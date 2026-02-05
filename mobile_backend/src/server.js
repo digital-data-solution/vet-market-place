@@ -8,7 +8,7 @@ import startLicenseCheckJob from './jobs/licenseCron.js';
 
 
 // Load environment variables
-dotenv.config();
+dotenv.config({ path: './mobile_backend/.env' });
 
 const app = express();
 
