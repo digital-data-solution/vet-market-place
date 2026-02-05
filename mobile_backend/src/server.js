@@ -3,13 +3,17 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import connectDB from './lib/db.js';
 import { connectRedis } from './lib/redis.js';
 import startLicenseCheckJob from './jobs/licenseCron.js';
 
 
 // Load environment variables
-dotenv.config({ path: './mobile_backend/.env' });
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+dotenv.config({ path: path.join(__dirname, '../.env') });
 
 const app = express();
 
