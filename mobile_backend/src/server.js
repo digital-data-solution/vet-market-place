@@ -3,7 +3,8 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
-import connectDB from './config/db.js';
+import connectDB from './lib/db.js';
+import { connectRedis } from './lib/redis.js';
 import startLicenseCheckJob from './jobs/licenseCron.js';
 
 
@@ -40,6 +41,10 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Routes
+import vetRoutes from './routes/vet.routes.js';
+app.use('/api/v1/professionals', vetRoutes);
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({
@@ -59,6 +64,7 @@ app.use((err, req, res, next) => {
 
 // Start Services
 connectDB();
+connectRedis();
 startLicenseCheckJob();
 
 const PORT = process.env.PORT || 5000;
