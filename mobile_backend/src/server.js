@@ -43,7 +43,9 @@ app.get('/health', (req, res) => {
 
 // Routes
 import vetRoutes from './routes/vet.routes.js';
+import authRoutes from './routes/auth.routes.js';
 app.use('/api/v1/professionals', vetRoutes);
+app.use('/api/auth', authRoutes);
 
 // 404 handler
 app.use((req, res) => {
