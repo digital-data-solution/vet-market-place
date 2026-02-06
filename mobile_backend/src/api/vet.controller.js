@@ -10,8 +10,8 @@ export const getNearbyProfessionals = async (req, res) => {
 
     const radiusInMeters = distance * 1000;
 
+    // Base geo query
     let query = {
-      isVerified: true,
       location: {
         $near: {
           $geometry: {
@@ -24,11 +24,16 @@ export const getNearbyProfessionals = async (req, res) => {
     };
 
     if (type === 'vet') {
+      // For vets require both phone/otp verification and VCN approval
       query.role = 'vet';
+      query.isVerified = true;
+      query['vetVerification.status'] = 'approved';
     } else if (type === 'kennel') {
       query.role = 'kennel_owner';
+      query.isVerified = true;
     } else {
       query.role = { $in: ['vet', 'kennel_owner'] };
+      query.isVerified = true;
     }
 
     const professionals = await User.find(query)
@@ -42,5 +47,48 @@ export const getNearbyProfessionals = async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ message: "Server error during geolocation search." });
+  }
+};
+
+// Vet-to-vet search (by name, specialization, VCN)
+export const searchProfessionals = async (req, res) => {
+  try {
+    const { q, lng, lat, distance = 50, role = 'vet', limit = 20 } = req.query;
+
+    if (!q && (!lng || !lat)) {
+      return res.status(400).json({ message: 'Provide query or coordinates' });
+    }
+
+    const filters = { role: role };
+    // Only vets with approved verification
+    if (role === 'vet') {
+      filters['vetVerification.status'] = 'approved';
+      filters.isVerified = true;
+    }
+
+    if (q) {
+      const regex = new RegExp(q, 'i');
+      filters.$or = [
+        { name: regex },
+        { 'vetDetails.specialization': regex },
+        { 'vetDetails.vcnNumber': regex }
+      ];
+    }
+
+    // If coordinates provided, perform geo-near first
+    if (lng && lat) {
+      const radiusInMeters = distance * 1000;
+      filters.location = {
+        $near: {
+          $geometry: { type: 'Point', coordinates: [parseFloat(lng), parseFloat(lat)] },
+          $maxDistance: radiusInMeters
+        }
+      };
+    }
+
+    const results = await User.find(filters).select('name email role location vetDetails').limit(parseInt(limit, 10));
+    res.json({ count: results.length, data: results });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 };

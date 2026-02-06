@@ -21,6 +21,12 @@ const userSchema = new mongoose.Schema({
     licenseExpiry: Date,
     specialization: [String]
   },
+  vetVerification: {
+    status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
+    documents: { type: [String], default: [] }, // URLs or file refs to verification docs
+    adminNotes: String,
+    verifiedAt: Date
+  },
   kennelDetails: {
     cacNumber: { type: String }, // Corporate Affairs Commission Number
     capacity: Number

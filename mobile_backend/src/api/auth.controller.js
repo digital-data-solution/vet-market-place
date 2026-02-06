@@ -1,8 +1,11 @@
 import User from '../models/User.js';
 import jwt from 'jsonwebtoken';
-import { sendSMSOTP, verifySMSOTP } from '../services/onesignal.service.js';
+import { sendSMSOTP } from '../services/onesignal.service.js';
+import { redisClient } from '../lib/redis.js';
 
-// Temporary storage for OTP (use Redis or DB in production)
+// OTP config
+const OTP_TTL = parseInt(process.env.OTP_TTL_SECONDS || '300', 10); // default 5 minutes
+// Fallback in-memory OTP store if Redis unavailable
 const otpStore = new Map();
 
 export const register = async (req, res) => {
@@ -20,13 +23,21 @@ export const register = async (req, res) => {
 
     await user.save();
 
-    // Send OTP for verification
-    const otpResult = await sendSMSOTP(phone);
+    // Generate server-side OTP and store in Redis with TTL
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpResult = await sendSMSOTP(phone, otpCode);
     if (!otpResult.success) return res.status(500).json({ message: 'Failed to send OTP' });
 
-    otpStore.set(phone, { otp: otpResult.otpCode, userId: user._id });
+    // store OTP in Redis: key otp:<phone> -> JSON { otp, userId }
+    try {
+      await redisClient.setEx(`otp:${phone}`, OTP_TTL, JSON.stringify({ otp: otpCode, userId: user._id.toString() }));
+    } catch (err) {
+      // Fallback to in-memory only if Redis not available
+      console.warn('Redis setEx failed, falling back to in-memory OTP store');
+      otpStore.set(phone, { otp: otpCode, userId: user._id.toString(), expiresAt: Date.now() + OTP_TTL * 1000 });
+    }
 
-    res.status(201).json({ message: 'User registered. Verify OTP.', otpId: otpResult.otpId });
+    res.status(201).json({ message: 'User registered. Verify OTP.' });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -36,13 +47,30 @@ export const verifyOTP = async (req, res) => {
   const { phone, otp } = req.body;
 
   try {
-    const stored = otpStore.get(phone);
-    if (!stored || stored.otp !== otp) return res.status(400).json({ message: 'Invalid OTP' });
+    // Try Redis first
+    let storedRaw;
+    try {
+      storedRaw = await redisClient.get(`otp:${phone}`);
+    } catch (err) {
+      storedRaw = null;
+    }
 
-    // Mark user as verified
+    let stored = null;
+    if (storedRaw) {
+      stored = JSON.parse(storedRaw);
+    } else if (otpStore.has(phone)) {
+      const s = otpStore.get(phone);
+      if (s.expiresAt && s.expiresAt > Date.now()) stored = s;
+    }
+
+    if (!stored || stored.otp !== otp) return res.status(400).json({ message: 'Invalid or expired OTP' });
+
+    // Mark user as phone-verified
     await User.findByIdAndUpdate(stored.userId, { isVerified: true });
 
-    otpStore.delete(phone);
+    // cleanup
+    try { await redisClient.del(`otp:${phone}`); } catch (e) { /* ignore */ }
+    if (otpStore.has(phone)) otpStore.delete(phone);
 
     res.json({ message: 'OTP verified. Registration complete.' });
   } catch (error) {
