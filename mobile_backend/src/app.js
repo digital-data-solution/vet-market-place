@@ -2,9 +2,9 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import rateLimit from 'express-rate-limit';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import rateLimit from 'express-rate-limit';
 
 // Routes
 import vetRoutes from './routes/vet.routes.js';
@@ -48,38 +48,5 @@ app.use('/api/v1/shops', shopLimiter, shopRoutes);
 app.use((req, res) => {
   res.status(404).json({ error: 'Not Found', message: `Cannot ${req.method} ${req.url}` });
 });
-
-export default app;
-import express from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import morgan from 'morgan';
-import rateLimit from 'express-rate-limit';
-import path from 'path';
-
-import vetRoutes from './routes/vet.routes.js';
-import authRoutes from './routes/auth.routes.js';
-import subscriptionRoutes from './routes/subscription.routes.js';
-import vetVerificationRoutes from './routes/vetVerification.routes.js';
-import shopRoutes from './routes/shop.routes.js';
-
-const app = express();
-
-app.use(helmet());
-app.use(cors());
-app.use(morgan('dev'));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-
-// Rate limiter for auth endpoints
-const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, message: 'Too many requests' });
-
-app.use('/api/auth', authLimiter, authRoutes);
-app.use('/api/v1/professionals', vetRoutes);
-app.use('/api/subscription', subscriptionRoutes);
-app.use('/api/v1/vet-verification', vetVerificationRoutes);
-app.use('/api/v1/shops', shopRoutes);
-
-app.get('/', (req, res) => res.json({ message: 'Vet backend app' }));
 
 export default app;
