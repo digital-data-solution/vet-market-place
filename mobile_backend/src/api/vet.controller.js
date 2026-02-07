@@ -1,4 +1,5 @@
 import User from '../models/User.js';
+import cache from '../lib/cache.js';
 
 export const getNearbyProfessionals = async (req, res) => {
   try {
@@ -36,15 +37,15 @@ export const getNearbyProfessionals = async (req, res) => {
       query.isVerified = true;
     }
 
-    const professionals = await User.find(query)
-      .select('name email role location vetDetails kennelDetails')
-      .limit(20);
-
-    res.status(200).json({
-      success: true,
-      count: professionals.length,
-      data: professionals,
+    const cacheKey = `professionals:near:${lng}:${lat}:${distance}:${type}`;
+    const professionals = await cache.cacheWrap(cacheKey, 30, async () => {
+      return await User.find(query)
+        .select('name email role location vetDetails kennelDetails')
+        .limit(20)
+        .lean();
     });
+
+    res.status(200).json({ success: true, count: professionals.length, data: professionals });
   } catch (error) {
     res.status(500).json({ message: "Server error during geolocation search." });
   }
@@ -86,7 +87,10 @@ export const searchProfessionals = async (req, res) => {
       };
     }
 
-    const results = await User.find(filters).select('name email role location vetDetails').limit(parseInt(limit, 10));
+    const cacheKey = `professionals:search:${role}:${q || ''}:${lng || ''}:${lat || ''}:${distance}:${limit}`;
+    const results = await cache.cacheWrap(cacheKey, 60, async () => {
+      return await User.find(filters).select('name email role location vetDetails').limit(parseInt(limit, 10)).lean();
+    });
     res.json({ count: results.length, data: results });
   } catch (error) {
     res.status(500).json({ message: error.message });

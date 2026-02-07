@@ -1,15 +1,17 @@
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import app from './app.js';
-import connectDB from './lib/db.js';
-import { connectRedis } from './lib/redis.js';
-import startLicenseCheckJob from './jobs/licenseCron.js';
 
-// Load environment variables
+// Load environment variables before importing modules that use them
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.join(__dirname, '../.env') });
+
+// Dynamic import of runtime modules so they read process.env after dotenv.config
+const { default: app } = await import('./app.js');
+const { default: connectDB } = await import('./lib/db.js');
+const { connectRedis } = await import('./lib/redis.js');
+const { default: startLicenseCheckJob } = await import('./jobs/licenseCron.js');
 
 // Start Services
 connectDB();

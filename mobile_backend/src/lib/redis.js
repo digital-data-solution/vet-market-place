@@ -2,14 +2,20 @@ import { createClient } from 'redis';
 
 let redisConnected = false;
 
-const redisClient = createClient({
-  url: process.env.REDIS_URL || 'redis://localhost:6379',
-  retry_strategy: () => null
-});
+const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+try {
+  const masked = redisUrl.replace(/:(.+)@/, ':*****@');
+  console.log('Using REDIS_URL:', masked);
+} catch (e) {
+  console.log('Using REDIS_URL: (unable to mask)');
+}
+
+const redisClient = createClient({ url: redisUrl, retry_strategy: () => null });
 
 redisClient.on('error', (err) => {
   if (!redisConnected) {
-    console.log('❌ Redis Client Error (Redis not available, continuing without caching):', err.message);
+    console.error('❌ Redis Client Error (Redis not available, continuing without caching):', err);
+    if (err && err.stack) console.error(err.stack);
     redisConnected = true; // Prevent repeated logs
   }
 });
@@ -23,7 +29,8 @@ const connectRedis = async () => {
   try {
     await redisClient.connect();
   } catch (error) {
-    // Redis not available, continue without it
+    console.error('Redis connect() failed:', error && error.message);
+    if (error && error.stack) console.error(error.stack);
   }
 };
 

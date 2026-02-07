@@ -1,5 +1,6 @@
 import Shop from '../models/Shop.js';
 import User from '../models/User.js';
+import cache from '../lib/cache.js';
 
 export const createShop = async (req, res) => {
   try {
@@ -23,14 +24,17 @@ export const getNearbyShops = async (req, res) => {
 
     const radiusInMeters = distance * 1000;
 
-    const shops = await Shop.find({
-      location: {
-        $near: {
-          $geometry: { type: 'Point', coordinates: [parseFloat(lng), parseFloat(lat)] },
-          $maxDistance: radiusInMeters
+    const cacheKey = `shops:near:${lng}:${lat}:${distance}`;
+    const shops = await cache.cacheWrap(cacheKey, 30, async () => {
+      return await Shop.find({
+        location: {
+          $near: {
+            $geometry: { type: 'Point', coordinates: [parseFloat(lng), parseFloat(lat)] },
+            $maxDistance: radiusInMeters
+          }
         }
-      }
-    }).limit(50).select('name address contact services location isVerified');
+      }).limit(50).select('name address contact services location isVerified').lean();
+    });
 
     res.json({ count: shops.length, data: shops });
   } catch (error) {
