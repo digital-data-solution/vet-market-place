@@ -12,6 +12,7 @@ import authRoutes from './routes/auth.routes.js';
 import subscriptionRoutes from './routes/subscription.routes.js';
 import vetVerificationRoutes from './routes/vetVerification.routes.js';
 import shopRoutes from './routes/shop.routes.js';
+import professionalRoutes from './routes/professional.routes.js';
 import cache from './lib/cache.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -44,6 +45,7 @@ app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/v1/vet-verification', vetVerificationRoutes);
 app.use('/api/v1/shops', shopLimiter, shopRoutes);
+app.use('/api/v1/professional', professionalRoutes);
 
 // initialize optional redis cache
 cache.initCache().catch(() => {});
