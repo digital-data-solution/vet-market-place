@@ -1,10 +1,13 @@
 import mongoose from 'mongoose';
 
 const ProfessionalSchema = new mongoose.Schema({
-  businessName: { type: String, required: true },
-  address: { type: Object, required: true },
-  specialization: { type: String, required: true },
-  role: { type: String, enum: ['vet', 'kennel_owner'], required: true },
+  name: { type: String, required: true },
+  vcnNumber: { type: String, required: function() { return this.role === 'vet'; } },
+  role: { type: String, enum: ['vet', 'kennel'], required: true },
+  phone: { type: String },
+  email: { type: String },
+  // Add other info fields as needed
+  // Remove document fields
 }, { timestamps: true });
 
 export default mongoose.model('Professional', ProfessionalSchema);
