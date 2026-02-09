@@ -6,7 +6,10 @@ export const getNearbyProfessionals = async (req, res) => {
     const { lng, lat, distance = 10, type = 'all' } = req.query; // type: 'vet', 'kennel', 'all'
 
     if (!lng || !lat) {
-      return res.status(400).json({ message: "Coordinates are required." });
+      return res.status(400).json({
+        success: false,
+        message: "Coordinates are required for location-based search."
+      });
     }
 
     const radiusInMeters = distance * 1000;
@@ -40,45 +43,68 @@ export const getNearbyProfessionals = async (req, res) => {
     const cacheKey = `professionals:near:${lng}:${lat}:${distance}:${type}`;
     const professionals = await cache.cacheWrap(cacheKey, 30, async () => {
       return await User.find(query)
-        .select('name email role location vetDetails kennelDetails')
+        .select('name email phone role location vetDetails kennelDetails vetVerification.status')
         .limit(20)
+        .sort({ 'vetVerification.status': -1, createdAt: -1 }) // Prioritize verified vets, then newest
         .lean();
     });
 
-    res.status(200).json({ success: true, count: professionals.length, data: professionals });
+    res.status(200).json({
+      success: true,
+      count: professionals.length,
+      data: professionals,
+      message: professionals.length > 0 ? 'Nearby verified professionals found' : 'No verified professionals found in your area'
+    });
   } catch (error) {
-    res.status(500).json({ message: "Server error during geolocation search." });
+    console.error('Professional search error:', error);
+    res.status(500).json({
+      success: false,
+      message: "Unable to search for professionals at this time. Please try again later."
+    });
   }
 };
 
-// Vet-to-vet search (by name, specialization, VCN)
+// Professional search by name, specialty, or location
 export const searchProfessionals = async (req, res) => {
   try {
-    const { q, lng, lat, distance = 50, role = 'vet', limit = 20 } = req.query;
+    const { q, lng, lat, distance = 50, type = 'all', limit = 20 } = req.query;
 
     if (!q && (!lng || !lat)) {
-      return res.status(400).json({ message: 'Provide query or coordinates' });
+      return res.status(400).json({
+        success: false,
+        message: 'Please provide a search query or coordinates for location-based search.'
+      });
     }
 
-    const filters = { role: role };
-    // Only vets with approved verification
-    if (role === 'vet') {
-      filters['vetVerification.status'] = 'approved';
-      filters.isVerified = true;
+    let filters = { isVerified: true };
+
+    // Role-based filtering
+    if (type === 'vet') {
+      filters.role = 'vet';
+      filters['vetVerification.status'] = 'approved'; // Only approved vets
+    } else if (type === 'kennel') {
+      filters.role = 'kennel_owner';
+    } else {
+      filters.role = { $in: ['vet', 'kennel_owner'] };
     }
 
-    if (q) {
-      const regex = new RegExp(q, 'i');
+    // Text search
+    if (q && q.trim().length >= 2) {
+      const regex = new RegExp(q.trim(), 'i');
       filters.$or = [
         { name: regex },
+        { 'vetDetails.specialty': regex },
         { 'vetDetails.specialization': regex },
-        { 'vetDetails.vcnNumber': regex }
+        { 'vetDetails.licenseNumber': regex },
+        { 'vetDetails.vcnNumber': regex },
+        { 'kennelDetails.businessName': regex },
+        { email: regex }
       ];
     }
 
-    // If coordinates provided, perform geo-near first
+    // Geo-location search
     if (lng && lat) {
-      const radiusInMeters = distance * 1000;
+      const radiusInMeters = parseFloat(distance) * 1000;
       filters.location = {
         $near: {
           $geometry: { type: 'Point', coordinates: [parseFloat(lng), parseFloat(lat)] },
@@ -87,12 +113,29 @@ export const searchProfessionals = async (req, res) => {
       };
     }
 
-    const cacheKey = `professionals:search:${role}:${q || ''}:${lng || ''}:${lat || ''}:${distance}:${limit}`;
-    const results = await cache.cacheWrap(cacheKey, 60, async () => {
-      return await User.find(filters).select('name email role location vetDetails').limit(parseInt(limit, 10)).lean();
+    const cacheKey = `professionals:search:${type}:${q || ''}:${lng || ''}:${lat || ''}:${distance}:${limit}`;
+    const professionals = await cache.cacheWrap(cacheKey, 60, async () => {
+      return await User.find(filters)
+        .select('name email phone role location vetDetails kennelDetails vetVerification.status')
+        .limit(parseInt(limit))
+        .sort({ 'vetVerification.status': -1, name: 1 }) // Prioritize verified vets, then alphabetical
+        .lean();
     });
-    res.json({ count: results.length, data: results });
+
+    const searchType = q ? `matching "${q}"` : `within ${distance}km`;
+    res.status(200).json({
+      success: true,
+      count: professionals.length,
+      data: professionals,
+      message: professionals.length > 0
+        ? `Found ${professionals.length} verified professional(s) ${searchType}`
+        : `No verified professionals found ${searchType}`
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Professional search error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Unable to perform search at this time. Please try again later.'
+    });
   }
 };

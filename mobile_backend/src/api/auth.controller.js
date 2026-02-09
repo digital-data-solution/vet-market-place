@@ -93,5 +93,68 @@ export const login = async (req, res) => {
   }
 };
 
+// Login with phone - sends OTP
+export const loginWithPhone = async (req, res) => {
+  const { phone } = req.body;
+
+  try {
+    const user = await User.findOne({ phone });
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    // Generate OTP and store in Redis
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpResult = await sendSMSOTP(phone, otpCode);
+    if (!otpResult.success) return res.status(500).json({ message: 'Failed to send OTP' });
+
+    try {
+      await redisClient.setEx(`otp:${phone}`, OTP_TTL, JSON.stringify({ otp: otpCode, userId: user._id.toString() }));
+    } catch (err) {
+      console.warn('Redis setEx failed, falling back to in-memory OTP store');
+      otpStore.set(phone, { otp: otpCode, userId: user._id.toString(), expiresAt: Date.now() + OTP_TTL * 1000 });
+    }
+
+    res.json({ message: 'OTP sent to your phone' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Verify login OTP
+export const verifyLoginOTP = async (req, res) => {
+  const { phone, otp } = req.body;
+
+  try {
+    let storedRaw;
+    try {
+      storedRaw = await redisClient.get(`otp:${phone}`);
+    } catch (err) {
+      storedRaw = null;
+    }
+
+    let stored = null;
+    if (storedRaw) {
+      stored = JSON.parse(storedRaw);
+    } else if (otpStore.has(phone)) {
+      const s = otpStore.get(phone);
+      if (s.expiresAt && s.expiresAt > Date.now()) stored = s;
+    }
+
+    if (!stored || stored.otp !== otp) return res.status(400).json({ message: 'Invalid or expired OTP' });
+
+    const user = await User.findById(stored.userId);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+
+    // cleanup
+    try { await redisClient.del(`otp:${phone}`); } catch (e) { /* ignore */ }
+    if (otpStore.has(phone)) otpStore.delete(phone);
+
+    res.json({ token, user: { id: user._id, name: user.name, role: user.role, isVerified: user.isVerified } });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // Add comparePassword method to User model
 // In User.js, add: userSchema.methods.comparePassword = async function (password) { return await bcrypt.compare(password, this.password); };

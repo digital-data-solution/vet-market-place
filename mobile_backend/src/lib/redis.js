@@ -3,6 +3,20 @@ import { createClient } from 'redis';
 let redisConnected = false;
 
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+
+// Configure Redis client with TLS support for production
+const clientOptions = {
+  url: redisUrl,
+  retry_strategy: () => null,
+  // Enable TLS for rediss:// URLs
+  ...(redisUrl.startsWith('rediss://') && {
+    socket: {
+      tls: true,
+      rejectUnauthorized: false // For self-signed certificates
+    }
+  })
+};
+
 try {
   const masked = redisUrl.replace(/:(.+)@/, ':*****@');
   console.log('Using REDIS_URL:', masked);
@@ -10,7 +24,7 @@ try {
   console.log('Using REDIS_URL: (unable to mask)');
 }
 
-const redisClient = createClient({ url: redisUrl, retry_strategy: () => null });
+const redisClient = createClient(clientOptions);
 
 redisClient.on('error', (err) => {
   if (!redisConnected) {
