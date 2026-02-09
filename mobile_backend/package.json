@@ -10,12 +10,13 @@
     "test": "jest --runInBand"
   },
   "dependencies": {
-    "express-rate-limit": "^6.7.0",
+    "@supabase/supabase-js": "^2.95.3",
     "axios": "^1.13.2",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
+    "express-rate-limit": "^6.7.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
     "mongodb": "^7.0.0",
@@ -26,8 +27,8 @@
     "redis": "^5.10.0"
   },
   "devDependencies": {
-    "nodemon": "^3.1.11",
     "jest": "^29.0.0",
+    "nodemon": "^3.1.11",
     "supertest": "^6.3.0"
   }
 }

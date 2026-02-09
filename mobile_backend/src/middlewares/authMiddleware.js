@@ -1,4 +1,4 @@
-import jwt from 'jsonwebtoken';
+import { verifySupabaseToken } from '../lib/supabase.js';
 import User from '../models/User.js';
 
 export const protect = async (req, res, next) => {
@@ -7,10 +7,22 @@ export const protect = async (req, res, next) => {
   if (!token) return res.status(401).json({ message: 'Not authorized, no token' });
 
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = await User.findById(decoded.id).select('-password');
+    // Verify Supabase JWT token
+    const supabaseUser = await verifySupabaseToken(token);
+    if (!supabaseUser) {
+      return res.status(401).json({ message: 'Not authorized, invalid token' });
+    }
+
+    // Find user in our database by phone number
+    const user = await User.findOne({ phone: supabaseUser.phone }).select('-password');
+    if (!user) {
+      return res.status(401).json({ message: 'User not found in database' });
+    }
+
+    req.user = user;
     next();
   } catch (error) {
+    console.error('Auth middleware error:', error);
     res.status(401).json({ message: 'Not authorized, token failed' });
   }
 };
