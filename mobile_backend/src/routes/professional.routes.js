@@ -1,5 +1,6 @@
 import express from 'express';
-import { onboardProfessional } from '../api/professional.controller.js';
+import { onboardProfessional, updateProfessional, getProfessional } from '../api/professional.controller.js';
+import { protect } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
