@@ -16,7 +16,7 @@ export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
 });
 
 // Verify Supabase JWT token
-export const verifySupabaseToken = async (token: string) => {
+export const verifySupabaseToken = async (token) => {
   try {
     const { data: { user }, error } = await supabaseAdmin.auth.getUser(token);
     if (error) throw error;
@@ -28,7 +28,7 @@ export const verifySupabaseToken = async (token: string) => {
 };
 
 // Get user by phone number
-export const getUserByPhone = async (phone: string) => {
+export const getUserByPhone = async (phone) => {
   try {
     const { data, error } = await supabaseAdmin
       .from('users')
