@@ -1,6 +1,6 @@
 import express from 'express';
 import { protect } from '../middlewares/authMiddleware.js';
-import { createShop, getNearbyShops, getShopById, searchShops } from '../api/shop.controller.js';
+import { createShop, getNearbyShops, getShopById, searchShops, listShops } from '../api/shop.controller.js';
 
 const router = express.Router();
 
