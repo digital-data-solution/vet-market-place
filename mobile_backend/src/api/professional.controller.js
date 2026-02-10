@@ -3,16 +3,18 @@ import Professional from '../models/Professional.js';
 export const onboardProfessional = async (req, res) => {
   try {
     const { name, vcnNumber, role } = req.body;
-    if (!name || !vcnNumber || role !== 'vet') {
-      return res.status(400).json({ message: 'Name, VCN number, and role (vet) are required.' });
+    if (!name || !role) {
+      return res.status(400).json({ message: 'Name and role are required.' });
     }
-    // Optionally: verify VCN number via external API if available
-    // Save vet profile
-    const professional = new Professional({ name, vcnNumber, role });
+    if (role === 'vet' && !vcnNumber) {
+      return res.status(400).json({ message: 'VCN number is required for vets.' });
+    }
+    // Save professional profile
+    const professional = new Professional({ name, vcnNumber: role === 'vet' ? vcnNumber : undefined, role });
     await professional.save();
-    res.status(201).json({ message: 'Veterinarian onboarded successfully', data: professional });
+    res.status(201).json({ message: 'Professional onboarded successfully', data: professional });
   } catch (error) {
-    res.status(500).json({ message: 'Failed to onboard veterinarian', error: error.message });
+    res.status(500).json({ message: 'Failed to onboard professional', error: error.message });
   }
 };
 
