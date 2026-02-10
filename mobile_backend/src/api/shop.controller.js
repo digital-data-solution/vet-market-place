@@ -152,3 +152,13 @@ export const getShopById = async (req, res) => {
     });
   }
 };
+
+// List all shops
+export async function listShops(req, res) {
+  try {
+    const shops = await Shop.find();
+    res.json({ data: shops });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to fetch shops', error: error.message });
+  }
+};

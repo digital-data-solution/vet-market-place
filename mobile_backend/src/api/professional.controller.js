@@ -44,3 +44,13 @@ export async function getProfessional(req, res) {
     res.status(500).json({ message: 'Failed to fetch profile', error: error.message });
   }
 };
+
+// List all professionals
+export async function listProfessionals(req, res) {
+  try {
+    const professionals = await Professional.find();
+    res.json({ data: professionals });
+  } catch (error) {
+    res.status(500).json({ message: 'Failed to fetch professionals', error: error.message });
+  }
+};

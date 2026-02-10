@@ -2,6 +2,7 @@ import User from '../models/User.js';
 import jwt from 'jsonwebtoken';
 import { sendSMSOTP } from '../services/onesignal.service.js';
 import { redisClient } from '../lib/redis.js';
+import { supabaseAdmin } from '../lib/supabase.js';
 
 // OTP config
 const OTP_TTL = parseInt(process.env.OTP_TTL_SECONDS || '300', 10); // default 5 minutes
@@ -12,15 +13,43 @@ export const register = async (req, res) => {
   const { name, email, password, phone, role, location } = req.body;
 
   try {
-    // Check if user exists
+    // Check if user exists in backend
     const existingUser = await User.findOne({ $or: [{ email }, { 'vetDetails.vcnNumber': req.body.vcnNumber }, { 'kennelDetails.cacNumber': req.body.cacNumber }] });
     if (existingUser) return res.status(400).json({ message: 'User already exists' });
 
-    // Create user (password hashed by pre-save hook)
+    // Check if user exists in Supabase
+    let supabaseUser = null;
+    if (email) {
+      const { data, error } = await supabaseAdmin.auth.admin.getUserByEmail(email);
+      if (data && data.user) supabaseUser = data.user;
+    }
+    if (supabaseUser) return res.status(400).json({ message: 'User already exists in Supabase' });
+
+    // Register user in Supabase Auth
+    let supabaseRes;
+    if (email) {
+      supabaseRes = await supabaseAdmin.auth.admin.createUser({
+        email,
+        password,
+        phone,
+        email_confirm: true,
+        phone_confirm: true
+      });
+    } else if (phone) {
+      supabaseRes = await supabaseAdmin.auth.admin.createUser({
+        phone,
+        password,
+        phone_confirm: true
+      });
+    }
+    if (supabaseRes?.error) {
+      return res.status(500).json({ message: 'Supabase error: ' + supabaseRes.error.message });
+    }
+
+    // Create user in backend DB (password hashed by pre-save hook)
     const user = new User({ name, email, password, phone, role, location });
     if (role === 'vet') user.vetDetails = req.body.vetDetails;
     if (role === 'kennel_owner') user.kennelDetails = req.body.kennelDetails;
-
     await user.save();
 
     // Generate server-side OTP and store in Redis with TTL

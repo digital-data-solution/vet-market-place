@@ -16,4 +16,7 @@ router.get('/nearby', getNearbyShops);
 // GET /api/v1/shops/:id
 router.get('/:id', getShopById);
 
+// GET /api/v1/shops - list all shops
+router.get('/', listShops);
+
 export default router;
