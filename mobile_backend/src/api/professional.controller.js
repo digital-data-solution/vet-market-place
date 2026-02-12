@@ -3,6 +3,7 @@ import User from '../models/User.js';
 import cache from '../lib/cache.js';
 import axios from 'axios';
 import logger from '../lib/logger.js';
+import Subscription from '../models/Subscription.js';
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -193,6 +194,17 @@ export const updateProfessional = async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
     const updates = req.body;
+
+    // Plan-based image limit
+    if (updates.images) {
+      const sub = await Subscription.findOne({ user: userId, status: 'active', endDate: { $gte: new Date() } });
+      let maxImages = 1;
+      if (sub?.plan === 'premium') maxImages = 5;
+      if (sub?.plan === 'enterprise') maxImages = 1000;
+      if (updates.images.length > maxImages) {
+        return res.status(400).json({ success: false, message: `Your plan allows up to ${maxImages} profile photos.` });
+      }
+    }
 
     // Don't allow changing userId or role
     delete updates.userId;

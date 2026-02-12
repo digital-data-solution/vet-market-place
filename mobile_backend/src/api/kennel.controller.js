@@ -2,6 +2,7 @@ import User from '../models/User.js';
 import Professional from '../models/Professional.js';
 import cache from '../lib/cache.js';
 import logger from '../lib/logger.js';
+import Subscription from '../models/Subscription.js';
 
 // ============================================================================
 // KENNEL ONBOARDING
@@ -85,15 +86,75 @@ export const listKennels = async (req, res) => {
       ];
     }
 
-    const [kennels, total] = await Promise.all([
-      Professional.find(query)
-        .select('name businessName address specialization phone email distance isVerified createdAt')
-        .sort({ createdAt: -1 })
-        .limit(parseInt(limit))
-        .skip((parseInt(page) - 1) * parseInt(limit))
-        .lean(),
-      Professional.countDocuments(query),
+    // Only show kennels with active subscription
+    const kennelsWithSub = await Professional.aggregate([
+      { $match: query },
+      {
+        $lookup: {
+          from: 'subscriptions',
+          localField: 'userId',
+          foreignField: 'user',
+          as: 'subscriptions'
+        }
+      },
+      {
+        $addFields: {
+          activeSubscription: {
+            $filter: {
+              input: '$subscriptions',
+              as: 'sub',
+              cond: {
+                $and: [
+                  { $eq: ['$$sub.status', 'active'] },
+                  { $gte: ['$$sub.endDate', new Date()] }
+                ]
+              }
+            }
+          }
+        }
+      },
+      { $match: { 'activeSubscription.0': { $exists: true } } },
+      { $sort: { createdAt: -1 } },
+      { $skip: (parseInt(page) - 1) * parseInt(limit) },
+      { $limit: parseInt(limit) }
     ]);
+    const total = await Professional.aggregate([
+      { $match: query },
+      {
+        $lookup: {
+          from: 'subscriptions',
+          localField: 'userId',
+          foreignField: 'user',
+          as: 'subscriptions'
+        }
+      },
+      {
+        $addFields: {
+          activeSubscription: {
+            $filter: {
+              input: '$subscriptions',
+              as: 'sub',
+              cond: {
+                $and: [
+                  { $eq: ['$$sub.status', 'active'] },
+                  { $gte: ['$$sub.endDate', new Date()] }
+                ]
+              }
+            }
+          }
+        }
+      },
+      { $match: { 'activeSubscription.0': { $exists: true } } },
+      { $count: 'count' }
+    ]);
+    res.json({
+      success: true,
+      count: kennelsWithSub.length,
+      total: total[0]?.count || 0,
+      page: parseInt(page),
+      totalPages: Math.ceil((total[0]?.count || 0) / parseInt(limit)),
+      data: kennelsWithSub,
+    });
 
     res.json({
       success: true,
@@ -235,19 +296,30 @@ export const getMyKennelProfile = async (req, res) => {
 export const updateKennel = async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
-    const { businessName, address, specialization, phone, email } = req.body;
+    const { businessName, address, specialization, phone, email, images } = req.body;
 
+    // Plan-based image limit
+    if (images) {
+      const sub = await Subscription.findOne({ user: userId, status: 'active', endDate: { $gte: new Date() } });
+      let maxImages = 1;
+      if (sub?.plan === 'premium') maxImages = 5;
+      if (sub?.plan === 'enterprise') maxImages = 1000;
+      if (images.length > maxImages) {
+        return res.status(400).json({ success: false, message: `Your plan allows up to ${maxImages} profile photos.` });
+      }
+    }
+
+    const updateSet = {
+      ...(businessName?.trim() && { businessName: businessName.trim() }),
+      ...(address?.trim() && { address: address.trim() }),
+      ...(specialization !== undefined && { specialization: specialization.trim() }),
+      ...(phone?.trim() && { phone: phone.trim() }),
+      ...(email?.trim() && { email: email.trim() }),
+      ...(images && { images }),
+    };
     const kennel = await Professional.findOneAndUpdate(
       { userId, role: 'kennel' },
-      {
-        $set: {
-          ...(businessName?.trim() && { businessName: businessName.trim() }),
-          ...(address?.trim() && { address: address.trim() }),
-          ...(specialization !== undefined && { specialization: specialization.trim() }),
-          ...(phone?.trim() && { phone: phone.trim() }),
-          ...(email?.trim() && { email: email.trim() }),
-        },
-      },
+      { $set: updateSet },
       { new: true }
     );
 

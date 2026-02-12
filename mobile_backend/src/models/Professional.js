@@ -2,6 +2,10 @@ import mongoose from 'mongoose';
 
 const professionalSchema = new mongoose.Schema(
   {
+    // Images (profile photos)
+    images: [{
+      type: String, // URLs to professional images
+    }],
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

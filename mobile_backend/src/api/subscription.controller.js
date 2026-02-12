@@ -47,17 +47,30 @@ export const createSubscription = async (req, res) => {
       });
     }
 
-    // Check if user is a professional or shop owner
+    // Check if user is a professional (vet or kennel) or shop owner
     const [professional, shop] = await Promise.all([
       Professional.findOne({ userId }),
       Shop.findOne({ owner: userId })
     ]);
 
-    if (!professional && !shop) {
-      logger.warn('Subscription attempted by non-professional/shop', { userId });
+    let isAllowed = false;
+    let role = null;
+    if (professional) {
+      role = professional.role;
+      if (role === 'vet' || role === 'kennel') {
+        isAllowed = true;
+      }
+    }
+    if (shop) {
+      isAllowed = true;
+      role = 'shop';
+    }
+
+    if (!isAllowed) {
+      logger.warn('Subscription attempted by unsupported user type', { userId });
       return res.status(403).json({
         success: false,
-        message: 'Subscriptions are only available for verified professionals and shop owners. Please register as a professional or shop owner first.'
+        message: 'Subscriptions are only available for verified vets, kennels, or shop owners. Please register as a vet, kennel, or shop owner first.'
       });
     }
 

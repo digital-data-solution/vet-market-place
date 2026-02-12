@@ -2,6 +2,7 @@ import Shop from '../models/Shop.js';
 import User from '../models/User.js';
 import cache from '../lib/cache.js';
 import logger from '../lib/logger.js';
+import Subscription from '../models/Subscription.js';
 import axios from 'axios';
 
 // Helper: Geocode address to coordinates using Nominatim (free)
@@ -110,6 +111,17 @@ export const updateShop = async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
     const updates = req.body;
+
+    // Plan-based image limit
+    if (updates.images) {
+      const sub = await Subscription.findOne({ user: userId, status: 'active', endDate: { $gte: new Date() } });
+      let maxImages = 1;
+      if (sub?.plan === 'premium') maxImages = 5;
+      if (sub?.plan === 'enterprise') maxImages = 1000;
+      if (updates.images.length > maxImages) {
+        return res.status(400).json({ success: false, message: `Your plan allows up to ${maxImages} profile photos.` });
+      }
+    }
 
     // Don't allow changing owner
     delete updates.owner;
@@ -229,18 +241,68 @@ export const listShops = async (req, res) => {
 
     const cacheKey = `shops:list:${page}:${limit}`;
     const result = await cache.cacheWrap(cacheKey, 120, async () => {
-      const [shops, total] = await Promise.all([
-        Shop.find(filters)
-          .populate('owner', 'name email phone')
-          .select('-__v')
-          .limit(parseInt(limit))
-          .skip((parseInt(page) - 1) * parseInt(limit))
-          .sort({ createdAt: -1 })
-          .lean(),
-        Shop.countDocuments(filters)
+      // Only show shops with active subscription
+      const shopsWithSub = await Shop.aggregate([
+        { $match: filters },
+        {
+          $lookup: {
+            from: 'subscriptions',
+            localField: 'owner',
+            foreignField: 'user',
+            as: 'subscriptions'
+          }
+        },
+        {
+          $addFields: {
+            activeSubscription: {
+              $filter: {
+                input: '$subscriptions',
+                as: 'sub',
+                cond: {
+                  $and: [
+                    { $eq: ['$$sub.status', 'active'] },
+                    { $gte: ['$$sub.endDate', new Date()] }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        { $match: { 'activeSubscription.0': { $exists: true } } },
+        { $sort: { createdAt: -1 } },
+        { $skip: (parseInt(page) - 1) * parseInt(limit) },
+        { $limit: parseInt(limit) }
       ]);
-
-      return { shops, total };
+      const total = await Shop.aggregate([
+        { $match: filters },
+        {
+          $lookup: {
+            from: 'subscriptions',
+            localField: 'owner',
+            foreignField: 'user',
+            as: 'subscriptions'
+          }
+        },
+        {
+          $addFields: {
+            activeSubscription: {
+              $filter: {
+                input: '$subscriptions',
+                as: 'sub',
+                cond: {
+                  $and: [
+                    { $eq: ['$$sub.status', 'active'] },
+                    { $gte: ['$$sub.endDate', new Date()] }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        { $match: { 'activeSubscription.0': { $exists: true } } },
+        { $count: 'count' }
+      ]);
+      return { shops: shopsWithSub, total: total[0]?.count || 0 };
     });
 
     res.json({
