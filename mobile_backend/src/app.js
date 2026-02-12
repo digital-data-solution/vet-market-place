@@ -10,6 +10,8 @@ import { fileURLToPath } from 'url';
 import vetRoutes from './routes/vet.routes.js';
 import authRoutes from './routes/auth.routes.js';
 import subscriptionRoutes from './routes/subscription.routes.js';
+// Add this import alongside your other route imports in app.js or server.js:
+import kennelRoutes from './routes/kennel.routes.js';
 import vetVerificationRoutes from './routes/vetVerification.routes.js';
 import shopRoutes from './routes/shop.routes.js';
 import professionalRoutes from './routes/professional.routes.js';
@@ -46,6 +48,8 @@ app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/v1/vet-verification', vetVerificationRoutes);
 app.use('/api/v1/shops', shopLimiter, shopRoutes);
 app.use('/api/v1/professional', professionalRoutes);
+// Then mount it alongside your other routes:
+app.use('/api/v1/kennels', kennelRoutes);
 
 // initialize optional redis cache
 cache.initCache().catch(() => {});
@@ -56,3 +60,7 @@ app.use((req, res) => {
 });
 
 export default app;
+
+
+
+

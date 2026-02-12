@@ -8,21 +8,35 @@ import {
   getNearbyProfessionals,
   deleteProfessional,
 } from '../api/professional.controller.js';
-import { protect } from '../middlewares/authMiddleware.js';
+
+import {
+  submitVCN,
+  listPendingVets,
+  reviewVet,
+  getVetVerification,
+  getMyVerificationStatus,
+} from '../api/vetVerification.controller.js';
+
+import { protect, authorize } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
-// Public routes
-router.get('/nearby', getNearbyProfessionals); // Search nearby professionals
-router.get('/list', listProfessionals); // List all verified professionals
-router.get('/:id', getProfessional); // Get specific professional by ID
+// Professional profile routes
+router.post('/onboard', protect, onboardProfessional);
+router.get('/me', protect, getMyProfessionalProfile);
+router.put('/profile', protect, updateProfessional);
+router.delete('/profile', protect, deleteProfessional);
 
-// Protected routes (require authentication)
-router.use(protect); // All routes below require authentication
+// Search & discovery — static paths BEFORE /:id wildcard
+router.get('/list', listProfessionals);
+router.get('/nearby', getNearbyProfessionals);
+router.get('/:id', getProfessional);
 
-router.post('/onboard', onboardProfessional); // Create professional profile
-router.get('/me/profile', getMyProfessionalProfile); // Get own professional profile
-router.put('/me/profile', updateProfessional); // Update own professional profile
-router.delete('/me/profile', deleteProfessional); // Delete own professional profile
+// VCN verification — static paths BEFORE /:id wildcard
+router.post('/vet-verification/submit', protect, authorize('vet'), submitVCN);
+router.get('/vet-verification/status', protect, authorize('vet'), getMyVerificationStatus);
+router.get('/vet-verification/pending', protect, authorize('admin'), listPendingVets);
+router.post('/vet-verification/review/:id', protect, authorize('admin'), reviewVet);
+router.get('/vet-verification/:id', protect, authorize('admin'), getVetVerification);
 
 export default router;

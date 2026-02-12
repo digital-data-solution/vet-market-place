@@ -4,6 +4,10 @@ import cache from '../lib/cache.js';
 import axios from 'axios';
 import logger from '../lib/logger.js';
 
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
 // Helper: Geocode address to coordinates using a free geocoding service
 const geocodeAddress = async (address) => {
   try {
@@ -29,13 +33,36 @@ const geocodeAddress = async (address) => {
     }
     return null;
   } catch (error) {
-    console.error('Geocoding error:', error.message);
+    logger.error('Geocoding error', { error: error.message });
     return null;
   }
 };
 
-// Onboard a new professional (vet or kennel)
+// Helper function: Calculate distance between two coordinates (Haversine formula)
+function calculateDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Earth's radius in km
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
 
+function toRad(degrees) {
+  return degrees * (Math.PI / 180);
+}
+
+// ============================================================================
+// ONBOARDING & PROFILE MANAGEMENT
+// ============================================================================
+
+/**
+ * Onboard a new professional (vet or kennel)
+ * POST /api/v1/professionals/onboard
+ */
 export const onboardProfessional = async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
@@ -70,6 +97,7 @@ export const onboardProfessional = async (req, res) => {
     if (role === 'vet' && vcnNumber) {
       const vcnExists = await Professional.findOne({ vcnNumber: vcnNumber.trim() });
       if (vcnExists) {
+        logger.warn('VCN number already registered', { vcnNumber: vcnNumber.trim() });
         return res.status(400).json({ 
           success: false,
           message: 'This VCN number is already registered.' 
@@ -77,13 +105,25 @@ export const onboardProfessional = async (req, res) => {
       }
     }
 
+    // Kennel requires businessName
+    if (role === 'kennel' && !businessName) {
+      logger.warn('Onboarding failed: missing business name for kennel', { userId, name });
+      return res.status(400).json({ 
+        success: false,
+        message: 'Business name is required for kennels.' 
+      });
+    }
+
     logger.info(`Onboarding professional: ${name} (${role})`, { userId, body: req.body });
 
     // Geocode the address
-    const location = await geocodeAddress(address);
-    if (!location) {
-      console.warn(`Failed to geocode address: ${address}`);
-      // Continue anyway - location is optional
+    let location = null;
+    if (address && address.trim()) {
+      location = await geocodeAddress(address);
+      if (!location) {
+        logger.warn(`Failed to geocode address: ${address}`, { userId });
+        // Continue anyway - location is optional
+      }
     }
 
     // Create professional profile
@@ -93,12 +133,12 @@ export const onboardProfessional = async (req, res) => {
       role,
       vcnNumber: role === 'vet' ? vcnNumber?.trim() : undefined,
       businessName: businessName?.trim(),
-      address: address.trim(),
+      address: address?.trim(),
       specialization: specialization?.trim(),
       phone: phone?.trim(),
       email: email?.trim(),
       location,
-      isVerified: false, // Requires admin verification for vets
+      isVerified: role === 'kennel', // Auto-verify kennels, vets need admin approval
     });
 
     await professional.save();
@@ -106,6 +146,7 @@ export const onboardProfessional = async (req, res) => {
     // Update User model to reflect professional status
     await User.findByIdAndUpdate(userId, {
       role: role === 'vet' ? 'vet' : 'kennel_owner',
+      location, // Sync location to User model for nearby search
       ...(role === 'vet' && {
         vetDetails: {
           vcnNumber: vcnNumber?.trim(),
@@ -121,15 +162,21 @@ export const onboardProfessional = async (req, res) => {
       })
     });
 
+    logger.info('Professional profile created successfully', { 
+      userId, 
+      professionalId: professional._id,
+      role 
+    });
+
     res.status(201).json({ 
       success: true,
       message: role === 'vet' 
         ? 'Professional profile created. VCN verification pending.' 
-        : 'Kennel profile created successfully.',
+        : 'Kennel profile created and activated successfully.',
       data: professional 
     });
   } catch (error) {
-    console.error('Onboard professional error:', error);
+    logger.error('Onboard professional error', { error: error.message, stack: error.stack });
     res.status(500).json({ 
       success: false,
       message: 'Failed to create professional profile. Please try again.',
@@ -138,7 +185,10 @@ export const onboardProfessional = async (req, res) => {
   }
 };
 
-// Update professional profile
+/**
+ * Update professional profile
+ * PUT /api/v1/professionals/profile
+ */
 export const updateProfessional = async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
@@ -153,6 +203,9 @@ export const updateProfessional = async (req, res) => {
       const location = await geocodeAddress(updates.address);
       if (location) {
         updates.location = location;
+        
+        // Also sync to User model
+        await User.findByIdAndUpdate(userId, { location });
       }
     }
 
@@ -176,13 +229,15 @@ export const updateProfessional = async (req, res) => {
     // Clear relevant cache
     await cache.del(`professional:${userId}`);
 
+    logger.info('Professional profile updated', { userId, updates: Object.keys(updates) });
+
     res.json({ 
       success: true,
       message: 'Profile updated successfully',
       data: professional 
     });
   } catch (error) {
-    console.error('Update professional error:', error);
+    logger.error('Update professional error', { error: error.message, stack: error.stack });
     res.status(500).json({ 
       success: false,
       message: 'Failed to update profile. Please try again.',
@@ -191,7 +246,10 @@ export const updateProfessional = async (req, res) => {
   }
 };
 
-// Get current user's professional profile
+/**
+ * Get current user's professional profile
+ * GET /api/v1/professionals/me
+ */
 export const getMyProfessionalProfile = async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
@@ -215,7 +273,7 @@ export const getMyProfessionalProfile = async (req, res) => {
       data: professional 
     });
   } catch (error) {
-    console.error('Get professional error:', error);
+    logger.error('Get professional error', { error: error.message, stack: error.stack });
     res.status(500).json({ 
       success: false,
       message: 'Failed to fetch profile',
@@ -224,7 +282,10 @@ export const getMyProfessionalProfile = async (req, res) => {
   }
 };
 
-// Get professional profile by ID (public)
+/**
+ * Get professional profile by ID (public)
+ * GET /api/v1/professionals/:id
+ */
 export const getProfessional = async (req, res) => {
   try {
     const { id } = req.params;
@@ -257,7 +318,7 @@ export const getProfessional = async (req, res) => {
       data: professional 
     });
   } catch (error) {
-    console.error('Get professional error:', error);
+    logger.error('Get professional error', { error: error.message, stack: error.stack });
     res.status(500).json({ 
       success: false,
       message: 'Failed to fetch profile',
@@ -266,16 +327,47 @@ export const getProfessional = async (req, res) => {
   }
 };
 
-// List all verified professionals (with optional filtering)
+// ============================================================================
+// SEARCH & DISCOVERY
+// ============================================================================
+
+/**
+ * List all verified professionals (with optional filtering)
+ * GET /api/v1/professionals/list
+ * Query params: role, limit, page, vcnNumber
+ */
 export const listProfessionals = async (req, res) => {
   try {
-    const { role, limit = 50, page = 1 } = req.query;
+    const { role, limit = 50, page = 1, vcnNumber } = req.query;
 
     const filters = { isVerified: true };
+    
+    // Filter by role
     if (role && ['vet', 'kennel'].includes(role)) {
       filters.role = role;
     }
 
+    // ✅ FIX: Add VCN number filtering for verification lookups
+    if (vcnNumber) {
+      filters.vcnNumber = vcnNumber.trim();
+      
+      // For VCN lookup, return immediately without pagination
+      const professional = await Professional.findOne(filters)
+        .populate('userId', 'name email phone')
+        .select('-__v')
+        .lean();
+      
+      return res.json({
+        success: true,
+        count: professional ? 1 : 0,
+        total: professional ? 1 : 0,
+        page: 1,
+        totalPages: 1,
+        data: professional ? [professional] : []
+      });
+    }
+
+    // Regular list with pagination
     const cacheKey = `professionals:list:${role || 'all'}:${page}:${limit}`;
     const result = await cache.cacheWrap(cacheKey, 120, async () => {
       const [professionals, total] = await Promise.all([
@@ -301,7 +393,7 @@ export const listProfessionals = async (req, res) => {
       data: result.professionals 
     });
   } catch (error) {
-    console.error('List professionals error:', error);
+    logger.error('List professionals error', { error: error.message, stack: error.stack });
     res.status(500).json({ 
       success: false,
       message: 'Failed to fetch professionals',
@@ -310,12 +402,17 @@ export const listProfessionals = async (req, res) => {
   }
 };
 
-// Search nearby professionals (location-based)
+/**
+ * Search nearby professionals (location-based)
+ * GET /api/v1/professionals/nearby
+ * Query params: lng, lat, distance, role, search
+ */
 export const getNearbyProfessionals = async (req, res) => {
   try {
     const { lng, lat, distance = 10, role, search } = req.query;
 
     if (!lng || !lat) {
+      logger.warn('Nearby professionals search missing coordinates', { lng, lat });
       return res.status(400).json({
         success: false,
         message: 'Coordinates (lng, lat) are required for location-based search.'
@@ -379,6 +476,15 @@ export const getNearbyProfessionals = async (req, res) => {
       return prof;
     });
 
+    logger.info('Nearby professionals search', { 
+      lng, 
+      lat, 
+      distance, 
+      role, 
+      search,
+      count: professionalsWithDistance.length 
+    });
+
     res.json({
       success: true,
       count: professionalsWithDistance.length,
@@ -388,7 +494,7 @@ export const getNearbyProfessionals = async (req, res) => {
         : 'No professionals found in this area'
     });
   } catch (error) {
-    console.error('Nearby professionals error:', error);
+    logger.error('Nearby professionals error', { error: error.message, stack: error.stack });
     res.status(500).json({
       success: false,
       message: 'Unable to search for nearby professionals. Please try again.',
@@ -397,7 +503,14 @@ export const getNearbyProfessionals = async (req, res) => {
   }
 };
 
-// Delete professional profile (user can delete their own)
+// ============================================================================
+// PROFILE DELETION
+// ============================================================================
+
+/**
+ * Delete professional profile (user can delete their own)
+ * DELETE /api/v1/professionals/profile
+ */
 export const deleteProfessional = async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
@@ -414,18 +527,20 @@ export const deleteProfessional = async (req, res) => {
     // Reset user role back to pet_owner
     await User.findByIdAndUpdate(userId, {
       role: 'pet_owner',
-      $unset: { vetDetails: '', kennelDetails: '' }
+      $unset: { vetDetails: '', kennelDetails: '', location: '' }
     });
 
     // Clear cache
     await cache.del(`professional:${userId}`);
+
+    logger.info('Professional profile deleted', { userId, professionalId: professional._id });
 
     res.json({ 
       success: true,
       message: 'Professional profile deleted successfully' 
     });
   } catch (error) {
-    console.error('Delete professional error:', error);
+    logger.error('Delete professional error', { error: error.message, stack: error.stack });
     res.status(500).json({ 
       success: false,
       message: 'Failed to delete profile',
@@ -433,20 +548,3 @@ export const deleteProfessional = async (req, res) => {
     });
   }
 };
-
-// Helper function: Calculate distance between two coordinates (Haversine formula)
-function calculateDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371; // Earth's radius in km
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c;
-}
-
-function toRad(degrees) {
-  return degrees * (Math.PI / 180);
-}
