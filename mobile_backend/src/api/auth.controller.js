@@ -1,5 +1,35 @@
+// Sync Supabase user to MongoDB if missing
+import { verifySupabaseToken } from '../lib/supabase.js';
+
+export const syncUser = async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ message: 'No token provided' });
+    const supabaseUser = await verifySupabaseToken(token);
+    if (!supabaseUser) return res.status(401).json({ message: 'Invalid Supabase token' });
+
+    // Try to find user in MongoDB
+    let user = await User.findOne({ phone: supabaseUser.phone });
+    if (user) return res.json({ message: 'User already exists in MongoDB', user });
+
+    // Create user in MongoDB
+    user = new User({
+      name: supabaseUser.user_metadata?.name || supabaseUser.phone || supabaseUser.email,
+      email: supabaseUser.email,
+      phone: supabaseUser.phone,
+      password: 'external', // Not used, but required by schema
+      role: 'pet_owner',
+      isVerified: true
+    });
+    await user.save();
+    res.status(201).json({ message: 'User synced to MongoDB', user });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
 import User from '../models/User.js';
 import jwt from 'jsonwebtoken';
+import logger from '../lib/logger.js';
 // import { sendSMSOTP } from '../services/onesignal.service.js';
 // import { redisClient } from '../lib/redis.js';
 import { supabaseAdmin } from '../lib/supabase.js';
@@ -10,9 +40,13 @@ export const register = async (req, res) => {
   const { name, email, password, phone, role, location } = req.body;
 
   try {
+    logger.info('Registering user', { email, phone, role });
     // Check if user exists in backend
     const existingUser = await User.findOne({ $or: [{ email }, { 'vetDetails.vcnNumber': req.body.vcnNumber }, { 'kennelDetails.cacNumber': req.body.cacNumber }] });
-    if (existingUser) return res.status(400).json({ message: 'User already exists' });
+    if (existingUser) {
+      logger.warn('User already exists', { email, phone });
+      return res.status(400).json({ message: 'User already exists' });
+    }
 
     // Register user in Supabase Auth (triggers OTP if phone provided)
     let supabaseRes;
@@ -24,6 +58,7 @@ export const register = async (req, res) => {
       });
     }
     if (supabaseRes?.error) {
+      logger.error('Supabase registration error', { error: supabaseRes.error.message });
       return res.status(500).json({ message: 'Supabase error: ' + supabaseRes.error.message });
     }
 
@@ -33,8 +68,10 @@ export const register = async (req, res) => {
     if (role === 'kennel_owner') user.kennelDetails = req.body.kennelDetails;
     await user.save();
 
+    logger.info('User registered successfully', { userId: user._id });
     res.status(201).json({ message: 'User registered. Please verify OTP sent to your phone/email.' });
   } catch (error) {
+    logger.error('User registration error', { error: error.message, stack: error.stack });
     res.status(500).json({ message: error.message });
   }
 };

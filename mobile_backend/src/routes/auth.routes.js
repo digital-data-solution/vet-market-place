@@ -1,7 +1,9 @@
 import express from 'express';
-import { register, verifyOTP, login, loginWithPhone, verifyLoginOTP } from '../api/auth.controller.js';
+import { register, verifyOTP, login, loginWithPhone, verifyLoginOTP, syncUser } from '../api/auth.controller.js';
 
 const router = express.Router();
+// POST /api/auth/sync
+router.post('/sync', syncUser);
 
 // POST /api/auth/register
 router.post('/register', register);

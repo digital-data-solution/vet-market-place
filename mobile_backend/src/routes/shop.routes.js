@@ -1,22 +1,30 @@
 import express from 'express';
+import {
+  createShop,
+  updateShop,
+  getMyShop,
+  getShopById,
+  listShops,
+  getNearbyShops,
+  searchShops,
+  deleteShop,
+} from '../api/shop.controller.js';
 import { protect } from '../middlewares/authMiddleware.js';
-import { createShop, getNearbyShops, getShopById, searchShops, listShops } from '../api/shop.controller.js';
 
 const router = express.Router();
 
-// POST /api/v1/shops/create
-router.post('/create', protect, createShop);
+// Public routes
+router.get('/nearby', getNearbyShops); // Search nearby shops
+router.get('/search', searchShops); // Search shops with text query
+router.get('/list', listShops); // List all verified shops
+router.get('/:id', getShopById); // Get specific shop by ID
 
-// GET /api/v1/shops/search?q=&lng=&lat=&distance=
-router.get('/search', searchShops);
+// Protected routes (require authentication)
+router.use(protect); // All routes below require authentication
 
-// GET /api/v1/shops/nearby?lng=&lat=&distance=
-router.get('/nearby', getNearbyShops);
-
-// GET /api/v1/shops/:id
-router.get('/:id', getShopById);
-
-// GET /api/v1/shops - list all shops
-router.get('/', listShops);
+router.post('/create', createShop); // Create shop
+router.get('/me/shop', getMyShop); // Get own shop
+router.put('/me/shop', updateShop); // Update own shop
+router.delete('/me/shop', deleteShop); // Delete own shop
 
 export default router;

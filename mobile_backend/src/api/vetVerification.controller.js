@@ -1,14 +1,22 @@
 import User from '../models/User.js';
+import logger from '../lib/logger.js';
 
 // Vet submits VCN info / documents for verification
 export const submitVCN = async (req, res) => {
   try {
     const userId = req.user._id;
     const { vcnNumber, documents = [] } = req.body;
+    logger.info('Submitting VCN for verification', { userId, vcnNumber });
 
     const user = await User.findById(userId);
-    if (!user) return res.status(404).json({ message: 'User not found' });
-    if (user.role !== 'vet') return res.status(403).json({ message: 'Only vets can submit VCN' });
+    if (!user) {
+      logger.warn('VCN submission: user not found', { userId });
+      return res.status(404).json({ message: 'User not found' });
+    }
+    if (user.role !== 'vet') {
+      logger.warn('VCN submission: not a vet', { userId });
+      return res.status(403).json({ message: 'Only vets can submit VCN' });
+    }
 
     user.vetDetails = user.vetDetails || {};
     if (vcnNumber) user.vetDetails.vcnNumber = vcnNumber;
@@ -16,8 +24,10 @@ export const submitVCN = async (req, res) => {
     user.vetVerification.status = 'pending';
     await user.save();
 
+    logger.info('VCN submitted for review', { userId });
     res.status(200).json({ message: 'VCN submitted for review', status: user.vetVerification.status });
   } catch (error) {
+    logger.error('VCN submission error', { error: error.message, stack: error.stack });
     res.status(500).json({ message: error.message });
   }
 };

@@ -1,11 +1,13 @@
 import User from '../models/User.js';
 import cache from '../lib/cache.js';
+import logger from '../lib/logger.js';
 
 export const getNearbyProfessionals = async (req, res) => {
   try {
     const { lng, lat, distance = 10, type = 'all' } = req.query; // type: 'vet', 'kennel', 'all'
 
     if (!lng || !lat) {
+        logger.warn('Nearby professionals search missing coordinates', { lng, lat });
       return res.status(400).json({
         success: false,
         message: "Coordinates are required for location-based search."
@@ -49,6 +51,7 @@ export const getNearbyProfessionals = async (req, res) => {
         .lean();
     });
 
+      logger.info('Nearby professionals search', { lng, lat, distance, type, count: professionals.length });
     res.status(200).json({
       success: true,
       count: professionals.length,
@@ -56,6 +59,7 @@ export const getNearbyProfessionals = async (req, res) => {
       message: professionals.length > 0 ? 'Nearby verified professionals found' : 'No verified professionals found in your area'
     });
   } catch (error) {
+      logger.error('Nearby professionals search error', { error: error.message, stack: error.stack });
     console.error('Professional search error:', error);
     res.status(500).json({
       success: false,

@@ -1,5 +1,6 @@
+
 import express from 'express';
-import { createSubscription, getUserSubscription, activateSubscription } from '../api/subscription.controller.js';
+import { createSubscription, getUserSubscription, handlePaystackWebhook } from '../api/subscription.controller.js';
 import { protect } from '../middlewares/authMiddleware.js';
 import { premiumOnly } from '../middlewares/premiumMiddleware.js';
 
@@ -18,6 +19,6 @@ router.get('/premium-feature', protect, premiumOnly, (req, res) => {
 
 // POST /api/subscription/activate (for Paystack webhook)
 // Use raw body parser to verify Paystack signature
-router.post('/activate', express.raw({ type: 'application/json' }), activateSubscription);
+router.post('/activate', express.raw({ type: 'application/json' }), handlePaystackWebhook);
 
 export default router;
