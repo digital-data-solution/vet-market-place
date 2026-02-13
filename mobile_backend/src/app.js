@@ -5,6 +5,7 @@ import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import multer from 'multer';
 
 // Routes
 import vetRoutes from './routes/vet.routes.js';
@@ -16,6 +17,8 @@ import vetVerificationRoutes from './routes/vetVerification.routes.js';
 import shopRoutes from './routes/shop.routes.js';
 import professionalRoutes from './routes/professional.routes.js';
 import cache from './lib/cache.js';
+import { uploadToCloudinary } from './lib/cloudinaryUpload.js';
+import { protect } from './middlewares/authMiddleware.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -48,6 +51,21 @@ app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/v1/vet-verification', vetVerificationRoutes);
 app.use('/api/v1/shops', shopLimiter, shopRoutes);
 app.use('/api/v1/professional', professionalRoutes);
+
+// File upload route using Cloudinary
+const upload = multer({ storage: multer.memoryStorage() });
+app.post('/api/upload', protect, upload.single('image'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+    const url = await uploadToCloudinary(req.file.buffer, 'profiles');
+    res.json({ url });
+  } catch (error) {
+    console.error('Upload error:', error);
+    res.status(500).json({ error: 'Upload failed' });
+  }
+});
 // Then mount it alongside your other routes:
 app.use('/api/v1/kennels', kennelRoutes);
 
