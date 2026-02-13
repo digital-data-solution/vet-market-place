@@ -18,6 +18,7 @@ import {
 } from '../api/vetVerification.controller.js';
 
 import { protect, authorize } from '../middlewares/authMiddleware.js';
+import { enforceSubscription } from '../middlewares/subscriptionMiddleware.js';
 
 const router = express.Router();
 
@@ -28,9 +29,9 @@ router.put('/profile', protect, updateProfessional);
 router.delete('/profile', protect, deleteProfessional);
 
 // Search & discovery — static paths BEFORE /:id wildcard
-router.get('/list', listProfessionals);
-router.get('/nearby', getNearbyProfessionals);
-router.get('/:id', getProfessional);
+router.get('/list', enforceSubscription, listProfessionals);
+router.get('/nearby', enforceSubscription, getNearbyProfessionals);
+router.get('/:id', enforceSubscription, getProfessional);
 
 // VCN verification — static paths BEFORE /:id wildcard
 router.post('/vet-verification/submit', protect, authorize('vet'), submitVCN);

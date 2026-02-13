@@ -14,6 +14,14 @@ const userSchema = new mongoose.Schema({
     type: { type: String, default: 'Point' },
     coordinates: { type: [Number], index: '2dsphere' } // [longitude, latitude]
   },
+  // Subscription for pet owners/general users
+  subscription: {
+    plan: { type: String, enum: ['monthly', 'yearly'], default: null },
+    status: { type: String, enum: ['active', 'inactive', 'expired'], default: 'inactive' },
+    startDate: Date,
+    endDate: Date,
+    paymentReference: String,
+  },
   // Professional Verification Fields
   isVerified: { type: Boolean, default: false },
   vetDetails: {

@@ -10,14 +10,15 @@ import {
   deleteShop,
 } from '../api/shop.controller.js';
 import { protect } from '../middlewares/authMiddleware.js';
+import { enforceSubscription } from '../middlewares/subscriptionMiddleware.js';
 
 const router = express.Router();
 
 // Public routes
-router.get('/nearby', getNearbyShops); // Search nearby shops
-router.get('/search', searchShops); // Search shops with text query
-router.get('/list', listShops); // List all verified shops
-router.get('/:id', getShopById); // Get specific shop by ID
+router.get('/nearby', enforceSubscription, getNearbyShops); // Search nearby shops
+router.get('/search', enforceSubscription, searchShops); // Search shops with text query
+router.get('/list', enforceSubscription, listShops); // List all verified shops
+router.get('/:id', enforceSubscription, getShopById); // Get specific shop by ID
 
 // Protected routes (require authentication)
 router.use(protect); // All routes below require authentication

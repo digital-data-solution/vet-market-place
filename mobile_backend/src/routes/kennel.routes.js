@@ -1,5 +1,6 @@
 import express from 'express';
 import { protect, authorize } from '../middlewares/authMiddleware.js';
+import { enforceSubscription } from '../middlewares/subscriptionMiddleware.js';
 import {
   onboardKennel,
   listKennels,
@@ -13,8 +14,8 @@ import {
 const router = express.Router();
 
 // Public routes — no auth needed to browse kennels
-router.get('/list', listKennels);
-router.get('/nearby', getNearbyKennels);
+router.get('/list', enforceSubscription, listKennels);
+router.get('/nearby', enforceSubscription, getNearbyKennels);
 
 // Private — kennel owner routes
 // Static paths BEFORE /:id wildcard
