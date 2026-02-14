@@ -23,7 +23,10 @@ import { protect } from './middlewares/authMiddleware.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+
 const app = express();
+// Fix: Trust proxy for rate limiting and X-Forwarded-For headers (Render, Vercel, etc)
+app.set('trust proxy', 1);
 
 app.use(helmet());
 app.use(cors());
@@ -51,21 +54,6 @@ app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/v1/vet-verification', vetVerificationRoutes);
 app.use('/api/v1/shops', shopLimiter, shopRoutes);
 app.use('/api/v1/professional', professionalRoutes);
-
-// File upload route using Cloudinary
-const upload = multer({ storage: multer.memoryStorage() });
-app.post('/api/upload', protect, upload.single('image'), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
-    }
-    const url = await uploadToCloudinary(req.file.buffer, 'profiles');
-    res.json({ url });
-  } catch (error) {
-    console.error('Upload error:', error);
-    res.status(500).json({ error: 'Upload failed' });
-  }
-});
 // Then mount it alongside your other routes:
 app.use('/api/v1/kennels', kennelRoutes);
 
