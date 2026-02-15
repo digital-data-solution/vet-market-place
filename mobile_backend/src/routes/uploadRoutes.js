@@ -1,7 +1,7 @@
+import { protect as authenticate } from '../middlewares/authMiddleware.js';
 import express from 'express';
 import multer from 'multer';
 import { uploadToCloudinary, deleteFromCloudinary } from '../utils/cloudinaryHelper.js';
-import { authenticate } from '../middleware/auth.js';
 
 const router = express.Router();
 

@@ -25,3 +25,4 @@ const validateConfig = () => {
 validateConfig();
 
 export default cloudinary;
+ 

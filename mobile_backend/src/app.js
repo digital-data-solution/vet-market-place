@@ -16,9 +16,11 @@ import kennelRoutes from './routes/kennel.routes.js';
 import vetVerificationRoutes from './routes/vetVerification.routes.js';
 import shopRoutes from './routes/shop.routes.js';
 import professionalRoutes from './routes/professional.routes.js';
+
 import cache from './lib/cache.js';
 import { uploadToCloudinary } from './lib/cloudinaryUpload.js';
 import { protect } from './middlewares/authMiddleware.js';
+import uploadRoutes from './routes/uploadRoutes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -56,6 +58,9 @@ app.use('/api/v1/shops', shopLimiter, shopRoutes);
 app.use('/api/v1/professional', professionalRoutes);
 // Then mount it alongside your other routes:
 app.use('/api/v1/kennels', kennelRoutes);
+
+// Mount upload routes for image upload and deletion
+app.use('/api/upload', uploadRoutes);
 
 // initialize optional redis cache
 cache.initCache().catch(() => {});
