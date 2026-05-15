@@ -1,0 +1,55 @@
+import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
+
+const userSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  email: { type: String, required: true, unique: true },
+  password: { type: String, required: true },
+  role: {
+    type: String,
+    enum: ['pet_owner', 'vet', 'kennel_owner', 'admin'],
+    default: 'pet_owner'
+  },
+  location: {
+    type: { type: String, default: 'Point' },
+    coordinates: { type: [Number], index: '2dsphere' } // [longitude, latitude]
+  },
+  // Subscription for pet owners/general users
+  subscription: {
+    plan: { type: String, enum: ['monthly', 'yearly'], default: null },
+    status: { type: String, enum: ['active', 'inactive', 'expired'], default: 'inactive' },
+    startDate: Date,
+    endDate: Date,
+    paymentReference: String,
+  },
+  // Professional Verification Fields
+  isVerified: { type: Boolean, default: false },
+  vetDetails: {
+    vcnNumber: { type: String }, // Veterinary Council of Nigeria ID
+    licenseExpiry: Date,
+    specialization: [String]
+  },
+  vetVerification: {
+    status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
+    documents: { type: [String], default: [] }, // URLs or file refs to verification docs
+    adminNotes: String,
+    verifiedAt: Date
+  },
+  kennelDetails: {
+    cacNumber: { type: String }, // Corporate Affairs Commission Number
+    capacity: Number
+  }
+}, { timestamps: true });
+
+// Pre-save Middleware: Auto-hash password
+userSchema.pre('save', async function () {
+  if (!this.isModified('password')) return;
+  this.password = await bcrypt.hash(this.password, 12);
+});
+
+// Compare password method
+userSchema.methods.comparePassword = async function (password) {
+  return await bcrypt.compare(password, this.password);
+};
+
+export default mongoose.model('User', userSchema);
