@@ -52,7 +52,7 @@ const shopLimiter = rateLimit({ windowMs: 60 * 60 * 1000, max: 100, message: 'Sh
 // Mount API routes with appropriate throttling
 app.use('/api/v1/professionals', vetRoutes);
 app.use('/api/auth', authLimiter, authRoutes);
-app.use('/api/subscription', subscriptionRoutes);
+app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/v1/vet-verification', vetVerificationRoutes);
 app.use('/api/v1/shops', shopLimiter, shopRoutes);
 app.use('/api/v1/professional', professionalRoutes);

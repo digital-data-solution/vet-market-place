@@ -9,7 +9,7 @@ dotenv.config({ path: path.join(__dirname, '../.env') });
 
 // Dynamic import of runtime modules so they read process.env after dotenv.config
 const { default: app } = await import('./app.js');
-const { default: connectDB } = await import('./lib/db.js');
+const { default: connectDB } = await import('./config/db.js');
 const { connectRedis } = await import('./lib/redis.js');
 const { default: startLicenseCheckJob } = await import('./jobs/licenseCron.js');
 
