@@ -7,65 +7,82 @@ import {
   verifyPayment,
   handlePaystackWebhook,
   getSubscriptionStats,
-  getPricing
+  getPricing,
 } from '../api/subscription.controller.js';
-import { 
-  enforceSubscription, 
-  premiumOnly, 
-  enterpriseOnly,
-  attachSubscription 
+import {
+  enforceSubscription,
+  professionalOnly,
+  attachSubscription,
+  checkExpiryWarning,
 } from '../middlewares/subscriptionMiddleware.js';
 import { protect, authorize } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
-// Public routes
+// ─────────────────────────────────────────────────────────────────────────────
+// PUBLIC ROUTES
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Returns plan pricing in NGN — safe to call unauthenticated
 router.get('/pricing', getPricing);
 
-// Webhook (must be BEFORE express.json middleware - use express.raw)
-// In your main app.js, add: app.use('/api/subscriptions/webhook', express.raw({ type: 'application/json' }), subscriptionRoutes);
+// Paystack webhook — MUST receive raw body (Buffer), not parsed JSON.
+// Wire this up in app.js BEFORE express.json(), like so:
+//
+//   app.use(
+//     '/api/subscriptions/webhook',
+//     express.raw({ type: 'application/json' }),
+//     subscriptionRoutes,
+//   );
+//
+// All other subscription routes run under express.json() as normal.
 router.post('/webhook', handlePaystackWebhook);
 
-// Protected routes (require authentication)
-router.use(protect); // All routes below require auth
+// ─────────────────────────────────────────────────────────────────────────────
+// AUTHENTICATED ROUTES
+// All routes below require a valid JWT via the protect middleware.
+// ─────────────────────────────────────────────────────────────────────────────
+router.use(protect);
 
-// Get current user's subscription
-router.get('/me', getUserSubscription);
+// Get the calling user's current subscription (works for both user types)
+// attachSubscription + checkExpiryWarning enrich the response automatically.
+router.get(
+  '/me',
+  attachSubscription,
+  checkExpiryWarning,
+  getUserSubscription,
+);
 
-// Create subscription - routes based on user type
-router.post('/user', createUserSubscription); // For pet owners
-router.post('/professional', createProfessionalSubscription); // For professionals/shops
+// Initiate payment — pet owners
+router.post('/user', createUserSubscription);
 
-// Verify payment after Paystack redirect
+// Initiate payment — professionals / shop owners
+router.post('/professional', createProfessionalSubscription);
+
+// Paystack redirect callback (manual verify fallback — webhook is the primary path)
 router.get('/verify', verifyPayment);
 
-// Cancel subscription
+// Cancel — soft cancel; access retained until billing period ends
 router.delete('/cancel', cancelSubscription);
 
-// Admin only - statistics
+// ─────────────────────────────────────────────────────────────────────────────
+// ADMIN ROUTES
+// ─────────────────────────────────────────────────────────────────────────────
 router.get('/stats', authorize('admin'), getSubscriptionStats);
 
-// Example protected routes showing middleware usage
+// ─────────────────────────────────────────────────────────────────────────────
+// EXAMPLE GATED FEATURE ROUTES
+// Swap these out for your real route handlers.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Any subscriber (pet owner or professional) can access
 router.get('/features/basic', enforceSubscription, (req, res) => {
-  res.json({ 
-    success: true, 
-    message: 'Access granted to basic feature',
-    subscription: req.subscription
-  });
+  res.json({ success: true, message: 'Access granted to basic feature.' });
 });
 
-router.get('/features/premium', premiumOnly, (req, res) => {
-  res.json({ 
-    success: true, 
-    message: 'Access granted to premium feature' 
-  });
-});
-
-router.get('/features/enterprise', enterpriseOnly, (req, res) => {
-  res.json({ 
-    success: true, 
-    message: 'Access granted to enterprise feature' 
-  });
+// Professional / shop subscribers only
+router.get('/features/professional', professionalOnly, (req, res) => {
+  res.json({ success: true, message: 'Access granted to professional feature.' });
 });
 
 export default router;

@@ -1,17 +1,48 @@
 import mongoose from 'mongoose';
 
-const subscriptionSchema = new mongoose.Schema({
-  user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  plan: { type: String, enum: ['basic', 'premium'], default: 'basic' },
-  amount: { 
-    type: Number, 
-    required: true,
-    default: function() { return this.plan === 'premium' ? 10000 : 5000; } // ₦5,000 basic, ₦10,000 premium
+const subscriptionSchema = new mongoose.Schema(
+  {
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+      index: true,
+    },
+
+    // 'basic' = professional listing plan (₦3,000/month)
+    // No other professional plans exist — premiumOnly/enterpriseOnly middleware
+    // has been removed from active use since those tiers don't exist.
+    plan: {
+      type: String,
+      enum: ['basic'],
+      default: 'basic',
+    },
+
+    amount: {
+      type: Number,
+      required: true,
+      default: 3000, // ₦3,000 — matches PLAN_PRICING.basic in controller
+    },
+
+    status: {
+      type: String,
+      // 'pending'   — payment initialized, not yet confirmed
+      // 'active'    — payment confirmed, access granted
+      // 'expired'   — past endDate
+      // 'cancelled' — user cancelled (access retained until endDate)
+      enum: ['pending', 'active', 'expired', 'cancelled'],
+      default: 'pending',
+    },
+
+    startDate: { type: Date },
+    endDate: { type: Date, required: true },
+
+    paymentReference: { type: String, index: true },
   },
-  status: { type: String, enum: ['active', 'inactive', 'expired'], default: 'active' },
-  startDate: { type: Date, default: Date.now },
-  endDate: { type: Date, required: true },
-  paymentReference: { type: String } // Paystack reference
-}, { timestamps: true });
+  { timestamps: true }
+);
+
+// Compound index: fast lookup for active subscription checks
+subscriptionSchema.index({ user: 1, status: 1, endDate: 1 });
 
 export default mongoose.model('Subscription', subscriptionSchema);
