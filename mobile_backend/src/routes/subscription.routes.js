@@ -5,7 +5,6 @@ import {
   getUserSubscription,
   cancelSubscription,
   verifyPayment,
-  handlePaystackWebhook,
   getSubscriptionStats,
   getPricing,
 } from '../api/subscription.controller.js';
@@ -26,32 +25,23 @@ const router = express.Router();
 // Returns plan pricing in NGN — safe to call unauthenticated
 router.get('/pricing', getPricing);
 
-// Paystack webhook — MUST receive raw body (Buffer), not parsed JSON.
-// Wire this up in app.js BEFORE express.json(), like so:
+// NOTE: Webhook is intentionally NOT here.
+// It is mounted directly in app.js with express.raw() before express.json():
 //
-//   app.use(
+//   import { handlePaystackWebhook } from './api/subscription.controller.js';
+//   app.post(
 //     '/api/subscriptions/webhook',
 //     express.raw({ type: 'application/json' }),
-//     subscriptionRoutes,
+//     handlePaystackWebhook,
 //   );
-//
-// All other subscription routes run under express.json() as normal.
-router.post('/webhook', handlePaystackWebhook);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AUTHENTICATED ROUTES
-// All routes below require a valid JWT via the protect middleware.
 // ─────────────────────────────────────────────────────────────────────────────
 router.use(protect);
 
-// Get the calling user's current subscription (works for both user types)
-// attachSubscription + checkExpiryWarning enrich the response automatically.
-router.get(
-  '/me',
-  attachSubscription,
-  checkExpiryWarning,
-  getUserSubscription,
-);
+// Get the calling user's current subscription
+router.get('/me', attachSubscription, checkExpiryWarning, getUserSubscription);
 
 // Initiate payment — pet owners
 router.post('/user', createUserSubscription);
@@ -59,7 +49,7 @@ router.post('/user', createUserSubscription);
 // Initiate payment — professionals / shop owners
 router.post('/professional', createProfessionalSubscription);
 
-// Paystack redirect callback (manual verify fallback — webhook is the primary path)
+// Paystack redirect callback (manual verify fallback — webhook is primary)
 router.get('/verify', verifyPayment);
 
 // Cancel — soft cancel; access retained until billing period ends
@@ -72,7 +62,6 @@ router.get('/stats', authorize('admin'), getSubscriptionStats);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // EXAMPLE GATED FEATURE ROUTES
-// Swap these out for your real route handlers.
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Any subscriber (pet owner or professional) can access

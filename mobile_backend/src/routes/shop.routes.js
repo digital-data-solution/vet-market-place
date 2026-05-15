@@ -14,18 +14,18 @@ import { enforceSubscription } from '../middlewares/subscriptionMiddleware.js';
 
 const router = express.Router();
 
-// Public routes
-router.get('/nearby', enforceSubscription, getNearbyShops); // Search nearby shops
-router.get('/search', enforceSubscription, searchShops); // Search shops with text query
-router.get('/list', enforceSubscription, listShops); // List all verified shops
-router.get('/:id', enforceSubscription, getShopById); // Get specific shop by ID
+// ─── Public named routes — must come before /:id wildcard ────────────────────
+router.get('/nearby', protect, enforceSubscription, getNearbyShops);
+router.get('/search', protect, enforceSubscription, searchShops);
+router.get('/list',   protect, enforceSubscription, listShops);
 
-// Protected routes (require authentication)
-router.use(protect); // All routes below require authentication
+// ─── Protected /me routes — must come before /:id wildcard ───────────────────
+router.get('/me/shop',    protect, getMyShop);
+router.put('/me/shop',    protect, updateShop);
+router.delete('/me/shop', protect, deleteShop);
+router.post('/create',    protect, createShop);
 
-router.post('/create', createShop); // Create shop
-router.get('/me/shop', getMyShop); // Get own shop
-router.put('/me/shop', updateShop); // Update own shop
-router.delete('/me/shop', deleteShop); // Delete own shop
+// ─── Wildcard — must be last ──────────────────────────────────────────────────
+router.get('/:id', protect, enforceSubscription, getShopById);
 
 export default router;
