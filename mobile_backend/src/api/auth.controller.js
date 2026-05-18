@@ -1,7 +1,6 @@
 import User from '../models/User.js';
 import logger from '../lib/logger.js';
-import { supabaseAdmin } from '../lib/supabase.js';
-import { verifySupabaseToken } from '../lib/supabase.js';
+import { supabaseAdmin, verifySupabaseToken } from '../lib/supabase.js';
 
 export const register = async (req, res) => {
   const { name, email, password, role, location, vetDetails, kennelDetails, vcnNumber, cacNumber } = req.body;
@@ -11,7 +10,6 @@ export const register = async (req, res) => {
       return res.status(400).json({ message: 'Name, email and password are required.' });
     }
 
-    // Check for duplicate in MongoDB
     const existing = await User.findOne({
       $or: [
         { email },
@@ -23,7 +21,6 @@ export const register = async (req, res) => {
       return res.status(400).json({ message: 'An account with these details already exists.' });
     }
 
-    // Register in Supabase — sends confirmation email automatically
     const { data: supabaseData, error: supabaseError } = await supabaseAdmin.auth.signUp({
       email,
       password,
@@ -37,18 +34,17 @@ export const register = async (req, res) => {
       return res.status(500).json({ message: supabaseError.message });
     }
 
-    // Create MongoDB user — supabaseId links the two systems
     const user = new User({
       supabaseId: supabaseData.user.id,
       name,
       email,
-      password,           // hashed by pre-save hook
+      password,
       role: role || 'pet_owner',
       location,
-      isVerified: false,  // flipped to true after email confirmation
+      isVerified: false,
     });
 
-    if (role === 'vet') user.vetDetails = vetDetails;
+    if (role === 'vet')          user.vetDetails    = vetDetails;
     if (role === 'kennel_owner') user.kennelDetails = kennelDetails;
 
     await user.save();
@@ -64,10 +60,6 @@ export const register = async (req, res) => {
 };
 
 export const login = async (req, res) => {
-  // Login is handled entirely client-side via Supabase SDK.
-  // The JWT from Supabase is passed in the Authorization header on every
-  // subsequent request, and protect() middleware validates it.
-  // This endpoint is kept only for legacy compatibility — it is not needed.
   return res.status(410).json({
     message: 'Direct login is handled by the Supabase client SDK. Use supabase.auth.signInWithPassword() on the frontend.',
   });
@@ -81,7 +73,7 @@ export const syncUser = async (req, res) => {
     const supabaseUser = await verifySupabaseToken(token);
     if (!supabaseUser) return res.status(401).json({ message: 'Invalid token.' });
 
-    const supabaseId = supabaseUser.sub;
+    const supabaseId = supabaseUser.id;     // ← FIXED: was .sub
     const email      = supabaseUser.email;
 
     if (!supabaseId || !email) {
@@ -94,9 +86,9 @@ export const syncUser = async (req, res) => {
         $setOnInsert: {
           supabaseId,
           email,
-          name: supabaseUser.user_metadata?.name || email.split('@')[0],
-          role: supabaseUser.user_metadata?.role || 'pet_owner',
-          password: 'supabase_managed',
+          name:       supabaseUser.user_metadata?.name || email.split('@')[0],
+          role:       supabaseUser.user_metadata?.role || 'pet_owner',
+          password:   'supabase_managed',
           isVerified: true,
         },
       },
@@ -108,4 +100,9 @@ export const syncUser = async (req, res) => {
     logger.error('Sync error', { error: error.message });
     return res.status(500).json({ message: error.message });
   }
+};
+
+// GET /api/auth/me — returns the authenticated user loaded by protect middleware
+export const getMe = async (req, res) => {
+  return res.json({ user: req.user });
 };

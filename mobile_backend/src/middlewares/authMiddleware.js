@@ -12,7 +12,7 @@ export const protect = async (req, res, next) => {
       return res.status(401).json({ message: 'Not authorized, invalid token' });
     }
 
-    const supabaseId = supabaseUser.sub;
+    const supabaseId = supabaseUser.id;     // ← FIXED: was .sub (undefined on User object)
     const email      = supabaseUser.email;
 
     if (!supabaseId || !email) {
@@ -25,9 +25,9 @@ export const protect = async (req, res, next) => {
         $setOnInsert: {
           supabaseId,
           email,
-          role:     supabaseUser.user_metadata?.role || 'pet_owner',
-          name:     supabaseUser.user_metadata?.name || email.split('@')[0],
-          password: 'supabase_managed',
+          role:      supabaseUser.user_metadata?.role || 'pet_owner',
+          name:      supabaseUser.user_metadata?.name || email.split('@')[0],
+          password:  'supabase_managed',
           createdAt: new Date(),
         },
       },
