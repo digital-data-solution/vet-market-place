@@ -1,149 +1,111 @@
-// Sync Supabase user to MongoDB if missing
+import User from '../models/User.js';
+import logger from '../lib/logger.js';
+import { supabaseAdmin } from '../lib/supabase.js';
 import { verifySupabaseToken } from '../lib/supabase.js';
 
-export const syncUser = async (req, res) => {
-  try {
-    const token = req.headers.authorization?.split(' ')[1];
-    if (!token) return res.status(401).json({ message: 'No token provided' });
-    const supabaseUser = await verifySupabaseToken(token);
-    if (!supabaseUser) return res.status(401).json({ message: 'Invalid Supabase token' });
-
-    // Try to find user in MongoDB
-    let user = await User.findOne({ phone: supabaseUser.phone });
-    if (user) return res.json({ message: 'User already exists in MongoDB', user });
-
-    // Create user in MongoDB
-    user = new User({
-      name: supabaseUser.user_metadata?.name || supabaseUser.phone || supabaseUser.email,
-      email: supabaseUser.email,
-      phone: supabaseUser.phone,
-      password: 'external', // Not used, but required by schema
-      role: 'pet_owner',
-      isVerified: true
-    });
-    await user.save();
-    res.status(201).json({ message: 'User synced to MongoDB', user });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-import User from '../models/User.js';
-import jwt from 'jsonwebtoken';
-import logger from '../lib/logger.js';
-// import { sendSMSOTP } from '../services/onesignal.service.js';
-// import { redisClient } from '../lib/redis.js';
-import { supabaseAdmin } from '../lib/supabase.js';
-
-// OTP logic now handled by Supabase
-
 export const register = async (req, res) => {
-  const { name, email, password, phone, role, location } = req.body;
+  const { name, email, password, role, location, vetDetails, kennelDetails, vcnNumber, cacNumber } = req.body;
 
   try {
-    logger.info('Registering user', { email, phone, role });
-    // Check if user exists in backend
-    const existingUser = await User.findOne({ $or: [{ email }, { 'vetDetails.vcnNumber': req.body.vcnNumber }, { 'kennelDetails.cacNumber': req.body.cacNumber }] });
-    if (existingUser) {
-      logger.warn('User already exists', { email, phone });
-      return res.status(400).json({ message: 'User already exists' });
+    if (!email || !password || !name) {
+      return res.status(400).json({ message: 'Name, email and password are required.' });
     }
 
-    // Register user in Supabase Auth (triggers OTP if phone provided)
-    let supabaseRes;
-    if (email || phone) {
-      supabaseRes = await supabaseAdmin.auth.signUp({
-        email: email || undefined,
-        phone: phone || undefined,
-        password
-      });
-    }
-    if (supabaseRes?.error) {
-      logger.error('Supabase registration error', { error: supabaseRes.error.message });
-      return res.status(500).json({ message: 'Supabase error: ' + supabaseRes.error.message });
+    // Check for duplicate in MongoDB
+    const existing = await User.findOne({
+      $or: [
+        { email },
+        ...(vcnNumber ? [{ 'vetDetails.vcnNumber': vcnNumber }] : []),
+        ...(cacNumber ? [{ 'kennelDetails.cacNumber': cacNumber }] : []),
+      ],
+    });
+    if (existing) {
+      return res.status(400).json({ message: 'An account with these details already exists.' });
     }
 
-    // Create user in backend DB (password hashed by pre-save hook)
-    const user = new User({ name, email, password, phone, role, location });
-    if (role === 'vet') user.vetDetails = req.body.vetDetails;
-    if (role === 'kennel_owner') user.kennelDetails = req.body.kennelDetails;
+    // Register in Supabase — sends confirmation email automatically
+    const { data: supabaseData, error: supabaseError } = await supabaseAdmin.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { name, role: role || 'pet_owner' },
+      },
+    });
+
+    if (supabaseError) {
+      logger.error('Supabase registration error', { error: supabaseError.message });
+      return res.status(500).json({ message: supabaseError.message });
+    }
+
+    // Create MongoDB user — supabaseId links the two systems
+    const user = new User({
+      supabaseId: supabaseData.user.id,
+      name,
+      email,
+      password,           // hashed by pre-save hook
+      role: role || 'pet_owner',
+      location,
+      isVerified: false,  // flipped to true after email confirmation
+    });
+
+    if (role === 'vet') user.vetDetails = vetDetails;
+    if (role === 'kennel_owner') user.kennelDetails = kennelDetails;
+
     await user.save();
 
-    logger.info('User registered successfully', { userId: user._id });
-    res.status(201).json({ message: 'User registered. Please verify OTP sent to your phone/email.' });
-  } catch (error) {
-    logger.error('User registration error', { error: error.message, stack: error.stack });
-    res.status(500).json({ message: error.message });
-  }
-};
-
-export const verifyOTP = async (req, res) => {
-  const { phone, token } = req.body;
-  try {
-    // Use Supabase to verify OTP
-    const { data, error } = await supabaseAdmin.auth.verifyOtp({
-      phone,
-      token,
-      type: 'sms',
+    logger.info('User registered', { userId: user._id, email });
+    return res.status(201).json({
+      message: 'Registration successful. Please check your email to verify your account.',
     });
-    if (error) return res.status(400).json({ message: error.message });
-    // Optionally update backend user as verified
-    await User.findOneAndUpdate({ phone }, { isVerified: true });
-    res.json({ message: 'OTP verified. Registration complete.' });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    logger.error('Registration error', { error: error.message });
+    return res.status(500).json({ message: error.message });
   }
 };
 
 export const login = async (req, res) => {
-  const { email, password } = req.body;
-
-  try {
-    const user = await User.findOne({ email });
-    if (!user || !(await user.comparePassword(password))) return res.status(401).json({ message: 'Invalid credentials' });
-
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
-
-    res.json({ token, user: { id: user._id, name: user.name, role: user.role, isVerified: user.isVerified } });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
+  // Login is handled entirely client-side via Supabase SDK.
+  // The JWT from Supabase is passed in the Authorization header on every
+  // subsequent request, and protect() middleware validates it.
+  // This endpoint is kept only for legacy compatibility — it is not needed.
+  return res.status(410).json({
+    message: 'Direct login is handled by the Supabase client SDK. Use supabase.auth.signInWithPassword() on the frontend.',
+  });
 };
 
-// Login with phone - sends OTP
-export const loginWithPhone = async (req, res) => {
-  const { phone } = req.body;
+export const syncUser = async (req, res) => {
   try {
-    // Use Supabase to send OTP for login
-    const { data, error } = await supabaseAdmin.auth.signInWithOtp({
-      phone,
-    });
-    if (error) return res.status(400).json({ message: error.message });
-    res.json({ message: 'OTP sent to your phone.' });
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ message: 'No token provided.' });
+
+    const supabaseUser = await verifySupabaseToken(token);
+    if (!supabaseUser) return res.status(401).json({ message: 'Invalid token.' });
+
+    const supabaseId = supabaseUser.sub;
+    const email      = supabaseUser.email;
+
+    if (!supabaseId || !email) {
+      return res.status(400).json({ message: 'Token missing required fields.' });
+    }
+
+    const user = await User.findOneAndUpdate(
+      { supabaseId },
+      {
+        $setOnInsert: {
+          supabaseId,
+          email,
+          name: supabaseUser.user_metadata?.name || email.split('@')[0],
+          role: supabaseUser.user_metadata?.role || 'pet_owner',
+          password: 'supabase_managed',
+          isVerified: true,
+        },
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
+    );
+
+    return res.json({ message: 'User synced.', userId: user._id });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    logger.error('Sync error', { error: error.message });
+    return res.status(500).json({ message: error.message });
   }
 };
-
-// Verify login OTP
-export const verifyLoginOTP = async (req, res) => {
-  const { phone, token } = req.body;
-  try {
-    // Use Supabase to verify OTP for login
-    const { data, error } = await supabaseAdmin.auth.verifyOtp({
-      phone,
-      token,
-      type: 'sms',
-    });
-    if (error) return res.status(400).json({ message: error.message });
-    // Find user in backend
-    const user = await User.findOne({ phone });
-    if (!user) return res.status(404).json({ message: 'User not found' });
-    const jwtToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token: jwtToken, user: { id: user._id, name: user.name, role: user.role, isVerified: user.isVerified } });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// Add comparePassword method to User model
-// In User.js, add: userSchema.methods.comparePassword = async function (password) { return await bcrypt.compare(password, this.password); };
