@@ -29,11 +29,11 @@ async function activateUserSubscription(userId, plan, reference) {
 
   user.subscription = {
     plan,
-    status: 'active',
+    status:           'active',
     startDate,
     endDate,
     paymentReference: reference,
-    amount: PLAN_PRICING[plan],
+    amount:           PLAN_PRICING[plan],
   };
 
   await user.save();
@@ -265,6 +265,14 @@ export const createProfessionalSubscription = async (req, res) => {
       return res.status(400).json({ success: false, message: 'You already have an active subscription.' });
     }
 
+    // ── NEW: void any stale pending sub before creating a new one ──────────
+    await Subscription.updateMany(
+      { user: userId, status: 'pending' },
+      { $set: { status: 'cancelled' } },
+      { session },
+    );
+    // ───────────────────────────────────────────────────────────────────────
+
     const amount  = PLAN_PRICING[plan];
     const endDate = new Date();
     endDate.setMonth(endDate.getMonth() + 1);
@@ -349,6 +357,9 @@ export const getUserSubscription = async (req, res) => {
       .lean();
 
     if (professionalSub) {
+      // ── Skip pending subs — only surface them if there's no better record ──
+      // (handled below after both checks)
+
       const endDate     = new Date(professionalSub.endDate);
       const justExpired = professionalSub.status === 'active' && now > endDate;
 
@@ -411,7 +422,35 @@ export const getUserSubscription = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CANCEL
+// CANCEL PENDING  ← NEW: clears the stuck-pending loop on payment cancel
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const cancelPendingSubscription = async (req, res) => {
+  const userId = req.user._id || req.user.id;
+
+  try {
+    // Professional pending subs (Subscription collection)
+    await Subscription.updateMany(
+      { user: userId, status: 'pending' },
+      { $set: { status: 'cancelled' } },
+    );
+
+    // Pet owner pending sub (embedded on User)
+    const user = await User.findById(userId);
+    if (user?.subscription?.status === 'pending') {
+      user.subscription.status = 'cancelled';
+      await user.save();
+    }
+
+    return res.json({ success: true, message: 'Pending subscription cleared.' });
+  } catch (error) {
+    logger.error('Cancel pending error', { error: error.message, userId });
+    return res.status(500).json({ success: false, message: 'Failed to clear pending subscription.' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CANCEL (active subscription)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const cancelSubscription = async (req, res) => {

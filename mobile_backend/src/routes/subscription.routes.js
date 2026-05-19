@@ -4,6 +4,7 @@ import {
   createProfessionalSubscription,
   getUserSubscription,
   cancelSubscription,
+  cancelPendingSubscription,
   verifyPayment,
   getSubscriptionStats,
   getPricing,
@@ -52,7 +53,11 @@ router.post('/professional', createProfessionalSubscription);
 // Paystack redirect callback (manual verify fallback — webhook is primary)
 router.get('/verify', verifyPayment);
 
-// Cancel — soft cancel; access retained until billing period ends
+// ── NEW: called by the app when user cancels/abandons the payment WebView ──
+// Clears any pending subscription record so the UI doesn't get stuck.
+router.post('/cancel-pending', cancelPendingSubscription);
+
+// Cancel active subscription — soft cancel; access retained until billing period ends
 router.delete('/cancel', cancelSubscription);
 
 // ─────────────────────────────────────────────────────────────────────────────
