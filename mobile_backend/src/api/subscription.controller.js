@@ -8,7 +8,7 @@ import logger from '../lib/logger.js';
 import mongoose from 'mongoose';
 
 const PAYSTACK_BASE   = process.env.PAYSTACK_BASE   || 'https://api.paystack.co';
-const PAYSTACK_SECRET = process.env.PAYSTACK_SECRET || '';
+const PAYSTACK_SECRET = process.env.PAYSTACK_SECRET_KEY || '';
 
 const PLAN_PRICING = {
   user_monthly: 500,
