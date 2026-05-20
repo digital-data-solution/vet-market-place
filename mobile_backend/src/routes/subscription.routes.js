@@ -53,8 +53,8 @@ router.post('/professional', createProfessionalSubscription);
 // Paystack redirect callback (manual verify fallback — webhook is primary)
 router.get('/verify', verifyPayment);
 
-// ── NEW: called by the app when user cancels/abandons the payment WebView ──
-// Clears any pending subscription record so the UI doesn't get stuck.
+// Called by the app when user cancels/abandons the payment WebView.
+// Clears any pending subscription record so the UI resets to the Subscribe button.
 router.post('/cancel-pending', cancelPendingSubscription);
 
 // Cancel active subscription — soft cancel; access retained until billing period ends
