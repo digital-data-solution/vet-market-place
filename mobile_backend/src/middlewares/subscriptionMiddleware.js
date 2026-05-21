@@ -32,8 +32,13 @@ async function resolveSubscription(userId, role) {
 
     // Lazily expire in the background — never block the request on this write.
     if (sub.status === 'active' && endDate && now > endDate) {
-      User.findByIdAndUpdate(userId, { 'subscription.status': 'expired' })
-        .catch(err => logger.error('Lazy expiry update failed (pet_owner)', { err: err.message, userId }));
+      User.findByIdAndUpdate(
+        userId,
+        { 'subscription.status': 'expired' },
+        { returnDocument: 'after' },   // replaces deprecated { new: true }
+      ).catch(err =>
+        logger.error('Lazy expiry update failed (pet_owner)', { err: err.message, userId }),
+      );
       sub.status = 'expired';
     }
 
@@ -79,8 +84,13 @@ async function resolveSubscription(userId, role) {
 
   // Lazily mark any stale active records as expired.
   if (lastSub.status === 'active') {
-    Subscription.findByIdAndUpdate(lastSub._id, { status: 'expired' })
-      .catch(err => logger.error('Lazy expiry update failed (professional)', { err: err.message, userId }));
+    Subscription.findByIdAndUpdate(
+      lastSub._id,
+      { status: 'expired' },
+      { returnDocument: 'after' },     // replaces deprecated { new: true }
+    ).catch(err =>
+      logger.error('Lazy expiry update failed (professional)', { err: err.message, userId }),
+    );
     lastSub.status = 'expired';
   }
 
@@ -266,8 +276,8 @@ export const attachSubscription = async (req, res, next) => {
   if (!userId) return next();
 
   try {
-    const role           = req.user.role || 'pet_owner';
-    req.subscription     = await resolveSubscription(userId, role);
+    const role       = req.user.role || 'pet_owner';
+    req.subscription = await resolveSubscription(userId, role);
   } catch (error) {
     // Intentionally swallow — this middleware must never block
     logger.error('attachSubscription error', { error: error.message, userId });
@@ -297,7 +307,7 @@ export const checkExpiryWarning = (req, res, next) => {
           return originalJson({
             ...data,
             subscriptionWarning: {
-              message:      `Your subscription expires in ${daysUntilExpiry} day${daysUntilExpiry !== 1 ? 's' : ''}. Renew now to avoid interruption.`,
+              message:       `Your subscription expires in ${daysUntilExpiry} day${daysUntilExpiry !== 1 ? 's' : ''}. Renew now to avoid interruption.`,
               daysRemaining: daysUntilExpiry,
               expiresAt:     sub.endDate,
               renewUrl:      sub.type === 'user' ? '/subscribe' : '/subscribe/professional',
