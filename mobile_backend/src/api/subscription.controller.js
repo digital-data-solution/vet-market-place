@@ -15,21 +15,12 @@ const PLAN_PRICING = {
   basic:        3000,
 };
 
-/**
- * Grace window must match the value in subscriptionMiddleware.js.
- * Pending subscriptions are treated as active for this many milliseconds
- * after paymentInitiatedAt, giving Paystack webhooks time to land.
- */
 const PENDING_GRACE_MS = 30 * 60 * 1000; // 30 minutes
 
 // ─────────────────────────────────────────────────────────────────────────────
 // INTERNAL HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Returns true if a pending subscription is still within the grace window.
- * Checks paymentInitiatedAt → createdAt → updatedAt in order.
- */
 function isWithinPendingGrace(sub) {
   const anchor =
     sub.paymentInitiatedAt ||
@@ -41,10 +32,6 @@ function isWithinPendingGrace(sub) {
   return Date.now() - new Date(anchor).getTime() <= PENDING_GRACE_MS;
 }
 
-/**
- * Builds the grace window expiry date from a subscription document.
- * Returns null if no anchor timestamp is available.
- */
 function graceEndsAt(sub) {
   const anchor =
     sub.paymentInitiatedAt ||
@@ -61,15 +48,11 @@ async function activateUserSubscription(userId, plan, reference) {
   const user = await User.findById(userId);
   if (!user) throw new Error('User not found');
 
-  // Idempotency — already activated by a previous webhook/verify call
   if (
     user.subscription?.paymentReference === reference &&
     user.subscription?.status === 'active'
   ) {
-    logger.info('User subscription already active — skipping duplicate activation', {
-      userId,
-      reference,
-    });
+    logger.info('User subscription already active — skipping duplicate activation', { userId, reference });
     return {
       plan:      user.subscription.plan,
       status:    'active',
@@ -83,12 +66,12 @@ async function activateUserSubscription(userId, plan, reference) {
 
   user.subscription = {
     plan,
-    status:              'active',
+    status:             'active',
     startDate,
     endDate,
-    paymentReference:    reference,
-    paymentInitiatedAt:  user.subscription?.paymentInitiatedAt ?? startDate,
-    amount:              PLAN_PRICING[plan],
+    paymentReference:   reference,
+    paymentInitiatedAt: user.subscription?.paymentInitiatedAt ?? startDate,
+    amount:             PLAN_PRICING[plan],
   };
 
   await user.save();
@@ -100,15 +83,11 @@ async function activateProfessionalSubscription(subscriptionId, reference) {
   const subscription = await Subscription.findById(subscriptionId);
   if (!subscription) throw new Error('Subscription not found');
 
-  // Idempotency — already activated
   if (
     subscription.paymentReference === reference &&
     subscription.status === 'active'
   ) {
-    logger.info('Professional subscription already active — skipping duplicate activation', {
-      subscriptionId,
-      reference,
-    });
+    logger.info('Professional subscription already active — skipping duplicate activation', { subscriptionId, reference });
     return {
       plan:      subscription.plan,
       status:    'active',
@@ -150,38 +129,69 @@ export const getPricing = async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const handlePaystackWebhook = async (req, res) => {
+  // ── DEBUG LOGS — remove after confirming webhook works ───────────────────
+  console.log('🔔 WEBHOOK HIT');
+  console.log('Body type:', typeof req.body, '| Is Buffer:', Buffer.isBuffer(req.body));
+  console.log('Signature header:', req.headers['x-paystack-signature']);
+  console.log('Content-Type:', req.headers['content-type']);
+  // ─────────────────────────────────────────────────────────────────────────
+
   try {
     const signature = req.headers['x-paystack-signature'];
-    if (!signature) return res.status(400).send('Missing signature');
+    if (!signature) {
+      console.log('❌ Webhook rejected: missing signature');
+      return res.status(400).send('Missing signature');
+    }
+
+    if (!PAYSTACK_SECRET) {
+      console.log('❌ Webhook rejected: PAYSTACK_SECRET_KEY not set');
+      return res.status(500).send('Server misconfigured');
+    }
 
     const computed = crypto
       .createHmac('sha512', PAYSTACK_SECRET)
       .update(req.body)
       .digest('hex');
 
-    if (signature !== computed) return res.status(400).send('Invalid signature');
+    console.log('Signature match:', signature === computed);
+
+    if (signature !== computed) {
+      console.log('❌ Webhook rejected: signature mismatch');
+      return res.status(400).send('Invalid signature');
+    }
 
     const event = JSON.parse(req.body.toString());
+    console.log('✅ Webhook event:', event.event, '| Payment status:', event.data?.status);
+    console.log('Metadata:', JSON.stringify(event.data?.metadata));
 
     if (event.event === 'charge.success' && event.data?.status === 'success') {
       const metadata = event.data.metadata || {};
 
       if (metadata.subscriptionType === 'user') {
+        console.log('▶ Activating user subscription for userId:', metadata.userId);
         await activateUserSubscription(
           metadata.userId,
           metadata.plan,
           event.data.reference,
         );
+        console.log('✅ User subscription activated');
       } else if (metadata.subscriptionType === 'professional') {
+        console.log('▶ Activating professional subscription for subscriptionId:', metadata.subscriptionId);
         await activateProfessionalSubscription(
           metadata.subscriptionId,
           event.data.reference,
         );
+        console.log('✅ Professional subscription activated');
+      } else {
+        console.log('⚠ Unknown subscriptionType in metadata:', metadata.subscriptionType);
       }
+    } else {
+      console.log('ℹ Event ignored (not charge.success):', event.event);
     }
 
     res.status(200).send('OK');
   } catch (error) {
+    console.log('❌ Webhook error:', error.message);
     logger.error('Webhook error', { error: error.message });
     res.status(500).send('Error');
   }
@@ -219,19 +229,18 @@ export const createUserSubscription = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Account email required to subscribe.' });
     }
 
-    // Block if already active
     const sub = user.subscription;
+
     if (sub?.status === 'active' && new Date() < new Date(sub.endDate)) {
       await session.abortTransaction();
       return res.status(400).json({ success: false, message: 'You already have an active subscription.' });
     }
 
-    // Block if pending and still within grace window — don't create a duplicate
     if (sub?.status === 'pending' && isWithinPendingGrace(sub)) {
       await session.abortTransaction();
       return res.status(400).json({
-        success:    false,
-        message:    'A payment is already being processed. Please wait for it to confirm.',
+        success: false,
+        message: 'A payment is already being processed. Please wait for it to confirm.',
         data: {
           status:      'pending',
           graceEndsAt: graceEndsAt(sub),
@@ -273,7 +282,6 @@ export const createUserSubscription = async (req, res) => {
       return res.status(500).json({ success: false, message: 'Payment initialization failed.' });
     }
 
-    // ── Set paymentInitiatedAt so the grace window has an anchor ─────────────
     user.subscription = {
       plan,
       status:             'pending',
@@ -348,7 +356,6 @@ export const createProfessionalSubscription = async (req, res) => {
       });
     }
 
-    // Block if already active
     const existing = await Subscription.findOne({
       user:    userId,
       status:  'active',
@@ -360,7 +367,6 @@ export const createProfessionalSubscription = async (req, res) => {
       return res.status(400).json({ success: false, message: 'You already have an active subscription.' });
     }
 
-    // Block if pending and still within grace window
     const pendingSub = await Subscription.findOne({
       user:   userId,
       status: 'pending',
@@ -380,7 +386,6 @@ export const createProfessionalSubscription = async (req, res) => {
       });
     }
 
-    // Void all stale pending subs (outside grace window or no anchor)
     await Subscription.updateMany(
       { user: userId, status: 'pending' },
       { $set: { status: 'cancelled' } },
@@ -391,11 +396,9 @@ export const createProfessionalSubscription = async (req, res) => {
     const displayName = user.name || user.email.split('@')[0];
     const initiatedAt = new Date();
 
-    // endDate is a placeholder — overwritten on activation
     const endDate = new Date(initiatedAt);
     endDate.setMonth(endDate.getMonth() + 1);
 
-    // ── Set paymentInitiatedAt explicitly so the grace window has an anchor ──
     const subscription = new Subscription({
       user:               userId,
       plan,
@@ -463,8 +466,6 @@ export const createProfessionalSubscription = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET CURRENT SUBSCRIPTION
-// Role-aware: pet_owner reads User.subscription; all others read Subscription.
-// Pending subs within the grace window are reported as active with grace info.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const getUserSubscription = async (req, res) => {
@@ -480,7 +481,6 @@ export const getUserSubscription = async (req, res) => {
 
     const now = new Date();
 
-    // ── Professional path ──────────────────────────────────────────────────
     if (role !== 'pet_owner') {
       const professionalSub = await Subscription.findOne({ user: userId })
         .sort({ createdAt: -1 })
@@ -490,22 +490,21 @@ export const getUserSubscription = async (req, res) => {
         return res.status(404).json({ success: false, message: 'No subscription found.', data: null });
       }
 
-      // Pending within grace window → treat as active
       if (professionalSub.status === 'pending') {
-        const inGrace    = isWithinPendingGrace(professionalSub);
+        const inGrace     = isWithinPendingGrace(professionalSub);
         const graceExpiry = graceEndsAt(professionalSub);
 
         return res.json({
           success: true,
           data: {
-            plan:         professionalSub.plan,
-            status:       'pending',
-            amount:       professionalSub.amount,
-            expiresAt:    professionalSub.endDate,
+            plan:          professionalSub.plan,
+            status:        'pending',
+            amount:        professionalSub.amount,
+            expiresAt:     professionalSub.endDate,
             daysRemaining: 0,
-            isActive:     inGrace,
-            isPending:    true,
-            graceEndsAt:  graceExpiry,
+            isActive:      inGrace,
+            isPending:     true,
+            graceEndsAt:   graceExpiry,
             ...(inGrace && {
               notice: 'Your payment is being confirmed. You have full access while we wait.',
             }),
@@ -520,6 +519,7 @@ export const getUserSubscription = async (req, res) => {
         await Subscription.findByIdAndUpdate(
           professionalSub._id,
           { status: 'expired' },
+          { returnDocument: 'after' },
         );
         professionalSub.status = 'expired';
       }
@@ -532,26 +532,24 @@ export const getUserSubscription = async (req, res) => {
       return res.json({
         success: true,
         data: {
-          plan:         professionalSub.plan,
-          status:       professionalSub.status,
-          amount:       professionalSub.amount,
-          expiresAt:    professionalSub.endDate,
+          plan:          professionalSub.plan,
+          status:        professionalSub.status,
+          amount:        professionalSub.amount,
+          expiresAt:     professionalSub.endDate,
           daysRemaining,
           isActive,
-          isPending:    false,
-          graceEndsAt:  null,
+          isPending:     false,
+          graceEndsAt:   null,
         },
       });
     }
 
-    // ── Pet owner path ─────────────────────────────────────────────────────
     if (!user.subscription) {
       return res.status(404).json({ success: false, message: 'No subscription found.', data: null });
     }
 
     const sub = user.subscription;
 
-    // Pending within grace window
     if (sub.status === 'pending') {
       const inGrace     = isWithinPendingGrace(sub);
       const graceExpiry = graceEndsAt(sub);
@@ -559,14 +557,14 @@ export const getUserSubscription = async (req, res) => {
       return res.json({
         success: true,
         data: {
-          plan:         sub.plan,
-          status:       'pending',
-          amount:       sub.amount ?? PLAN_PRICING[sub.plan],
-          expiresAt:    sub.endDate ?? null,
+          plan:          sub.plan,
+          status:        'pending',
+          amount:        sub.amount ?? PLAN_PRICING[sub.plan],
+          expiresAt:     sub.endDate ?? null,
           daysRemaining: 0,
-          isActive:     inGrace,
-          isPending:    true,
-          graceEndsAt:  graceExpiry,
+          isActive:      inGrace,
+          isPending:     true,
+          graceEndsAt:   graceExpiry,
           ...(inGrace && {
             notice: 'Your payment is being confirmed. You have full access while we wait.',
           }),
@@ -578,7 +576,11 @@ export const getUserSubscription = async (req, res) => {
     const justExpired = sub.status === 'active' && now > endDate;
 
     if (justExpired) {
-      await User.findByIdAndUpdate(userId, { 'subscription.status': 'expired' });
+      await User.findByIdAndUpdate(
+        userId,
+        { 'subscription.status': 'expired' },
+        { returnDocument: 'after' },
+      );
       sub.status = 'expired';
     }
 
@@ -590,14 +592,14 @@ export const getUserSubscription = async (req, res) => {
     return res.json({
       success: true,
       data: {
-        plan:         sub.plan,
-        status:       sub.status,
-        amount:       sub.amount ?? PLAN_PRICING[sub.plan],
-        expiresAt:    sub.endDate,
+        plan:          sub.plan,
+        status:        sub.status,
+        amount:        sub.amount ?? PLAN_PRICING[sub.plan],
+        expiresAt:     sub.endDate,
         daysRemaining,
         isActive,
-        isPending:    false,
-        graceEndsAt:  null,
+        isPending:     false,
+        graceEndsAt:   null,
       },
     });
   } catch (error) {
@@ -608,28 +610,20 @@ export const getUserSubscription = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CANCEL PENDING
-// Clears the stuck-pending loop when the user explicitly abandons payment.
-// Refuses to cancel if a pending sub is still within the grace window —
-// the webhook may still land. User must wait for grace to expire, or the
-// webhook will activate it.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const cancelPendingSubscription = async (req, res) => {
   const userId = req.user._id || req.user.id;
 
   try {
-    // ── Professional pending subs ──────────────────────────────────────────
     const pendingSubs = await Subscription.find({ user: userId, status: 'pending' }).lean();
 
     for (const s of pendingSubs) {
       if (isWithinPendingGrace(s)) {
-        // Still within grace — don't cancel, webhook may be in-flight
         return res.status(400).json({
-          success:    false,
-          message:    'Your payment is still being confirmed. Please wait before cancelling.',
-          data: {
-            graceEndsAt: graceEndsAt(s),
-          },
+          success: false,
+          message: 'Your payment is still being confirmed. Please wait before cancelling.',
+          data: { graceEndsAt: graceEndsAt(s) },
         });
       }
     }
@@ -639,16 +633,13 @@ export const cancelPendingSubscription = async (req, res) => {
       { $set: { status: 'cancelled' } },
     );
 
-    // ── Pet owner embedded sub ─────────────────────────────────────────────
     const user = await User.findById(userId);
     if (user?.subscription?.status === 'pending') {
       if (isWithinPendingGrace(user.subscription)) {
         return res.status(400).json({
-          success:    false,
-          message:    'Your payment is still being confirmed. Please wait before cancelling.',
-          data: {
-            graceEndsAt: graceEndsAt(user.subscription),
-          },
+          success: false,
+          message: 'Your payment is still being confirmed. Please wait before cancelling.',
+          data: { graceEndsAt: graceEndsAt(user.subscription) },
         });
       }
       user.subscription.status = 'cancelled';
@@ -663,8 +654,7 @@ export const cancelPendingSubscription = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CANCEL (active subscription — soft cancel)
-// Access retained until end of billing period.
+// CANCEL ACTIVE (soft cancel)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const cancelSubscription = async (req, res) => {
@@ -708,7 +698,6 @@ export const cancelSubscription = async (req, res) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // VERIFY PAYMENT (manual fallback — webhook is primary)
-// Idempotent: calling this twice with the same reference is safe.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const verifyPayment = async (req, res) => {

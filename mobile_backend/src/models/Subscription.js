@@ -10,8 +10,6 @@ const subscriptionSchema = new mongoose.Schema(
     },
 
     // 'basic' = professional listing plan (₦3,000/month)
-    // No other professional plans exist — premiumOnly/enterpriseOnly middleware
-    // has been removed from active use since those tiers don't exist.
     plan: {
       type: String,
       enum: ['basic'],
@@ -21,25 +19,28 @@ const subscriptionSchema = new mongoose.Schema(
     amount: {
       type: Number,
       required: true,
-      default: 3000, // ₦3,000 — matches PLAN_PRICING.basic in controller
+      default: 3000,
     },
 
     status: {
       type: String,
-      // 'pending'   — payment initialized, not yet confirmed
-      // 'active'    — payment confirmed, access granted
-      // 'expired'   — past endDate
-      // 'cancelled' — user cancelled (access retained until endDate)
-      enum: ['pending', 'active', 'expired', 'cancelled'],
+      enum: ['pending', 'active', 'expired', 'cancelled', 'inactive'],
       default: 'pending',
     },
 
     startDate: { type: Date },
-    endDate: { type: Date, required: true },
+    endDate:   { type: Date, required: true },
 
     paymentReference: { type: String, index: true },
+
+    // ── ADDED: explicit field so Mongoose doesn't strip it on save ──────────
+    // Grace window logic in subscriptionMiddleware.js and subscription.controller.js
+    // both check this field first before falling back to createdAt/updatedAt.
+    // Without this field declared here, Mongoose silently drops it when saving
+    // a new Subscription document, breaking the 30-minute grace window anchor.
+    paymentInitiatedAt: { type: Date },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 // Compound index: fast lookup for active subscription checks

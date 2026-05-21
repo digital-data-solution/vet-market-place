@@ -2,10 +2,10 @@ import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 
 const userSchema = new mongoose.Schema({
-  supabaseId: { type: String, unique: true, sparse: true },  // Supabase UUID
+  supabaseId: { type: String, unique: true, sparse: true },
   name:       { type: String, required: true },
   email:      { type: String, required: true, unique: true },
-  password:   { type: String, required: true },              // 'supabase_managed' for OAuth users
+  password:   { type: String, required: true },
   role: {
     type:    String,
     enum:    ['pet_owner', 'vet', 'kennel_owner', 'shop_owner', 'admin'],
@@ -22,6 +22,13 @@ const userSchema = new mongoose.Schema({
     endDate:          Date,
     paymentReference: String,
     amount:           Number,
+
+    // ── ADDED: explicit field so Mongoose doesn't strip it on save ──────────
+    // Grace window logic in subscriptionMiddleware.js and subscription.controller.js
+    // both check this field first before falling back to createdAt/updatedAt.
+    // Without this declared, Mongoose silently drops paymentInitiatedAt when
+    // saving user.subscription, breaking the 30-minute grace window anchor.
+    paymentInitiatedAt: Date,
   },
   isVerified: { type: Boolean, default: false },
   vetDetails: {
@@ -30,8 +37,8 @@ const userSchema = new mongoose.Schema({
     specialization: [String],
   },
   vetVerification: {
-    status:    { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
-    documents: { type: [String], default: [] },
+    status:     { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
+    documents:  { type: [String], default: [] },
     adminNotes: String,
     verifiedAt: Date,
   },
@@ -45,7 +52,6 @@ userSchema.index({ supabaseId: 1 }, { unique: true, sparse: true });
 
 userSchema.pre('save', async function () {
   if (!this.isModified('password')) return;
-  // Don't hash the placeholder value
   if (this.password === 'supabase_managed') return;
   this.password = await bcrypt.hash(this.password, 12);
 });
