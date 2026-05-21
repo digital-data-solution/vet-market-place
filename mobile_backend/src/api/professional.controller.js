@@ -225,10 +225,11 @@ export const updateProfessional = async (req, res) => {
     delete updates.isVerified;
     delete updates.verificationStatus;
 
+    // ✅ FIXED: Changed { new: true } to { returnDocument: 'after' }
     const professional = await Professional.findOneAndUpdate(
       { userId },
       { $set: updates },
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     );
 
     if (!professional) {

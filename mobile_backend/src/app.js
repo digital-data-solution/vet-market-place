@@ -61,10 +61,10 @@ const shopLimiter = rateLimit({
 
 // ─── API routes ───────────────────────────────────────────────────────────────
 app.use('/api/auth',                    authLimiter, authRoutes);
-app.use('/api/v1/professionals',        vetRoutes);
+app.use('/api/v1/professionals',        professionalRoutes);     // ✅ FIXED - was missing
+app.use('/api/v1/professionals',        vetRoutes);              // Vet routes
 app.use('/api/v1/kennels',              kennelRoutes);
-app.use('/api/v1/shops',               shopLimiter, shopRoutes);
-app.use('/api/v1/professional',         professionalRoutes);
+app.use('/api/v1/shops',                shopLimiter, shopRoutes);
 app.use('/api/v1/vet-verification',     vetVerificationRoutes);
 app.use('/api/subscriptions',           subscriptionRoutes);
 app.use('/api/upload',                  uploadRoutes);
