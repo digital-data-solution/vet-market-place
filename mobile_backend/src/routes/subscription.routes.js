@@ -20,6 +20,18 @@ import { protect, authorize } from '../middlewares/authMiddleware.js';
 const router = express.Router();
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SHARED MIDDLEWARE — disable HTTP caching for all subscription routes
+// Prevents 304 Not Modified responses from serving stale subscription state
+// (e.g. showing "pending" after payment has been confirmed as "active")
+// ─────────────────────────────────────────────────────────────────────────────
+router.use((req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  next();
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // PUBLIC ROUTES
 // ─────────────────────────────────────────────────────────────────────────────
 

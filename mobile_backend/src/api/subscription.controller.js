@@ -265,13 +265,12 @@ export const createProfessionalSubscription = async (req, res) => {
       return res.status(400).json({ success: false, message: 'You already have an active subscription.' });
     }
 
-    // ── NEW: void any stale pending sub before creating a new one ──────────
+    // Void any stale pending subs before creating a new one
     await Subscription.updateMany(
       { user: userId, status: 'pending' },
       { $set: { status: 'cancelled' } },
       { session },
     );
-    // ───────────────────────────────────────────────────────────────────────
 
     const amount  = PLAN_PRICING[plan];
     const endDate = new Date();
@@ -339,9 +338,24 @@ export const createProfessionalSubscription = async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // GET CURRENT SUBSCRIPTION
 // ─────────────────────────────────────────────────────────────────────────────
+//
+// FIX: Role-aware lookup order.
+// Previously the Subscription collection was always checked first, which meant
+// pet_owner users (whose subscription is embedded on the User document) could
+// accidentally match an unrelated professional Subscription record in the
+// collection (e.g. from a previous role or a data-entry mistake).
+//
+// Now:
+//   - pet_owner  → only checks User.subscription (embedded)
+//   - all others → only checks Subscription collection
+//
+// This prevents "no subscription found" for Samuel-type users who paid and
+// were manually fixed directly on the User document.
+// ─────────────────────────────────────────────────────────────────────────────
 
 export const getUserSubscription = async (req, res) => {
   const userId = req.user._id || req.user.id;
+  const role   = req.user.role || 'pet_owner';
 
   try {
     const user = await User.findById(userId).lean();
@@ -352,47 +366,60 @@ export const getUserSubscription = async (req, res) => {
 
     const now = new Date();
 
-    const professionalSub = await Subscription.findOne({ user: userId })
-      .sort({ createdAt: -1 })
-      .lean();
+    // ── Professional path (Subscription collection) ────────────────────────
+    if (role !== 'pet_owner') {
+      const professionalSub = await Subscription.findOne({ user: userId })
+        .sort({ createdAt: -1 })
+        .lean();
 
-    if (professionalSub) {
-      // ── Skip pending subs — only surface them if there's no better record ──
-      // (handled below after both checks)
+      if (professionalSub) {
+        const endDate     = new Date(professionalSub.endDate);
+        const justExpired = professionalSub.status === 'active' && now > endDate;
 
-      const endDate     = new Date(professionalSub.endDate);
-      const justExpired = professionalSub.status === 'active' && now > endDate;
+        if (justExpired) {
+          // Use returnDocument instead of deprecated `new` option
+          await Subscription.findByIdAndUpdate(
+            professionalSub._id,
+            { status: 'expired' },
+            { returnDocument: 'after' },
+          );
+          professionalSub.status = 'expired';
+        }
 
-      if (justExpired) {
-        await Subscription.findByIdAndUpdate(professionalSub._id, { status: 'expired' });
-        professionalSub.status = 'expired';
+        const isActive      = professionalSub.status === 'active' && !justExpired;
+        const daysRemaining = isActive
+          ? Math.ceil((endDate - now) / (1000 * 60 * 60 * 24))
+          : 0;
+
+        return res.json({
+          success: true,
+          data: {
+            plan:         professionalSub.plan,
+            status:       professionalSub.status,
+            amount:       professionalSub.amount,
+            expiresAt:    professionalSub.endDate,
+            daysRemaining,
+            isActive,
+          },
+        });
       }
 
-      const isActive      = professionalSub.status === 'active' && !justExpired;
-      const daysRemaining = isActive
-        ? Math.ceil((endDate - now) / (1000 * 60 * 60 * 24))
-        : 0;
-
-      return res.json({
-        success: true,
-        data: {
-          plan:         professionalSub.plan,
-          status:       professionalSub.status,
-          amount:       professionalSub.amount,
-          expiresAt:    professionalSub.endDate,
-          daysRemaining,
-          isActive,
-        },
-      });
+      return res.status(404).json({ success: false, message: 'No subscription found.', data: null });
     }
 
+    // ── Pet owner path (embedded User.subscription) ────────────────────────
     if (user.subscription) {
       const sub         = user.subscription;
       const endDate     = new Date(sub.endDate);
       const justExpired = sub.status === 'active' && now > endDate;
 
       if (justExpired) {
-        await User.findByIdAndUpdate(userId, { 'subscription.status': 'expired' });
+        // Use returnDocument instead of deprecated `new` option
+        await User.findByIdAndUpdate(
+          userId,
+          { 'subscription.status': 'expired' },
+          { returnDocument: 'after' },
+        );
         sub.status = 'expired';
       }
 
@@ -422,7 +449,7 @@ export const getUserSubscription = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CANCEL PENDING  ← NEW: clears the stuck-pending loop on payment cancel
+// CANCEL PENDING — clears the stuck-pending loop on payment cancel
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const cancelPendingSubscription = async (req, res) => {
