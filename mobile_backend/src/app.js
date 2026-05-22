@@ -15,7 +15,13 @@ import subscriptionRoutes    from './routes/subscription.routes.js';
 import uploadRoutes          from './routes/uploadRoutes.js';
 
 // Webhook handler — imported directly so it can receive raw body
-import { handlePaystackWebhook } from './api/subscription.controller.js';
+import { handlePaystackWebhook, getSubscriptionStats } from './api/subscription.controller.js';
+import { listPendingVets, reviewVet }                  from './api/vetVerification.controller.js';
+import { adminProtect }                                from './middlewares/adminAuthMiddleware.js';
+
+// Models used in inline admin stats handler
+import Professional from './models/Professional.js';
+import User         from './models/User.js';
 
 const app = express();
 
@@ -23,7 +29,6 @@ const app = express();
 app.set('trust proxy', 1);
 
 // ─── Webhook route — MUST be registered BEFORE express.json() ────────────────
-// Paystack sends a raw Buffer; parsing it as JSON breaks the HMAC signature check.
 app.post(
   '/api/subscriptions/webhook',
   express.raw({ type: 'application/json' }),
@@ -61,21 +66,53 @@ app.get('/health', (_req, res) => {
 
 // ─── Rate limiters ────────────────────────────────────────────────────────────
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000,
   max: 20,
   message: 'Too many requests, please try again later.',
 });
 
 const shopLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
+  windowMs: 60 * 60 * 1000,
   max: 100,
   message: 'Shop endpoint rate limit exceeded.',
 });
 
+// ─── Admin-only routes (JWT protected) ───────────────────────────────────────
+
+// Professional / vet stats for dashboard
+app.get('/api/admin/stats/professionals', adminProtect, async (req, res) => {
+  try {
+    const [totalVets, pendingVets, totalKennels] = await Promise.all([
+      Professional.countDocuments({ role: 'vet' }),
+      User.countDocuments({ role: 'vet', 'vetVerification.status': 'pending' }),
+      Professional.countDocuments({ role: 'kennel' }),
+    ]);
+
+    return res.json({
+      success: true,
+      data: {
+        vets:    { total: totalVets,    pending: pendingVets },
+        kennels: { total: totalKennels },
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Failed to fetch stats.' });
+  }
+});
+
+// Subscription stats for dashboard
+app.get('/api/admin/stats/subscriptions', adminProtect, getSubscriptionStats);
+
+// Pending vet verifications list
+app.get('/api/admin/vets/pending', adminProtect, listPendingVets);
+
+// Review (approve / reject) a vet
+app.post('/api/admin/vets/review/:id', adminProtect, reviewVet);
+
 // ─── API routes ───────────────────────────────────────────────────────────────
 app.use('/api/auth',                authLimiter, authRoutes);
-app.use('/api/v1/professionals',    professionalRoutes);     // ✅ FIXED - was missing
-app.use('/api/v1/professionals',    vetRoutes);              // Vet routes
+app.use('/api/v1/professionals',    professionalRoutes);
+app.use('/api/v1/professionals',    vetRoutes);
 app.use('/api/v1/kennels',          kennelRoutes);
 app.use('/api/v1/shops',            shopLimiter, shopRoutes);
 app.use('/api/v1/vet-verification', vetVerificationRoutes);
