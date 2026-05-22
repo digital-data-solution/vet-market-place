@@ -31,13 +31,23 @@ app.post(
 );
 
 // ─── Global middleware ────────────────────────────────────────────────────────
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc:  ["'self'", "'unsafe-inline'"],
+      styleSrc:   ["'self'", "'unsafe-inline'"],
+      imgSrc:     ["'self'", "data:"],
+      connectSrc: ["'self'", "https://vet-market-place-jsj5.onrender.com"],
+    },
+  },
+}));
 app.use(cors());
 app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ─── Serve static files (admin dashboard, etc.) ────────────────────────────────
+// ─── Serve static files (admin dashboard, etc.) ──────────────────────────────
 app.use(express.static('public'));
 
 // ─── Health / root ────────────────────────────────────────────────────────────
@@ -63,14 +73,14 @@ const shopLimiter = rateLimit({
 });
 
 // ─── API routes ───────────────────────────────────────────────────────────────
-app.use('/api/auth',                    authLimiter, authRoutes);
-app.use('/api/v1/professionals',        professionalRoutes);     // ✅ FIXED - was missing
-app.use('/api/v1/professionals',        vetRoutes);              // Vet routes
-app.use('/api/v1/kennels',              kennelRoutes);
-app.use('/api/v1/shops',                shopLimiter, shopRoutes);
-app.use('/api/v1/vet-verification',     vetVerificationRoutes);
-app.use('/api/subscriptions',           subscriptionRoutes);
-app.use('/api/upload',                  uploadRoutes);
+app.use('/api/auth',                authLimiter, authRoutes);
+app.use('/api/v1/professionals',    professionalRoutes);     // ✅ FIXED - was missing
+app.use('/api/v1/professionals',    vetRoutes);              // Vet routes
+app.use('/api/v1/kennels',          kennelRoutes);
+app.use('/api/v1/shops',            shopLimiter, shopRoutes);
+app.use('/api/v1/vet-verification', vetVerificationRoutes);
+app.use('/api/subscriptions',       subscriptionRoutes);
+app.use('/api/upload',              uploadRoutes);
 
 // ─── 404 fallback ─────────────────────────────────────────────────────────────
 app.use((req, res) => {
