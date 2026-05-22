@@ -172,11 +172,11 @@ export const updateProfessionalByAdmin = async (req, res) => {
     const { id } = req.params;
     const updates = req.body;
 
-    // Admin can update verification fields
+    // ✅ FIXED: Changed { new: true } to { returnDocument: 'after' }
     const professional = await Professional.findByIdAndUpdate(
       id,
       { $set: updates },
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     ).populate('userId', 'name email phone');
 
     if (!professional) {

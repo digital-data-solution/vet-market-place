@@ -37,6 +37,9 @@ app.use(morgan('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// ─── Serve static files (admin dashboard, etc.) ────────────────────────────────
+app.use(express.static('public'));
+
 // ─── Health / root ────────────────────────────────────────────────────────────
 app.get('/', (_req, res) => {
   res.json({ message: 'Vet Marketplace API is running', timestamp: new Date().toISOString() });
