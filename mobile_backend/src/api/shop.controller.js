@@ -140,7 +140,7 @@ export const updateShop = async (req, res) => {
     const shop = await Shop.findOneAndUpdate(
       { owner: userId },
       { $set: updates },
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     );
 
     if (!shop) {

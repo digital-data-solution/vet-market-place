@@ -25,7 +25,7 @@ const professionalSchema = new mongoose.Schema(
       required: [true, 'Role is required'],
       index: true,
     },
-    
+
     // Vet-specific fields
     vcnNumber: {
       type: String,
@@ -44,7 +44,7 @@ const professionalSchema = new mongoose.Schema(
         message: 'VCN number is required for veterinarians'
       }
     },
-    
+
     // Common fields
     businessName: {
       type: String,
@@ -61,7 +61,7 @@ const professionalSchema = new mongoose.Schema(
       trim: true,
       maxlength: [200, 'Specialization cannot exceed 200 characters'],
     },
-    
+
     // Contact information
     phone: {
       type: String,
@@ -74,8 +74,12 @@ const professionalSchema = new mongoose.Schema(
       lowercase: true,
       match: [/^\S+@\S+\.\S+$/, 'Please provide a valid email address'],
     },
-    
+
     // Geolocation
+    // ✅ FIX: Removed `index: '2dsphere'` from coordinates field.
+    // Having it inline AND in the explicit index declaration below caused
+    // Mongoose to misparse the schema, passing the document as `next`
+    // in the pre('save') hook instead of the actual next() function.
     location: {
       type: {
         type: String,
@@ -84,10 +88,10 @@ const professionalSchema = new mongoose.Schema(
       },
       coordinates: {
         type: [Number],
-        index: '2dsphere',
+        // index: '2dsphere' was here — REMOVED. Declared explicitly below.
       },
     },
-    
+
     // Verification status
     isVerified: {
       type: Boolean,
@@ -106,7 +110,7 @@ const professionalSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
-    
+
     // Additional metadata
     rating: {
       type: Number,
@@ -127,7 +131,7 @@ const professionalSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
-    
+
     // Profile visibility
     isActive: {
       type: Boolean,
@@ -141,11 +145,18 @@ const professionalSchema = new mongoose.Schema(
   }
 );
 
-// Indexes for efficient queries
+// ============================================================================
+// INDEXES
+// ============================================================================
+
 professionalSchema.index({ role: 1, isVerified: 1 });
-professionalSchema.index({ location: '2dsphere' });
+professionalSchema.index({ location: '2dsphere' }); // ✅ Single, correct declaration
 professionalSchema.index({ vcnNumber: 1 }, { sparse: true });
 professionalSchema.index({ name: 'text', businessName: 'text', specialization: 'text' });
+
+// ============================================================================
+// MIDDLEWARE
+// ============================================================================
 
 // Pre-save middleware: Auto-approve kennels, vets need admin approval
 professionalSchema.pre('save', function(next) {
@@ -161,6 +172,10 @@ professionalSchema.pre('save', function(next) {
   }
   next();
 });
+
+// ============================================================================
+// VIRTUALS
+// ============================================================================
 
 // Virtual for full display name
 professionalSchema.virtual('displayName').get(function() {

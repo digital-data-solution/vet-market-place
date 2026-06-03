@@ -320,7 +320,7 @@ export const updateKennel = async (req, res) => {
     const kennel = await Professional.findOneAndUpdate(
       { userId, role: 'kennel' },
       { $set: updateSet },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     if (!kennel) {

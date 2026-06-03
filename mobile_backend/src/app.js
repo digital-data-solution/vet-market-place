@@ -119,6 +119,90 @@ app.use('/api/v1/vet-verification', vetVerificationRoutes);
 app.use('/api/subscriptions',       subscriptionRoutes);
 app.use('/api/upload',              uploadRoutes);
 
+// ─── Global Error Handler ─────────────────────────────────────────────────────
+app.use((err, req, res, next) => {
+  console.error('Global error:', err);
+
+  // Mongoose validation error
+  if (err.name === 'ValidationError') {
+    const messages = Object.values(err.errors).map(e => e.message);
+    return res.status(400).json({
+      success: false,
+      error: 'Validation Error',
+      message: messages.join(', '),
+      details: messages,
+    });
+  }
+
+  // Mongoose cast error (invalid ObjectId)
+  if (err.name === 'CastError') {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid ID',
+      message: `Invalid ${err.kind}: ${err.value}`,
+    });
+  }
+
+  // Mongoose duplicate key error
+  if (err.code === 11000) {
+    const field = Object.keys(err.keyPattern)[0];
+    return res.status(400).json({
+      success: false,
+      error: 'Duplicate Entry',
+      message: `A record with this ${field} already exists.`,
+    });
+  }
+
+  // Multer file upload errors
+  if (err.name === 'MulterError') {
+    const messages = {
+      'LIMIT_FILE_SIZE': 'File is too large. Maximum size is 5MB.',
+      'FILE_TOO_LARGE': 'File is too large. Maximum size is 5MB.',
+      'LIMIT_FILE_COUNT': 'Too many files uploaded.',
+    };
+    return res.status(400).json({
+      success: false,
+      error: 'File Upload Error',
+      message: messages[err.code] || err.message,
+    });
+  }
+
+  // JWT errors
+  if (err.name === 'JsonWebTokenError') {
+    return res.status(401).json({
+      success: false,
+      error: 'Invalid Token',
+      message: 'Your session is invalid or expired. Please log in again.',
+    });
+  }
+
+  if (err.name === 'TokenExpiredError') {
+    return res.status(401).json({
+      success: false,
+      error: 'Session Expired',
+      message: 'Your session has expired. Please log in again.',
+    });
+  }
+
+  // Custom app errors
+  if (err.statusCode) {
+    return res.status(err.statusCode).json({
+      success: false,
+      error: err.error || 'Error',
+      message: err.message,
+    });
+  }
+
+  // Default server error
+  res.status(500).json({
+    success: false,
+    error: 'Server Error',
+    message: process.env.NODE_ENV === 'production' 
+      ? 'An unexpected error occurred. Please try again later.' 
+      : err.message,
+  });
+});
+
 // ─── 404 fallback ─────────────────────────────────────────────────────────────
 app.use((req, res) => {
   res.status(404).json({ error: 'Not Found', message: `Cannot ${req.method} ${req.url}` });

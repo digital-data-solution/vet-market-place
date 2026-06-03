@@ -28,8 +28,8 @@ router.get('/me', protect, getMyProfessionalProfile);
 router.put('/profile', protect, updateProfessional);
 router.delete('/profile', protect, deleteProfessional);
 
-router.get('/list', enforceSubscription, listProfessionals);
-router.get('/nearby', enforceSubscription, getNearbyProfessionals);
+router.get('/list', protect, enforceSubscription, listProfessionals);
+router.get('/nearby', protect, enforceSubscription, getNearbyProfessionals);
 
 router.post('/vet-verification/submit', protect, authorize('vet'), submitVCN);
 router.get('/vet-verification/status', protect, authorize('vet'), getMyVerificationStatus);

@@ -92,7 +92,7 @@ export const syncUser = async (req, res) => {
           isVerified: true,
         },
       },
-      { upsert: true, new: true, setDefaultsOnInsert: true },
+      { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
     );
 
     return res.json({ message: 'User synced.', userId: user._id });
@@ -105,4 +105,33 @@ export const syncUser = async (req, res) => {
 // GET /api/auth/me — returns the authenticated user loaded by protect middleware
 export const getMe = async (req, res) => {
   return res.json({ user: req.user });
+};
+
+export const updateProfile = async (req, res) => {
+  try {
+    const { profileImage, profileImagePath } = req.body;
+
+    if (profileImage === undefined && profileImagePath === undefined) {
+      return res.status(400).json({ message: 'No profile data provided.' });
+    }
+
+    const updatePayload = {};
+    if (profileImage !== undefined) updatePayload.profileImage = profileImage;
+    if (profileImagePath !== undefined) updatePayload.profileImagePath = profileImagePath;
+
+    const updatedUser = await User.findOneAndUpdate(
+      { _id: req.user._id },
+      { $set: updatePayload },
+      { returnDocument: 'after' },
+    ).select('-password');
+
+    if (!updatedUser) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    return res.json({ message: 'Profile updated successfully.', user: updatedUser });
+  } catch (error) {
+    logger.error('Update profile error', { error: error.message });
+    return res.status(500).json({ message: error.message });
+  }
 };

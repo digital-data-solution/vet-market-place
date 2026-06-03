@@ -13,9 +13,9 @@ import {
 
 const router = express.Router();
 
-// Public routes — no auth needed to browse kennels
-router.get('/list', enforceSubscription, listKennels);
-router.get('/nearby', enforceSubscription, getNearbyKennels);
+// Public routes — users must auth to browse
+router.get('/list', protect, enforceSubscription, listKennels);
+router.get('/nearby', protect, enforceSubscription, getNearbyKennels);
 
 // Private — kennel owner routes
 // Static paths BEFORE /:id wildcard

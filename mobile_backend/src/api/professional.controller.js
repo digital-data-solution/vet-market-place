@@ -72,25 +72,25 @@ export const onboardProfessional = async (req, res) => {
     // Validation
     if (!name || !role) {
       logger.warn('Onboarding failed: missing name or role', { userId, body: req.body });
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: 'Name and role are required.' 
+        message: 'Name and role are required.'
       });
     }
 
     if (!['vet', 'kennel'].includes(role)) {
       logger.warn('Onboarding failed: invalid role', { userId, role });
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: 'Role must be either "vet" or "kennel".' 
+        message: 'Role must be either "vet" or "kennel".'
       });
     }
 
     if (role === 'vet' && !vcnNumber) {
       logger.warn('Onboarding failed: missing VCN number for vet', { userId, name });
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: 'VCN number is required for veterinarians.' 
+        message: 'VCN number is required for veterinarians.'
       });
     }
 
@@ -99,9 +99,9 @@ export const onboardProfessional = async (req, res) => {
       const vcnExists = await Professional.findOne({ vcnNumber: vcnNumber.trim() });
       if (vcnExists) {
         logger.warn('VCN number already registered', { vcnNumber: vcnNumber.trim() });
-        return res.status(400).json({ 
+        return res.status(400).json({
           success: false,
-          message: 'This VCN number is already registered.' 
+          message: 'This VCN number is already registered.'
         });
       }
     }
@@ -109,9 +109,19 @@ export const onboardProfessional = async (req, res) => {
     // Kennel requires businessName
     if (role === 'kennel' && !businessName) {
       logger.warn('Onboarding failed: missing business name for kennel', { userId, name });
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: 'Business name is required for kennels.' 
+        message: 'Business name is required for kennels.'
+      });
+    }
+
+    // Check if user already has a professional profile
+    const existingProfile = await Professional.findOne({ userId });
+    if (existingProfile) {
+      logger.warn('Onboarding failed: profile already exists', { userId });
+      return res.status(400).json({
+        success: false,
+        message: 'You already have a professional profile. Please update your existing profile instead.'
       });
     }
 
@@ -163,25 +173,43 @@ export const onboardProfessional = async (req, res) => {
       })
     });
 
-    logger.info('Professional profile created successfully', { 
-      userId, 
+    logger.info('Professional profile created successfully', {
+      userId,
       professionalId: professional._id,
-      role 
+      role
     });
 
-    res.status(201).json({ 
+    res.status(201).json({
       success: true,
-      message: role === 'vet' 
-        ? 'Professional profile created. VCN verification pending.' 
+      message: role === 'vet'
+        ? 'Professional profile created. VCN verification pending.'
         : 'Kennel profile created and activated successfully.',
-      data: professional 
+      data: professional
     });
   } catch (error) {
     logger.error('Onboard professional error', { error: error.message, stack: error.stack });
-    res.status(500).json({ 
+
+    // Handle duplicate key errors gracefully
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern || {})[0];
+      if (field === 'userId') {
+        return res.status(400).json({
+          success: false,
+          message: 'You already have a professional profile.'
+        });
+      }
+      if (field === 'vcnNumber') {
+        return res.status(400).json({
+          success: false,
+          message: 'This VCN number is already registered.'
+        });
+      }
+    }
+
+    res.status(500).json({
       success: false,
       message: 'Failed to create professional profile. Please try again.',
-      error: error.message 
+      error: error.message
     });
   }
 };
@@ -215,7 +243,7 @@ export const updateProfessional = async (req, res) => {
       const location = await geocodeAddress(updates.address);
       if (location) {
         updates.location = location;
-        
+
         // Also sync to User model
         await User.findByIdAndUpdate(userId, { location });
       }
@@ -225,7 +253,6 @@ export const updateProfessional = async (req, res) => {
     delete updates.isVerified;
     delete updates.verificationStatus;
 
-    // ✅ FIXED: Changed { new: true } to { returnDocument: 'after' }
     const professional = await Professional.findOneAndUpdate(
       { userId },
       { $set: updates },
@@ -233,9 +260,9 @@ export const updateProfessional = async (req, res) => {
     );
 
     if (!professional) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: 'Professional profile not found. Please create one first.' 
+        message: 'Professional profile not found. Please create one first.'
       });
     }
 
@@ -244,17 +271,17 @@ export const updateProfessional = async (req, res) => {
 
     logger.info('Professional profile updated', { userId, updates: Object.keys(updates) });
 
-    res.json({ 
+    res.json({
       success: true,
       message: 'Profile updated successfully',
-      data: professional 
+      data: professional
     });
   } catch (error) {
     logger.error('Update professional error', { error: error.message, stack: error.stack });
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
       message: 'Failed to update profile. Please try again.',
-      error: error.message 
+      error: error.message
     });
   }
 };
@@ -275,22 +302,22 @@ export const getMyProfessionalProfile = async (req, res) => {
     });
 
     if (!professional) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: 'Professional profile not found' 
+        message: 'Professional profile not found'
       });
     }
 
-    res.json({ 
+    res.json({
       success: true,
-      data: professional 
+      data: professional
     });
   } catch (error) {
     logger.error('Get professional error', { error: error.message, stack: error.stack });
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
       message: 'Failed to fetch profile',
-      error: error.message 
+      error: error.message
     });
   }
 };
@@ -309,9 +336,9 @@ export const getProfessional = async (req, res) => {
       .lean();
 
     if (!professional) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: 'Professional not found' 
+        message: 'Professional not found'
       });
     }
 
@@ -320,22 +347,22 @@ export const getProfessional = async (req, res) => {
     const profileUserId = professional.userId?._id?.toString();
 
     if (!professional.isVerified && requestingUserId !== profileUserId) {
-      return res.status(403).json({ 
+      return res.status(403).json({
         success: false,
-        message: 'This professional profile is pending verification' 
+        message: 'This professional profile is pending verification'
       });
     }
 
-    res.json({ 
+    res.json({
       success: true,
-      data: professional 
+      data: professional
     });
   } catch (error) {
     logger.error('Get professional error', { error: error.message, stack: error.stack });
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
       message: 'Failed to fetch profile',
-      error: error.message 
+      error: error.message
     });
   }
 };
@@ -354,22 +381,22 @@ export const listProfessionals = async (req, res) => {
     const { role, limit = 50, page = 1, vcnNumber } = req.query;
 
     const filters = { isVerified: true };
-    
+
     // Filter by role
     if (role && ['vet', 'kennel'].includes(role)) {
       filters.role = role;
     }
 
-    // ✅ FIX: Add VCN number filtering for verification lookups
+    // VCN number filtering for verification lookups
     if (vcnNumber) {
       filters.vcnNumber = vcnNumber.trim();
-      
+
       // For VCN lookup, return immediately without pagination
       const professional = await Professional.findOne(filters)
         .populate('userId', 'name email phone')
         .select('-__v')
         .lean();
-      
+
       return res.json({
         success: true,
         count: professional ? 1 : 0,
@@ -397,20 +424,20 @@ export const listProfessionals = async (req, res) => {
       return { professionals, total };
     });
 
-    res.json({ 
+    res.json({
       success: true,
       count: result.professionals.length,
       total: result.total,
       page: parseInt(page),
       totalPages: Math.ceil(result.total / parseInt(limit)),
-      data: result.professionals 
+      data: result.professionals
     });
   } catch (error) {
     logger.error('List professionals error', { error: error.message, stack: error.stack });
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
       message: 'Failed to fetch professionals',
-      error: error.message 
+      error: error.message
     });
   }
 };
@@ -478,31 +505,31 @@ export const getNearbyProfessionals = async (req, res) => {
     const professionalsWithDistance = professionals.map(prof => {
       if (prof.location && prof.location.coordinates) {
         const [profLng, profLat] = prof.location.coordinates;
-        const distance = calculateDistance(
+        const dist = calculateDistance(
           parseFloat(lat),
           parseFloat(lng),
           profLat,
           profLng
         );
-        return { ...prof, distance: parseFloat(distance.toFixed(2)) };
+        return { ...prof, distance: parseFloat(dist.toFixed(2)) };
       }
       return prof;
     });
 
-    logger.info('Nearby professionals search', { 
-      lng, 
-      lat, 
-      distance, 
-      role, 
+    logger.info('Nearby professionals search', {
+      lng,
+      lat,
+      distance,
+      role,
       search,
-      count: professionalsWithDistance.length 
+      count: professionalsWithDistance.length
     });
 
     res.json({
       success: true,
       count: professionalsWithDistance.length,
       data: professionalsWithDistance,
-      message: professionalsWithDistance.length > 0 
+      message: professionalsWithDistance.length > 0
         ? `Found ${professionalsWithDistance.length} professional(s) nearby`
         : 'No professionals found in this area'
     });
@@ -531,9 +558,9 @@ export const deleteProfessional = async (req, res) => {
     const professional = await Professional.findOneAndDelete({ userId });
 
     if (!professional) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: 'Professional profile not found' 
+        message: 'Professional profile not found'
       });
     }
 
@@ -548,16 +575,16 @@ export const deleteProfessional = async (req, res) => {
 
     logger.info('Professional profile deleted', { userId, professionalId: professional._id });
 
-    res.json({ 
+    res.json({
       success: true,
-      message: 'Professional profile deleted successfully' 
+      message: 'Professional profile deleted successfully'
     });
   } catch (error) {
     logger.error('Delete professional error', { error: error.message, stack: error.stack });
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
       message: 'Failed to delete profile',
-      error: error.message 
+      error: error.message
     });
   }
 };

@@ -79,7 +79,7 @@ export const submitVCN = async (req, res) => {
           verificationSubmittedAt: new Date(),
         },
       },
-      { new: true, upsert: true }
+      { returnDocument: 'after', upsert: true }
     );
 
     logger.info('VCN submitted for review', { userId, vcn: vcn.trim() });
@@ -200,7 +200,7 @@ export const reviewVet = async (req, res) => {
           verifiedAt: new Date(),
           verifiedBy: adminId,
         },
-        { new: true }
+        { returnDocument: 'after' }
       );
 
       if (!professionalUpdate) {

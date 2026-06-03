@@ -21,42 +21,72 @@ const upload = multer({
   },
 });
 
+// Error handler for multer
+const handleMulterError = (err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({
+        success: false,
+        message: 'File is too large. Maximum size is 5MB.',
+      });
+    }
+    if (err.code === 'FILE_TOO_LARGE') {
+      return res.status(400).json({
+        success: false,
+        message: 'File is too large. Maximum size is 5MB.',
+      });
+    }
+    return res.status(400).json({
+      success: false,
+      message: err.message || 'File upload error',
+    });
+  }
+  if (err) {
+    return res.status(400).json({
+      success: false,
+      message: err.message || 'File upload error',
+    });
+  }
+  next();
+};
+
 /**
  * POST /api/upload/media
  * Upload multiple images to Cloudinary (for vets/kennels/shops)
  * Protected route - requires authentication
  */
-router.post('/media', authenticate, upload.single('image'), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message: 'No image file provided',
-      });
-    }
+router.post('/media', authenticate, (req, res, next) => {
+  upload.single('image')(req, res, (err) => {
+    handleMulterError(err, req, res, async () => {
+      try {
+        if (!req.file) {
+          return res.status(400).json({
+            success: false,
+            message: 'No image file provided',
+          });
+        }
 
-    const userId = req.user.id;
-    const folder = req.body.folder || 'general'; // vet, kennel, shop, or general
+        const userId = req.user.id;
+        const folder = req.body.folder || 'general'; // vet, kennel, shop, or general
 
-    // Upload to Cloudinary
-    const cloudinaryUrl = await uploadToCloudinary(req.file.buffer, folder);
+        // Upload to Cloudinary
+        const uploadResult = await uploadToCloudinary(req.file.buffer, { folder });
 
-    // Optionally: Save reference in database
-    // await db.query('INSERT INTO media (user_id, url, type) VALUES ($1, $2, $3)', 
-    //   [userId, cloudinaryUrl, folder]);
-
-    res.status(200).json({
-      success: true,
-      url: cloudinaryUrl,
-      message: 'Image uploaded successfully',
+        res.status(200).json({
+          success: true,
+          url: uploadResult.url,
+          publicId: uploadResult.publicId,
+          message: 'Image uploaded successfully',
+        });
+      } catch (error) {
+        console.error('Upload error:', error);
+        res.status(500).json({
+          success: false,
+          message: error.message || 'Failed to upload image',
+        });
+      }
     });
-  } catch (error) {
-    console.error('Upload error:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to upload image',
-    });
-  }
+  });
 });
 
 /**
@@ -75,24 +105,14 @@ router.delete('/delete', authenticate, async (req, res) => {
       });
     }
 
-    // Extract public_id from Cloudinary URL
-    // Example URL: https://res.cloudinary.com/demo/image/upload/v1234567890/vet/image_name.jpg
-    const urlParts = imageUrl.split('/');
-    const uploadIndex = urlParts.findIndex((part) => part === 'upload');
-    
-    if (uploadIndex === -1) {
-      return res.status(400).json({
+    // Delete from Cloudinary using the helper, which derives public_id as needed
+    const deleted = await deleteFromCloudinary(imageUrl);
+    if (!deleted) {
+      return res.status(404).json({
         success: false,
-        message: 'Invalid Cloudinary URL',
+        message: 'Image not found or already deleted',
       });
     }
-
-    // Get public_id (includes folder path)
-    const publicIdWithExt = urlParts.slice(uploadIndex + 2).join('/');
-    const publicId = publicIdWithExt.replace(/\.[^/.]+$/, ''); // Remove extension
-
-    // Delete from Cloudinary
-    await deleteFromCloudinary(publicId);
 
     // Optionally: Remove reference from database
     // await db.query('DELETE FROM media WHERE url = $1 AND user_id = $2', 
@@ -116,32 +136,37 @@ router.delete('/delete', authenticate, async (req, res) => {
  * Upload single profile image (used by ProfileImageUploader)
  * Protected route - requires authentication
  */
-router.post('/', authenticate, upload.single('image'), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({
-        success: false,
-        message: 'No image file provided',
-      });
-    }
+router.post('/', authenticate, (req, res, next) => {
+  upload.single('image')(req, res, (err) => {
+    handleMulterError(err, req, res, async () => {
+      try {
+        if (!req.file) {
+          return res.status(400).json({
+            success: false,
+            message: 'No image file provided',
+          });
+        }
 
-    const userId = req.user.id;
+        const userId = req.user.id;
 
-    // Upload to Cloudinary in 'profiles' folder
-    const cloudinaryUrl = await uploadToCloudinary(req.file.buffer, 'profiles');
+        // Upload to Cloudinary in 'profiles' folder
+        const uploadResult = await uploadToCloudinary(req.file.buffer, { folder: 'profiles' });
 
-    res.status(200).json({
-      success: true,
-      url: cloudinaryUrl,
-      message: 'Profile image uploaded successfully',
+        res.status(200).json({
+          success: true,
+          url: uploadResult.url,
+          publicId: uploadResult.publicId,
+          message: 'Profile image uploaded successfully',
+        });
+      } catch (error) {
+        console.error('Upload error:', error);
+        res.status(500).json({
+          success: false,
+          message: error.message || 'Failed to upload profile image',
+        });
+      }
     });
-  } catch (error) {
-    console.error('Upload error:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || 'Failed to upload profile image',
-    });
-  }
+  });
 });
 
 /**

@@ -199,7 +199,7 @@ export const reviewVet = async (req, res) => {
           verifiedAt: new Date(),
           verifiedBy: adminId
         },
-        { new: true }
+        { returnDocument: 'after' }
       );
 
       if (!professionalUpdate) {

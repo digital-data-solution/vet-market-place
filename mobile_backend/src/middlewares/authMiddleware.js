@@ -31,7 +31,7 @@ export const protect = async (req, res, next) => {
           createdAt: new Date(),
         },
       },
-      { upsert: true, new: true, setDefaultsOnInsert: true },
+      { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
     ).select('-password');
 
     if (!user) {
