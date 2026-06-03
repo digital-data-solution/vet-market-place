@@ -60,7 +60,6 @@ const shopSchema = new mongoose.Schema(
       },
       coordinates: {
         type: [Number],
-        index: '2dsphere',
       },
     },
     

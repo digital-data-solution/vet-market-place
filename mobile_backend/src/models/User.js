@@ -13,7 +13,7 @@ const userSchema = new mongoose.Schema({
   },
   location: {
     type:        { type: String, default: 'Point' },
-    coordinates: { type: [Number], index: '2dsphere' },
+    coordinates: { type: [Number] },
   },
   subscription: {
     plan:             { type: String, enum: ['user_monthly', 'basic'], default: null },
@@ -49,6 +49,7 @@ const userSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 userSchema.index({ supabaseId: 1 }, { unique: true, sparse: true });
+userSchema.index({ location: '2dsphere' });
 
 userSchema.pre('save', async function () {
   if (!this.isModified('password')) return;
