@@ -32,10 +32,9 @@ const professionalSchema = new mongoose.Schema(
       trim: true,
       uppercase: true,
       unique: true,
-      sparse: true, // Allows null values but enforces uniqueness when present
+      sparse: true,
       validate: {
         validator: function(v) {
-          // Only validate if role is vet
           if (this.role === 'vet') {
             return v && v.length > 0;
           }
@@ -76,10 +75,6 @@ const professionalSchema = new mongoose.Schema(
     },
 
     // Geolocation
-    // ✅ FIX: Removed `index: '2dsphere'` from coordinates field.
-    // Having it inline AND in the explicit index declaration below caused
-    // Mongoose to misparse the schema, passing the document as `next`
-    // in the pre('save') hook instead of the actual next() function.
     location: {
       type: {
         type: String,
@@ -88,7 +83,6 @@ const professionalSchema = new mongoose.Schema(
       },
       coordinates: {
         type: [Number],
-        // index: '2dsphere' was here — REMOVED. Declared explicitly below.
       },
     },
 
@@ -150,7 +144,7 @@ const professionalSchema = new mongoose.Schema(
 // ============================================================================
 
 professionalSchema.index({ role: 1, isVerified: 1 });
-professionalSchema.index({ location: '2dsphere' }); // ✅ Single, correct declaration
+professionalSchema.index({ location: '2dsphere' });
 professionalSchema.index({ vcnNumber: 1 }, { sparse: true });
 professionalSchema.index({ name: 'text', businessName: 'text', specialization: 'text' });
 
