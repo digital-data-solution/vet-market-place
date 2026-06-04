@@ -1,6 +1,14 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 
+const mediaImageSchema = new mongoose.Schema(
+  {
+    url:      { type: String, required: true },
+    publicId: { type: String, required: true },
+  },
+  { _id: false },
+);
+
 const userSchema = new mongoose.Schema({
   supabaseId: { type: String, unique: true, sparse: true },
   name:       { type: String, required: true },
@@ -11,6 +19,14 @@ const userSchema = new mongoose.Schema({
     enum:    ['pet_owner', 'vet', 'kennel_owner', 'shop_owner', 'admin'],
     default: 'pet_owner',
   },
+
+  // Profile photo (single, managed by ProfileImageUploader)
+  profileImage:     { type: String, default: null },
+  profileImagePath: { type: String, default: null }, // Cloudinary publicId for overwrite
+
+  // Gallery images (array, managed by MediaUploader)
+  mediaImages: { type: [mediaImageSchema], default: [] },
+
   location: {
     type:        { type: String, default: 'Point' },
     coordinates: { type: [Number] },
@@ -23,11 +39,7 @@ const userSchema = new mongoose.Schema({
     paymentReference: String,
     amount:           Number,
 
-    // ── ADDED: explicit field so Mongoose doesn't strip it on save ──────────
-    // Grace window logic in subscriptionMiddleware.js and subscription.controller.js
-    // both check this field first before falling back to createdAt/updatedAt.
-    // Without this declared, Mongoose silently drops paymentInitiatedAt when
-    // saving user.subscription, breaking the 30-minute grace window anchor.
+    // Grace window anchor — must be declared or Mongoose silently drops it on save
     paymentInitiatedAt: Date,
   },
   isVerified: { type: Boolean, default: false },
