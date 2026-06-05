@@ -1,6 +1,7 @@
 import express from 'express';
-import { protect, authorize } from '../middlewares/authMiddleware.js';
+import { protect }             from '../middlewares/authMiddleware.js';
 import { enforceSubscription } from '../middlewares/subscriptionMiddleware.js';
+import { requireKennelOwner }  from '../middlewares/ownershipMiddleware.js';
 import {
   onboardKennel,
   listKennels,
@@ -13,18 +14,17 @@ import {
 
 const router = express.Router();
 
-// Public routes — users must auth to browse
-router.get('/list', protect, enforceSubscription, listKennels);
+// ─── Public browse routes ─────────────────────────────────────────────────────
+router.get('/list',   protect, enforceSubscription, listKennels);
 router.get('/nearby', protect, enforceSubscription, getNearbyKennels);
 
-// Private — kennel owner routes
-// Static paths BEFORE /:id wildcard
-router.get('/me', protect, getMyKennelProfile);
-router.post('/onboard', protect, onboardKennel);
-router.put('/profile', protect, authorize('kennel_owner'), updateKennel);
-router.delete('/profile', protect, authorize('kennel_owner'), deleteKennel);
+// ─── Owner routes ─────────────────────────────────────────────────────────────
+router.get('/me',      protect, getMyKennelProfile);
+router.post('/onboard', protect, onboardKennel);                        // creates ownership
+router.put('/profile',  protect, requireKennelOwner, updateKennel);     // must own kennel
+router.delete('/profile', protect, requireKennelOwner, deleteKennel);   // must own kennel
 
-// Wildcard last
+// ─── Wildcard last ────────────────────────────────────────────────────────────
 router.get('/:id', getKennel);
 
 export default router;

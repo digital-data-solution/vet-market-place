@@ -3,513 +3,1033 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="X-UA-Compatible" content="ie=edge">
-  <title>🏥 Vet Marketplace Admin Dashboard</title>
+  <title>VetAdmin — Vet Marketplace Dashboard</title>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
     :root {
-      --primary: #2563eb;
-      --primary-dark: #1e40af;
-      --success: #10b981;
-      --danger: #ef4444;
-      --warning: #f59e0b;
-      --bg-dark: #0f172a;
-      --bg-card: #1e293b;
-      --bg-hover: #334155;
-      --text-primary: #f1f5f9;
-      --text-secondary: #cbd5e1;
-      --border: #334155;
+      --bg:          #060910;
+      --bg-1:        #0c1118;
+      --bg-2:        #111822;
+      --bg-3:        #192030;
+      --border:      rgba(255,255,255,0.07);
+      --border-hi:   rgba(255,255,255,0.14);
+      --accent:      #00c896;
+      --accent-dim:  rgba(0,200,150,0.12);
+      --accent-glow: rgba(0,200,150,0.25);
+      --danger:      #ff4d6d;
+      --danger-dim:  rgba(255,77,109,0.12);
+      --warning:     #ffb547;
+      --warning-dim: rgba(255,181,71,0.12);
+      --blue:        #4f8eff;
+      --blue-dim:    rgba(79,142,255,0.12);
+      --txt:         #e8edf5;
+      --txt-2:       #8899b0;
+      --txt-3:       #506070;
+      --radius:      10px;
+      --radius-lg:   16px;
     }
 
-    body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background: linear-gradient(135deg, var(--bg-dark) 0%, #1a2332 100%);
-      color: var(--text-primary);
-      min-height: 100vh;
+    html, body { height: 100%; font-family: 'Sora', sans-serif; background: var(--bg); color: var(--txt); }
+
+    /* ── SCROLLBAR ── */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--bg-3); border-radius: 99px; }
+
+    /* ── AUTH ── */
+    #authScreen {
+      display: flex; align-items: center; justify-content: center;
+      height: 100vh;
+      background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(0,200,150,0.08) 0%, transparent 70%), var(--bg);
     }
+    .auth-card {
+      width: 100%; max-width: 420px;
+      background: var(--bg-1);
+      border: 1px solid var(--border-hi);
+      border-radius: var(--radius-lg);
+      padding: 48px 40px;
+      box-shadow: 0 40px 80px rgba(0,0,0,0.6), 0 0 0 1px var(--border);
+      animation: slideUp .4s ease;
+    }
+    @keyframes slideUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:none; } }
 
-    .container { display: flex; height: 100vh; }
+    .auth-logo { display:flex; align-items:center; gap:12px; margin-bottom:36px; }
+    .auth-logo-icon {
+      width:44px; height:44px; border-radius:12px;
+      background: linear-gradient(135deg, var(--accent), #00a878);
+      display:flex; align-items:center; justify-content:center;
+      font-size:22px; box-shadow: 0 0 20px var(--accent-glow);
+    }
+    .auth-logo-text { font-size:20px; font-weight:700; letter-spacing:-0.5px; }
+    .auth-logo-text span { color:var(--accent); }
 
-    /* Sidebar */
+    .auth-heading { font-size:26px; font-weight:700; margin-bottom:6px; letter-spacing:-0.5px; }
+    .auth-sub { font-size:13px; color:var(--txt-2); margin-bottom:32px; }
+
+    .form-group { margin-bottom:18px; }
+    .form-label { display:block; font-size:12px; font-weight:600; letter-spacing:.6px; text-transform:uppercase; color:var(--txt-2); margin-bottom:8px; }
+    .form-input {
+      width:100%; padding:11px 14px;
+      background: var(--bg-2); border: 1px solid var(--border-hi);
+      border-radius: var(--radius); color: var(--txt); font-size:14px; font-family:inherit;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .form-input:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-dim); }
+    .form-input::placeholder { color:var(--txt-3); }
+
+    .btn {
+      display:inline-flex; align-items:center; justify-content:center; gap:8px;
+      padding:11px 20px; border:none; border-radius:var(--radius);
+      font-family:inherit; font-size:14px; font-weight:600; cursor:pointer;
+      transition:all .2s; white-space:nowrap;
+    }
+    .btn:disabled { opacity:.5; cursor:not-allowed; }
+    .btn-accent  { background:var(--accent); color:#000; }
+    .btn-accent:hover:not(:disabled) { background:#00dba8; box-shadow:0 0 20px var(--accent-glow); }
+    .btn-danger  { background:var(--danger); color:#fff; }
+    .btn-danger:hover:not(:disabled) { background:#ff6b83; }
+    .btn-ghost   { background:var(--bg-3); color:var(--txt); border:1px solid var(--border-hi); }
+    .btn-ghost:hover:not(:disabled) { background:var(--bg-2); border-color:var(--accent); color:var(--accent); }
+    .btn-sm      { padding:7px 14px; font-size:12px; }
+    .btn-full    { width:100%; }
+    .btn-icon    { padding:9px; }
+
+    /* ── ALERT ── */
+    .alert {
+      padding:11px 14px; border-radius:var(--radius); font-size:13px;
+      margin-bottom:16px; display:none; animation:fadeIn .3s ease;
+    }
+    @keyframes fadeIn { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:none} }
+    .alert-error   { background:var(--danger-dim);  border:1px solid var(--danger);  color:#ffb3c0; }
+    .alert-success { background:var(--accent-dim);  border:1px solid var(--accent);  color:#80ffe8; }
+    .alert-info    { background:var(--blue-dim);    border:1px solid var(--blue);    color:#aac8ff; }
+
+    /* ── SHELL ── */
+    #dashboardShell { display:none; height:100vh; }
+    .shell { display:flex; height:100vh; overflow:hidden; }
+
+    /* ── SIDEBAR ── */
     .sidebar {
-      width: 260px;
-      background: var(--bg-card);
-      border-right: 1px solid var(--border);
-      display: flex;
-      flex-direction: column;
-      overflow-y: auto;
+      width:240px; flex-shrink:0;
+      background:var(--bg-1);
+      border-right:1px solid var(--border);
+      display:flex; flex-direction:column;
+      overflow-y:auto;
     }
-    .sidebar-header { padding: 24px 16px; border-bottom: 1px solid var(--border); }
-    .logo { font-size: 20px; font-weight: 700; color: var(--primary); display: flex; align-items: center; gap: 8px; }
-    .nav-menu { flex: 1; padding: 16px 0; }
+    .sidebar-top { padding:24px 16px 20px; border-bottom:1px solid var(--border); }
+    .sidebar-logo { display:flex; align-items:center; gap:10px; }
+    .sidebar-logo-icon {
+      width:34px; height:34px; border-radius:9px;
+      background:linear-gradient(135deg, var(--accent), #00a878);
+      display:flex; align-items:center; justify-content:center;
+      font-size:16px; box-shadow:0 0 12px var(--accent-glow);
+    }
+    .sidebar-logo-text { font-size:15px; font-weight:700; letter-spacing:-0.3px; }
+    .sidebar-logo-text span { color:var(--accent); }
+
+    .nav { flex:1; padding:12px 8px; }
+    .nav-section { font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--txt-3); padding:12px 8px 6px; }
     .nav-item {
-      padding: 12px 16px; cursor: pointer; border-left: 3px solid transparent;
-      transition: all 0.2s; display: flex; align-items: center; gap: 12px; color: var(--text-secondary);
+      display:flex; align-items:center; gap:10px;
+      padding:10px 12px; border-radius:var(--radius); cursor:pointer;
+      color:var(--txt-2); font-size:13.5px; font-weight:500;
+      transition:all .18s; margin-bottom:2px; position:relative;
     }
-    .nav-item:hover { background: var(--bg-hover); color: var(--text-primary); }
-    .nav-item.active { border-left-color: var(--primary); background: rgba(37,99,235,0.1); color: var(--primary); font-weight: 600; }
-    .nav-icon { font-size: 18px; width: 20px; }
-    .sidebar-footer { padding: 16px; border-top: 1px solid var(--border); }
-    .user-info { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
-    .avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--primary); display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px; }
-    .user-details h4 { font-size: 14px; margin-bottom: 2px; }
-    .user-details p { font-size: 12px; color: var(--text-secondary); }
-    .logout-btn { width: 100%; padding: 10px; background: var(--danger); border: none; border-radius: 6px; color: white; cursor: pointer; font-size: 14px; font-weight: 600; transition: all 0.2s; }
-    .logout-btn:hover { background: #dc2626; }
+    .nav-item:hover { background:var(--bg-2); color:var(--txt); }
+    .nav-item.active { background:var(--accent-dim); color:var(--accent); font-weight:600; }
+    .nav-item.active::before {
+      content:''; position:absolute; left:0; top:20%; bottom:20%;
+      width:3px; border-radius:0 3px 3px 0; background:var(--accent);
+    }
+    .nav-icon { font-size:16px; width:20px; text-align:center; flex-shrink:0; }
+    .nav-badge {
+      margin-left:auto; font-size:10px; font-weight:700;
+      background:var(--danger); color:#fff;
+      padding:2px 7px; border-radius:99px; min-width:20px; text-align:center;
+    }
 
-    /* Main */
-    .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-    .header { background: var(--bg-card); border-bottom: 1px solid var(--border); padding: 20px 32px; display: flex; justify-content: space-between; align-items: center; }
-    .header-title h1 { font-size: 28px; margin-bottom: 4px; }
-    .header-title p { color: var(--text-secondary); font-size: 14px; }
-    .header-actions { display: flex; gap: 12px; }
-    .btn { padding: 10px 16px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; transition: all 0.2s; font-size: 14px; }
-    .btn-primary { background: var(--primary); color: white; }
-    .btn-primary:hover { background: var(--primary-dark); }
-    .btn-success { background: var(--success); color: white; }
-    .btn-danger { background: var(--danger); color: white; }
-    .btn-sm { padding: 6px 12px; font-size: 12px; }
-    .content { flex: 1; overflow-y: auto; padding: 32px; }
-    .section { display: none; }
-    .section.active { display: block; }
+    .sidebar-footer { padding:16px; border-top:1px solid var(--border); }
+    .user-card {
+      display:flex; align-items:center; gap:10px;
+      padding:10px 12px; border-radius:var(--radius);
+      background:var(--bg-2); margin-bottom:10px;
+    }
+    .avatar {
+      width:34px; height:34px; border-radius:50%;
+      background:linear-gradient(135deg, var(--accent), #007aff);
+      display:flex; align-items:center; justify-content:center;
+      font-weight:700; font-size:14px; color:#000; flex-shrink:0;
+    }
+    .user-name { font-size:13px; font-weight:600; }
+    .user-role { font-size:11px; color:var(--txt-3); }
 
-    /* Cards */
-    .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 24px; }
-    .card-title { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
-    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
-    .stat-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 20px; text-align: center; }
-    .stat-value { font-size: 32px; font-weight: 700; color: var(--primary); margin: 8px 0; }
-    .stat-label { font-size: 14px; color: var(--text-secondary); }
+    /* ── MAIN ── */
+    .main { flex:1; display:flex; flex-direction:column; overflow:hidden; min-width:0; }
+    .topbar {
+      background:var(--bg-1); border-bottom:1px solid var(--border);
+      padding:18px 28px; display:flex; align-items:center; justify-content:space-between;
+      flex-shrink:0;
+    }
+    .topbar-title { font-size:20px; font-weight:700; letter-spacing:-0.4px; }
+    .topbar-sub { font-size:12px; color:var(--txt-2); margin-top:2px; }
+    .topbar-right { display:flex; align-items:center; gap:10px; }
 
-    /* Tables */
-    .table-wrapper { overflow-x: auto; }
-    table { width: 100%; border-collapse: collapse; }
-    th { background: var(--bg-hover); padding: 12px; text-align: left; font-weight: 600; font-size: 14px; color: var(--text-secondary); border-bottom: 1px solid var(--border); }
-    td { padding: 12px; border-bottom: 1px solid var(--border); font-size: 14px; }
-    tr:hover { background: rgba(37,99,235,0.05); }
+    .content { flex:1; overflow-y:auto; padding:28px; }
+    .section { display:none; animation:fadeIn .25s ease; }
+    .section.active { display:block; }
 
-    /* Auth */
-    .auth-screen { display: flex; align-items: center; justify-content: center; height: 100vh; background: linear-gradient(135deg, var(--bg-dark) 0%, #1a2332 100%); }
-    .auth-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 40px; width: 100%; max-width: 400px; }
-    .auth-title { font-size: 28px; font-weight: 700; margin-bottom: 8px; text-align: center; }
-    .form-group { margin-bottom: 16px; }
-    label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; }
-    input { width: 100%; padding: 10px 12px; background: var(--bg-hover); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary); font-size: 14px; }
-    input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+    /* ── STATS GRID ── */
+    .stats-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:14px; margin-bottom:24px; }
+    .stat-card {
+      background:var(--bg-1); border:1px solid var(--border);
+      border-radius:var(--radius-lg); padding:20px;
+      position:relative; overflow:hidden; transition:border-color .2s;
+    }
+    .stat-card:hover { border-color:var(--border-hi); }
+    .stat-card::before {
+      content:''; position:absolute; top:0; left:0; right:0; height:2px;
+    }
+    .stat-card.green::before  { background:var(--accent); }
+    .stat-card.red::before    { background:var(--danger); }
+    .stat-card.blue::before   { background:var(--blue); }
+    .stat-card.orange::before { background:var(--warning); }
 
-    /* Alerts */
-    .alert { padding: 12px 16px; border-radius: 6px; margin-bottom: 16px; font-size: 14px; display: none; }
-    .alert-success { background: rgba(16,185,129,0.2); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.3); }
-    .alert-error { background: rgba(239,68,68,0.2); color: #fca5a5; border: 1px solid rgba(239,68,68,0.3); }
-    .alert-info { background: rgba(37,99,235,0.2); color: #93c5fd; border: 1px solid rgba(37,99,235,0.3); }
+    .stat-icon { font-size:20px; margin-bottom:14px; }
+    .stat-value { font-size:32px; font-weight:800; letter-spacing:-1px; line-height:1; margin-bottom:6px; font-family:'DM Mono',monospace; }
+    .stat-value.green  { color:var(--accent); }
+    .stat-value.red    { color:var(--danger); }
+    .stat-value.blue   { color:var(--blue); }
+    .stat-value.orange { color:var(--warning); }
+    .stat-label { font-size:12px; color:var(--txt-2); font-weight:500; }
 
-    @keyframes spin { to { transform: rotate(360deg); } }
-    @media (max-width: 768px) {
-      .sidebar { display: none; }
-      .header { padding: 16px; }
-      .content { padding: 16px; }
-      .stats-grid { grid-template-columns: 1fr; }
+    /* ── CARD ── */
+    .card {
+      background:var(--bg-1); border:1px solid var(--border);
+      border-radius:var(--radius-lg); padding:24px; margin-bottom:20px;
+    }
+    .card-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; }
+    .card-title { font-size:15px; font-weight:700; display:flex; align-items:center; gap:8px; }
+    .card-title-icon { font-size:16px; }
+
+    /* ── REVENUE GRID ── */
+    .revenue-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(170px,1fr)); gap:12px; }
+    .rev-item { background:var(--bg-2); border-radius:var(--radius); padding:16px; }
+    .rev-label { font-size:11px; color:var(--txt-2); font-weight:600; text-transform:uppercase; letter-spacing:.5px; margin-bottom:8px; }
+    .rev-value { font-size:22px; font-weight:800; letter-spacing:-0.5px; font-family:'DM Mono',monospace; }
+    .rev-value.accent { color:var(--accent); }
+    .rev-value.blue   { color:var(--blue); }
+
+    /* ── TABLE ── */
+    .table-wrap { overflow-x:auto; }
+    table { width:100%; border-collapse:collapse; font-size:13.5px; }
+    thead th {
+      padding:10px 14px; text-align:left;
+      font-size:11px; font-weight:700; letter-spacing:.5px; text-transform:uppercase;
+      color:var(--txt-3); border-bottom:1px solid var(--border);
+      background:var(--bg-2);
+    }
+    thead th:first-child { border-radius:var(--radius) 0 0 0; }
+    thead th:last-child  { border-radius:0 var(--radius) 0 0; }
+    tbody td { padding:13px 14px; border-bottom:1px solid var(--border); color:var(--txt); vertical-align:middle; }
+    tbody tr:last-child td { border-bottom:none; }
+    tbody tr { transition:background .15s; }
+    tbody tr:hover { background:rgba(255,255,255,0.02); }
+    .td-mono { font-family:'DM Mono',monospace; font-size:12px; color:var(--txt-2); }
+
+    /* ── BADGE ── */
+    .badge {
+      display:inline-flex; align-items:center; gap:4px;
+      padding:3px 9px; border-radius:99px; font-size:11px; font-weight:600;
+    }
+    .badge::before { content:''; width:5px; height:5px; border-radius:50%; }
+    .badge-pending  { background:var(--warning-dim); color:var(--warning); border:1px solid rgba(255,181,71,.3); }
+    .badge-pending::before  { background:var(--warning); }
+    .badge-approved { background:var(--accent-dim);  color:var(--accent);  border:1px solid rgba(0,200,150,.3); }
+    .badge-approved::before { background:var(--accent); }
+    .badge-rejected { background:var(--danger-dim);  color:var(--danger);  border:1px solid rgba(255,77,109,.3); }
+    .badge-rejected::before { background:var(--danger); }
+    .badge-active   { background:var(--blue-dim);    color:var(--blue);    border:1px solid rgba(79,142,255,.3); }
+    .badge-active::before   { background:var(--blue); }
+
+    /* ── EMPTY STATE ── */
+    .empty {
+      text-align:center; padding:60px 20px; color:var(--txt-3);
+    }
+    .empty-icon { font-size:40px; margin-bottom:12px; }
+    .empty-text { font-size:14px; }
+
+    /* ── SPINNER ── */
+    .spinner {
+      width:18px; height:18px; border:2px solid var(--border-hi);
+      border-top-color:var(--accent); border-radius:50%;
+      animation:spin .7s linear infinite; display:inline-block;
+    }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    /* ── MODAL ── */
+    .modal-overlay {
+      position:fixed; inset:0; background:rgba(0,0,0,.75);
+      display:flex; align-items:center; justify-content:center;
+      z-index:1000; display:none; animation:fadeIn .2s ease;
+    }
+    .modal-overlay.open { display:flex; }
+    .modal {
+      background:var(--bg-1); border:1px solid var(--border-hi);
+      border-radius:var(--radius-lg); padding:32px; width:100%; max-width:440px;
+      animation:slideUp .25s ease;
+    }
+    .modal-title { font-size:17px; font-weight:700; margin-bottom:6px; }
+    .modal-sub   { font-size:13px; color:var(--txt-2); margin-bottom:24px; }
+    .modal-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:24px; }
+
+    /* ── TABS ── */
+    .filter-tabs { display:flex; gap:6px; margin-bottom:20px; }
+    .filter-tab {
+      padding:7px 16px; border-radius:var(--radius); font-size:13px; font-weight:600;
+      cursor:pointer; transition:all .18s; border:1px solid var(--border);
+      color:var(--txt-2); background:var(--bg-2);
+    }
+    .filter-tab:hover { color:var(--txt); border-color:var(--border-hi); }
+    .filter-tab.active { background:var(--accent-dim); color:var(--accent); border-color:var(--accent); }
+
+    /* ── TOAST ── */
+    #toast {
+      position:fixed; bottom:24px; right:24px; z-index:9999;
+      padding:12px 18px; border-radius:var(--radius);
+      font-size:13px; font-weight:600; display:none;
+      animation:slideUp .3s ease;
+      box-shadow:0 8px 30px rgba(0,0,0,.4);
+    }
+    #toast.success { background:var(--accent); color:#000; }
+    #toast.error   { background:var(--danger);  color:#fff; }
+
+    @media (max-width:768px) {
+      .sidebar { display:none; }
+      .content { padding:16px; }
+      .stats-grid { grid-template-columns:1fr 1fr; }
     }
   </style>
 </head>
 <body>
 
-  <!-- Auth Screen -->
-  <div id="authScreen" class="auth-screen">
-    <div class="auth-card">
-      <div class="auth-title">🏥 Admin Portal</div>
-      <p style="text-align:center;color:var(--text-secondary);margin-bottom:32px;font-size:14px;">Vet Marketplace Management</p>
-      <div id="authAlert" class="alert"></div>
-      <form id="loginForm">
-        <div class="form-group">
-          <label>Email</label>
-          <input type="email" id="loginEmail" required placeholder="admin@example.com" autocomplete="email">
-        </div>
-        <div class="form-group">
-          <label>Password</label>
-          <input type="password" id="loginPassword" required placeholder="••••••••" autocomplete="current-password">
-        </div>
-        <button type="submit" class="btn btn-primary" style="width:100%;margin-top:20px;">Sign In</button>
-      </form>
+<!-- ══ AUTH ══════════════════════════════════════════════════════════════════ -->
+<div id="authScreen">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <div class="auth-logo-icon">🏥</div>
+      <div class="auth-logo-text">Vet<span>Admin</span></div>
     </div>
+    <h1 class="auth-heading">Welcome back</h1>
+    <p class="auth-sub">Sign in to your admin portal</p>
+    <div id="authAlert" class="alert"></div>
+    <div class="form-group">
+      <label class="form-label">Email</label>
+      <input class="form-input" type="email" id="loginEmail" placeholder="admin@xpressvet.ng" autocomplete="email">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Password</label>
+      <input class="form-input" type="password" id="loginPassword" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="btn btn-accent btn-full" id="loginBtn" onclick="handleLogin()" style="margin-top:8px;">
+      Sign In
+    </button>
   </div>
+</div>
 
-  <!-- Main Dashboard -->
-  <div id="dashboardShell" class="container" style="display:none;">
-    <div class="sidebar">
-      <div class="sidebar-header">
-        <div class="logo"><span>🏥</span><span>VetAdmin</span></div>
+<!-- ══ DASHBOARD ══════════════════════════════════════════════════════════════ -->
+<div id="dashboardShell">
+  <div class="shell">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-top">
+        <div class="sidebar-logo">
+          <div class="sidebar-logo-icon">🏥</div>
+          <div class="sidebar-logo-text">Vet<span>Admin</span></div>
+        </div>
       </div>
-      <div class="nav-menu">
-        <div class="nav-item active" onclick="switchTab('dashboardSection', this)">
+
+      <nav class="nav">
+        <div class="nav-section">Main</div>
+        <div class="nav-item active" data-tab="dashboardSection" onclick="switchTab('dashboardSection',this)">
           <span class="nav-icon">📊</span><span>Dashboard</span>
         </div>
-        <div class="nav-item" onclick="switchTab('vetsSection', this)">
-          <span class="nav-icon">✓</span><span>Vet Verification</span>
-          <span id="vetBadge" style="margin-left:auto;font-size:12px;background:var(--danger);padding:2px 6px;border-radius:10px;">0</span>
+        <div class="nav-section">Management</div>
+        <div class="nav-item" data-tab="vetsSection" onclick="switchTab('vetsSection',this)">
+          <span class="nav-icon">🩺</span><span>Vet Verification</span>
+          <span class="nav-badge" id="vetBadge" style="display:none">0</span>
         </div>
-        <div class="nav-item" onclick="switchTab('subscriptionsSection', this)">
+        <div class="nav-item" data-tab="allProfsSection" onclick="switchTab('allProfsSection',this)">
+          <span class="nav-icon">👥</span><span>All Professionals</span>
+        </div>
+        <div class="nav-item" data-tab="subscriptionsSection" onclick="switchTab('subscriptionsSection',this)">
           <span class="nav-icon">💳</span><span>Subscriptions</span>
         </div>
-      </div>
+      </nav>
+
       <div class="sidebar-footer">
-        <div class="user-info">
-          <div class="avatar" id="userAvatar">A</div>
-          <div class="user-details">
-            <h4 id="userName">Admin</h4>
-            <p id="userEmail">admin@vet.ng</p>
+        <div class="user-card">
+          <div class="avatar" id="sidebarAvatar">A</div>
+          <div>
+            <div class="user-name" id="sidebarName">Admin</div>
+            <div class="user-role">Administrator</div>
           </div>
         </div>
-        <button class="logout-btn" onclick="logout()">Logout</button>
+        <button class="btn btn-ghost btn-full btn-sm" onclick="logout()">Sign Out</button>
       </div>
-    </div>
+    </aside>
 
+    <!-- MAIN AREA -->
     <div class="main">
-      <div class="header">
-        <div class="header-title">
-          <h1 id="pageTitle">Dashboard</h1>
-          <p id="pageSubtitle">Overview of your platform</p>
+      <div class="topbar">
+        <div>
+          <div class="topbar-title" id="pageTitle">Dashboard</div>
+          <div class="topbar-sub" id="pageSubtitle">Platform overview</div>
         </div>
-        <div class="header-actions">
-          <button class="btn btn-primary" onclick="refreshData()">🔄 Refresh</button>
+        <div class="topbar-right">
+          <button class="btn btn-ghost btn-sm" onclick="refreshData()">
+            <span id="refreshIcon">↻</span> Refresh
+          </button>
         </div>
       </div>
 
       <div class="content">
-        <!-- Dashboard Section -->
+
+        <!-- ── DASHBOARD ── -->
         <div id="dashboardSection" class="section active">
           <div class="stats-grid">
-            <div class="stat-card"><div class="stat-label">Total Vets</div><div class="stat-value" id="totalVets">—</div></div>
-            <div class="stat-card"><div class="stat-label">Pending Vets</div><div class="stat-value" id="pendingVets">—</div></div>
-            <div class="stat-card"><div class="stat-label">Total Kennels</div><div class="stat-value" id="totalKennels">—</div></div>
-            <div class="stat-card"><div class="stat-label">Active Subscriptions</div><div class="stat-value" id="activeSubscriptions">—</div></div>
+            <div class="stat-card green">
+              <div class="stat-icon">🩺</div>
+              <div class="stat-value green" id="totalVets">—</div>
+              <div class="stat-label">Total Vets</div>
+            </div>
+            <div class="stat-card red">
+              <div class="stat-icon">⏳</div>
+              <div class="stat-value red" id="pendingVets">—</div>
+              <div class="stat-label">Pending Vets</div>
+            </div>
+            <div class="stat-card orange">
+              <div class="stat-icon">🏠</div>
+              <div class="stat-value orange" id="totalKennels">—</div>
+              <div class="stat-label">Total Kennels</div>
+            </div>
+            <div class="stat-card blue">
+              <div class="stat-icon">💳</div>
+              <div class="stat-value blue" id="activeSubscriptions">—</div>
+              <div class="stat-label">Active Subscriptions</div>
+            </div>
+            <div class="stat-card green">
+              <div class="stat-icon">✅</div>
+              <div class="stat-value green" id="approvedVets">—</div>
+              <div class="stat-label">Approved Vets</div>
+            </div>
+            <div class="stat-card red">
+              <div class="stat-icon">❌</div>
+              <div class="stat-value red" id="rejectedVets">—</div>
+              <div class="stat-label">Rejected Vets</div>
+            </div>
           </div>
+
           <div class="card">
-            <div class="card-title">📈 Revenue Summary</div>
-            <div class="stats-grid">
-              <div>
-                <p style="color:var(--text-secondary);font-size:14px;">Professional Monthly</p>
-                <p style="font-size:24px;font-weight:700;color:var(--success);">₦<span id="profRevenue">0</span></p>
+            <div class="card-header">
+              <div class="card-title"><span class="card-title-icon">₦</span> Revenue Summary</div>
+            </div>
+            <div class="revenue-grid">
+              <div class="rev-item">
+                <div class="rev-label">Professional Monthly</div>
+                <div class="rev-value accent">₦<span id="profRevenue">0</span></div>
               </div>
-              <div>
-                <p style="color:var(--text-secondary);font-size:14px;">Pet Owner Monthly</p>
-                <p style="font-size:24px;font-weight:700;color:var(--success);">₦<span id="userRevenue">0</span></p>
+              <div class="rev-item">
+                <div class="rev-label">Pet Owner Monthly</div>
+                <div class="rev-value accent">₦<span id="userRevenue">0</span></div>
               </div>
-              <div>
-                <p style="color:var(--text-secondary);font-size:14px;">Total Monthly</p>
-                <p style="font-size:24px;font-weight:700;color:var(--primary);">₦<span id="totalRevenue">0</span></p>
+              <div class="rev-item">
+                <div class="rev-label">Total Monthly</div>
+                <div class="rev-value blue">₦<span id="totalRevenue">0</span></div>
               </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title"><span class="card-title-icon">⏳</span> Recent Pending Vets</div>
+              <button class="btn btn-ghost btn-sm" onclick="switchTab('vetsSection', document.querySelector('[data-tab=vetsSection]'))">View All →</button>
+            </div>
+            <div id="dashPendingVets">
+              <div class="empty"><div class="spinner"></div></div>
             </div>
           </div>
         </div>
 
-        <!-- Vet Verification Section -->
+        <!-- ── VET VERIFICATION ── -->
         <div id="vetsSection" class="section">
+          <div id="vetsAlert" class="alert"></div>
           <div class="card">
-            <div class="card-title">⏳ Pending Vet Verifications</div>
-            <div id="vetsAlert" class="alert"></div>
-            <div class="table-wrapper">
+            <div class="card-header">
+              <div class="card-title"><span class="card-title-icon">⏳</span> Pending Vet Verifications</div>
+              <button class="btn btn-ghost btn-sm" onclick="loadPendingVets()">↻ Reload</button>
+            </div>
+            <div class="table-wrap">
               <table>
                 <thead>
                   <tr>
-                    <th>Name</th><th>Email</th><th>VCN Number</th><th>Submitted</th><th>Actions</th>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>VCN #</th>
+                    <th>Specialization</th>
+                    <th>Address</th>
+                    <th>Submitted</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody id="pendingVetsTable">
-                  <tr><td colspan="5" style="text-align:center;color:var(--text-secondary);">Loading...</td></tr>
+                  <tr><td colspan="7"><div class="empty"><div class="spinner"></div></div></td></tr>
                 </tbody>
               </table>
             </div>
           </div>
         </div>
 
-        <!-- Subscriptions Section -->
+        <!-- ── ALL PROFESSIONALS ── -->
+        <div id="allProfsSection" class="section">
+          <div class="filter-tabs">
+            <div class="filter-tab active" onclick="filterProfs('all', this)">All</div>
+            <div class="filter-tab" onclick="filterProfs('vet', this)">Vets</div>
+            <div class="filter-tab" onclick="filterProfs('kennel', this)">Kennels</div>
+          </div>
+          <div class="card" style="padding:0;overflow:hidden;">
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Name</th>
+                    <th>Role</th>
+                    <th>Email</th>
+                    <th>Phone</th>
+                    <th>Status</th>
+                    <th>Joined</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="allProfsTable">
+                  <tr><td colspan="7"><div class="empty"><div class="spinner"></div></div></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div id="profsPagination" style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;"></div>
+        </div>
+
+        <!-- ── SUBSCRIPTIONS ── -->
         <div id="subscriptionsSection" class="section">
+          <div class="stats-grid">
+            <div class="stat-card green">
+              <div class="stat-icon">👨‍⚕️</div>
+              <div class="stat-value green" id="subProfActive">—</div>
+              <div class="stat-label">Professional Active</div>
+            </div>
+            <div class="stat-card orange">
+              <div class="stat-icon">⏳</div>
+              <div class="stat-value orange" id="subProfPending">—</div>
+              <div class="stat-label">Professional Pending</div>
+            </div>
+            <div class="stat-card blue">
+              <div class="stat-icon">🐾</div>
+              <div class="stat-value blue" id="subUserActive">—</div>
+              <div class="stat-label">Pet Owner Subscribers</div>
+            </div>
+            <div class="stat-card green">
+              <div class="stat-icon">₦</div>
+              <div class="stat-value green" id="subTotalRevenue">—</div>
+              <div class="stat-label">Monthly Revenue</div>
+            </div>
+          </div>
           <div class="card">
-            <div class="card-title">💳 Subscription Stats</div>
-            <div class="stats-grid">
-              <div class="stat-card"><div class="stat-label">Professional Active</div><div class="stat-value" id="subProfActive">—</div></div>
-              <div class="stat-card"><div class="stat-label">Professional Pending</div><div class="stat-value" id="subProfPending">—</div></div>
-              <div class="stat-card"><div class="stat-label">User Subscribers</div><div class="stat-value" id="subUserActive">—</div></div>
-              <div class="stat-card"><div class="stat-label">Total Monthly ₦</div><div class="stat-value" id="subTotalRevenue">—</div></div>
+            <div class="card-header">
+              <div class="card-title">Subscription Breakdown</div>
+            </div>
+            <div class="revenue-grid" id="subBreakdown">
+              <div class="empty"><div class="spinner"></div></div>
             </div>
           </div>
         </div>
-      </div>
+
+      </div><!-- /content -->
+    </div><!-- /main -->
+  </div><!-- /shell -->
+</div>
+
+<!-- ══ REVIEW MODAL ══════════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="reviewModal">
+  <div class="modal">
+    <div class="modal-title" id="modalTitle">Review Vet</div>
+    <div class="modal-sub" id="modalSub">You are about to take action on this vet application.</div>
+    <div class="form-group">
+      <label class="form-label">Admin Notes</label>
+      <input class="form-input" id="adminNotes" placeholder="Add notes (required)…">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn" id="modalConfirmBtn" onclick="confirmReview()">Confirm</button>
     </div>
   </div>
+</div>
 
-  <script>
-    // ════════════════════════════════════════════════════════════════════════
-    // CONFIG
-    // ════════════════════════════════════════════════════════════════════════
-    if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
-      location.protocol = 'https:';
-    }
+<!-- ══ TOAST ════════════════════════════════════════════════════════════════ -->
+<div id="toast"></div>
 
-    const API_BASE   = 'https://vet-market-place-jsj5.onrender.com/api';
-    const ADMIN_AUTH = `${API_BASE}/auth/admin`;
-    const ADMIN_API  = `${API_BASE}/admin`;
+<script>
+// ════════════════════════════════════════════════════════════════════════════
+// CONFIG
+// ════════════════════════════════════════════════════════════════════════════
+const API_BASE = 'https://vet-market-place-jsj5.onrender.com/api';
 
-    let authToken       = sessionStorage.getItem('adminToken');
-    let currentUser     = null;
-    let tokenExpireTime = null;
+let authToken       = sessionStorage.getItem('adminToken');
+let currentUser     = null;
+let tokenExpireTime = null;
 
-    // ════════════════════════════════════════════════════════════════════════
-    // UTILS
-    // ════════════════════════════════════════════════════════════════════════
-    function escapeHtml(text) {
-      if (text == null) return '';
-      return String(text).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
-    }
+// modal state
+let pendingReviewId     = null;
+let pendingReviewAction = null;
 
-    function showAlert(id, message, type) {
-      const el = document.getElementById(id);
-      if (!el) return;
-      el.className     = `alert alert-${type}`;
-      el.textContent   = escapeHtml(message);
-      el.style.display = 'block';
-      if (type === 'success') setTimeout(() => { el.style.display = 'none'; }, 5000);
-    }
+// all-profs filter state
+let currentProfRole = '';
+let currentProfPage = 1;
 
-    function decodeToken(token) {
-      try {
-        const base64 = token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');
-        return JSON.parse(decodeURIComponent(atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')));
-      } catch { return null; }
-    }
+// ════════════════════════════════════════════════════════════════════════════
+// UTILS
+// ════════════════════════════════════════════════════════════════════════════
+function esc(t) {
+  if (t == null) return '';
+  return String(t).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+}
 
-    // ════════════════════════════════════════════════════════════════════════
-    // TOKEN REFRESH
-    // ════════════════════════════════════════════════════════════════════════
-    async function refreshAuthToken() {
-      try {
-        const r = await fetch(`${ADMIN_AUTH}/refresh`, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' },
-          credentials: 'include',
-        });
-        if (!r.ok) throw new Error('Refresh failed');
-        const data = await r.json();
-        authToken = data.data.token;
-        sessionStorage.setItem('adminToken', authToken);
-        const decoded = decodeToken(authToken);
-        if (decoded) tokenExpireTime = decoded.exp * 1000;
-      } catch { logout(); }
-    }
+function fmt(n) { return Number(n || 0).toLocaleString(); }
 
-    // ════════════════════════════════════════════════════════════════════════
-    // API WRAPPER
-    // ════════════════════════════════════════════════════════════════════════
-    async function apiCall(endpoint, options = {}) {
-      if (tokenExpireTime && Date.now() > tokenExpireTime - 5 * 60 * 1000) {
-        await refreshAuthToken();
-      }
-      const headers = { ...(options.headers || {}), 'Authorization': `Bearer ${authToken}`, 'Content-Type': 'application/json' };
-      const response = await fetch(`${API_BASE}${endpoint}`, { ...options, headers, credentials: 'include' });
-      if (response.status === 401) { logout(); return null; }
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.message || `HTTP ${response.status}`);
-      }
-      return response.json();
-    }
+function fmtDate(d) {
+  if (!d) return '—';
+  return new Date(d).toLocaleDateString('en-NG', { day:'numeric', month:'short', year:'numeric' });
+}
 
-    // ════════════════════════════════════════════════════════════════════════
-    // AUTH
-    // ════════════════════════════════════════════════════════════════════════
-    document.getElementById('loginForm').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const email    = document.getElementById('loginEmail').value.trim();
-      const password = document.getElementById('loginPassword').value;
-      if (!email || !password) { showAlert('authAlert', 'Email and password are required', 'error'); return; }
+function toast(msg, type = 'success') {
+  const el = document.getElementById('toast');
+  el.textContent   = msg;
+  el.className     = type;
+  el.style.display = 'block';
+  setTimeout(() => { el.style.display = 'none'; }, 3500);
+}
 
-      const btn = e.target.querySelector('button[type="submit"]');
-      btn.disabled = true; btn.textContent = 'Signing in…';
+function showAlert(id, msg, type) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.className     = `alert alert-${type}`;
+  el.textContent   = msg;
+  el.style.display = 'block';
+  if (type === 'success') setTimeout(() => { el.style.display = 'none'; }, 4000);
+}
 
-      try {
-        const r = await fetch(`${ADMIN_AUTH}/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password }),
-          credentials: 'include',
-        });
-        const data = await r.json();
-        if (!r.ok) throw new Error(data.message || 'Login failed');
-        if (data.data.user.role !== 'admin') throw new Error('Admin access required.');
+function decodeToken(token) {
+  try {
+    const b64 = token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');
+    return JSON.parse(decodeURIComponent(atob(b64).split('').map(c=>'%'+('00'+c.charCodeAt(0).toString(16)).slice(-2)).join('')));
+  } catch { return null; }
+}
 
-        authToken   = data.data.token;
-        currentUser = data.data.user;
-        sessionStorage.setItem('adminToken', authToken);
-        sessionStorage.setItem('adminUser',  JSON.stringify(currentUser));
+// ════════════════════════════════════════════════════════════════════════════
+// API
+// ════════════════════════════════════════════════════════════════════════════
+async function apiCall(endpoint, opts = {}) {
+  if (tokenExpireTime && Date.now() > tokenExpireTime - 5*60*1000) await refreshToken();
+  const headers = { 'Content-Type':'application/json', 'Authorization':`Bearer ${authToken}`, ...(opts.headers||{}) };
+  const res = await fetch(`${API_BASE}${endpoint}`, { ...opts, headers, credentials:'include' });
+  if (res.status === 401) { logout(); return null; }
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);
+  return data;
+}
 
-        const decoded = decodeToken(authToken);
-        if (decoded) tokenExpireTime = decoded.exp * 1000;
-
-        showDashboard();
-        loadData();
-      } catch (err) {
-        showAlert('authAlert', err.message, 'error');
-      } finally {
-        btn.disabled = false; btn.textContent = 'Sign In';
-      }
+async function refreshToken() {
+  try {
+    const r = await fetch(`${API_BASE}/auth/admin/refresh`, {
+      method:'POST', headers:{'Authorization':`Bearer ${authToken}`,'Content-Type':'application/json'}, credentials:'include',
     });
+    if (!r.ok) throw new Error();
+    const d = await r.json();
+    authToken = d.data.token;
+    sessionStorage.setItem('adminToken', authToken);
+    const decoded = decodeToken(authToken);
+    if (decoded) tokenExpireTime = decoded.exp * 1000;
+  } catch { logout(); }
+}
 
-    function showDashboard() {
-      document.getElementById('authScreen').style.display    = 'none';
-      document.getElementById('dashboardShell').style.display = 'flex';
-      document.getElementById('userName').textContent  = currentUser.name  || 'Admin';
-      document.getElementById('userEmail').textContent = currentUser.email;
-      document.getElementById('userAvatar').textContent = (currentUser.name || 'A')[0].toUpperCase();
-    }
+// ════════════════════════════════════════════════════════════════════════════
+// AUTH
+// ════════════════════════════════════════════════════════════════════════════
+async function handleLogin() {
+  const email    = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  if (!email || !password) { showAlert('authAlert','Email and password are required','error'); return; }
 
-    function showAuthScreen() {
-      document.getElementById('authScreen').style.display    = 'flex';
-      document.getElementById('dashboardShell').style.display = 'none';
-    }
+  const btn = document.getElementById('loginBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
 
-    async function logout() {
-      try {
-        await fetch(`${ADMIN_AUTH}/logout`, {
-          method: 'POST', headers: { 'Authorization': `Bearer ${authToken}` }, credentials: 'include',
-        });
-      } catch {}
-      authToken = null; currentUser = null; tokenExpireTime = null;
-      sessionStorage.removeItem('adminToken');
-      sessionStorage.removeItem('adminUser');
-      showAuthScreen();
-      document.getElementById('loginEmail').value    = '';
-      document.getElementById('loginPassword').value = '';
-    }
-
-    // ════════════════════════════════════════════════════════════════════════
-    // INIT
-    // ════════════════════════════════════════════════════════════════════════
-    window.addEventListener('load', () => {
-      authToken      = sessionStorage.getItem('adminToken');
-      const userStr  = sessionStorage.getItem('adminUser');
-      if (authToken && userStr) {
-        try {
-          currentUser = JSON.parse(userStr);
-          const decoded = decodeToken(authToken);
-          if (decoded) {
-            tokenExpireTime = decoded.exp * 1000;
-            if (Date.now() > tokenExpireTime) { logout(); return; }
-          }
-          showDashboard();
-          loadData();
-        } catch { logout(); }
-      } else {
-        showAuthScreen();
-      }
+  try {
+    const r = await fetch(`${API_BASE}/auth/admin/login`, {
+      method:'POST', credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ email, password }),
     });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.message || 'Login failed');
+    if (data.data.user.role !== 'admin') throw new Error('Admin access only.');
 
-    // ════════════════════════════════════════════════════════════════════════
-    // DATA  — now uses /api/admin/* endpoints (JWT protected)
-    // ════════════════════════════════════════════════════════════════════════
-    async function loadData() {
-      try {
-        // Professional stats
-        const profRes = await apiCall('/admin/stats/professionals');
-        if (profRes?.success) {
-          document.getElementById('totalVets').textContent    = profRes.data.vets.total;
-          document.getElementById('pendingVets').textContent  = profRes.data.vets.pending;
-          document.getElementById('vetBadge').textContent     = profRes.data.vets.pending;
-          document.getElementById('totalKennels').textContent = profRes.data.kennels.total;
-        }
+    authToken   = data.data.token;
+    currentUser = data.data.user;
+    sessionStorage.setItem('adminToken', authToken);
+    sessionStorage.setItem('adminUser',  JSON.stringify(currentUser));
+    const decoded = decodeToken(authToken);
+    if (decoded) tokenExpireTime = decoded.exp * 1000;
 
-        // Subscription stats
-        const subRes = await apiCall('/admin/stats/subscriptions');
-        if (subRes?.success) {
-          const s = subRes.data;
-          document.getElementById('activeSubscriptions').textContent = s.summary.totalActiveSubscriptions;
-          document.getElementById('profRevenue').textContent         = (s.professional.monthlyRevenue || 0).toLocaleString();
-          document.getElementById('userRevenue').textContent         = (s.users.monthlyRevenue        || 0).toLocaleString();
-          document.getElementById('totalRevenue').textContent        = (s.summary.totalMonthlyRevenue  || 0).toLocaleString();
+    showDashboard();
+    loadData();
+  } catch (err) {
+    showAlert('authAlert', err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Sign In';
+  }
+}
 
-          // Subscriptions tab detail
-          document.getElementById('subProfActive').textContent   = s.professional.active;
-          document.getElementById('subProfPending').textContent  = s.professional.pending;
-          document.getElementById('subUserActive').textContent   = s.users.activeSubscribers;
-          document.getElementById('subTotalRevenue').textContent = (s.summary.totalMonthlyRevenue || 0).toLocaleString();
-        }
+document.getElementById('loginPassword').addEventListener('keydown', e => {
+  if (e.key === 'Enter') handleLogin();
+});
 
-        loadPendingVets();
-      } catch (err) {
-        console.error('Load data error:', err);
+function showDashboard() {
+  document.getElementById('authScreen').style.display    = 'none';
+  document.getElementById('dashboardShell').style.display = 'block';
+  document.getElementById('sidebarName').textContent    = currentUser.name  || 'Admin';
+  document.getElementById('sidebarAvatar').textContent  = (currentUser.name || 'A')[0].toUpperCase();
+}
+
+function showAuthScreen() {
+  document.getElementById('authScreen').style.display    = 'flex';
+  document.getElementById('dashboardShell').style.display = 'none';
+}
+
+async function logout() {
+  try {
+    await fetch(`${API_BASE}/auth/admin/logout`, {
+      method:'POST', headers:{'Authorization':`Bearer ${authToken}`}, credentials:'include',
+    });
+  } catch {}
+  authToken = null; currentUser = null; tokenExpireTime = null;
+  sessionStorage.removeItem('adminToken');
+  sessionStorage.removeItem('adminUser');
+  showAuthScreen();
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════════════════════════════════
+window.addEventListener('load', () => {
+  authToken     = sessionStorage.getItem('adminToken');
+  const userStr = sessionStorage.getItem('adminUser');
+  if (authToken && userStr) {
+    try {
+      currentUser = JSON.parse(userStr);
+      const decoded = decodeToken(authToken);
+      if (decoded) {
+        tokenExpireTime = decoded.exp * 1000;
+        if (Date.now() > tokenExpireTime) { logout(); return; }
       }
-    }
-
-    async function loadPendingVets() {
-      const tbody = document.getElementById('pendingVetsTable');
-      try {
-        const data = await apiCall('/admin/vets/pending');
-        if (!data?.data || data.data.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-secondary);">No pending verifications</td></tr>';
-          return;
-        }
-        tbody.innerHTML = data.data.map(vet => `
-          <tr>
-            <td>${escapeHtml(vet.name)}</td>
-            <td>${escapeHtml(vet.email || 'N/A')}</td>
-            <td>${escapeHtml(vet.vetDetails?.vcnNumber || 'N/A')}</td>
-            <td>${vet.vetVerification?.submittedAt ? new Date(vet.vetVerification.submittedAt).toLocaleDateString() : 'N/A'}</td>
-            <td>
-              <button class="btn btn-sm btn-success" onclick="reviewVet('${escapeHtml(vet._id)}','approve')">Approve</button>
-              <button class="btn btn-sm btn-danger"  onclick="reviewVet('${escapeHtml(vet._id)}','reject')">Reject</button>
-            </td>
-          </tr>
-        `).join('');
-      } catch (err) {
-        showAlert('vetsAlert', 'Error loading vets: ' + err.message, 'error');
-      }
-    }
-
-    async function reviewVet(vetId, action) {
-      const notes = prompt(`Enter admin notes for ${action}ing this vet:`);
-      if (!notes) return;
-      try {
-        const data = await apiCall(`/admin/vets/review/${escapeHtml(vetId)}`, {
-          method: 'POST',
-          body:   JSON.stringify({ action, adminNotes: notes }),
-        });
-        if (data?.success) {
-          showAlert('vetsAlert', `Vet ${action}ed successfully!`, 'success');
-          loadPendingVets();
-          loadData();
-        } else {
-          throw new Error(data?.message || 'Failed');
-        }
-      } catch (err) {
-        showAlert('vetsAlert', 'Error: ' + err.message, 'error');
-      }
-    }
-
-    // ════════════════════════════════════════════════════════════════════════
-    // NAVIGATION
-    // ════════════════════════════════════════════════════════════════════════
-    const TAB_META = {
-      dashboardSection:     { title: 'Dashboard',        subtitle: 'Overview of your platform' },
-      vetsSection:          { title: 'Vet Verification',  subtitle: 'Review and approve veterinarian applications' },
-      subscriptionsSection: { title: 'Subscriptions',     subtitle: 'Manage user and professional subscriptions' },
-    };
-
-    function switchTab(sectionId, navEl) {
-      document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
-      navEl.classList.add('active');
-      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-      document.getElementById(sectionId).classList.add('active');
-      const meta = TAB_META[sectionId] || TAB_META.dashboardSection;
-      document.getElementById('pageTitle').textContent    = meta.title;
-      document.getElementById('pageSubtitle').textContent = meta.subtitle;
-      if (sectionId === 'vetsSection') loadPendingVets();
-    }
-
-    function refreshData() {
+      showDashboard();
       loadData();
-      showAlert('vetsAlert', 'Data refreshed', 'success');
+    } catch { logout(); }
+  } else { showAuthScreen(); }
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// DATA LOADERS
+// ════════════════════════════════════════════════════════════════════════════
+async function loadData() {
+  const icon = document.getElementById('refreshIcon');
+  icon.style.animation = 'spin .7s linear infinite';
+  try {
+    await Promise.all([loadProfStats(), loadSubStats(), loadDashPendingVets()]);
+  } finally {
+    icon.style.animation = '';
+  }
+}
+
+async function loadProfStats() {
+  try {
+    const data = await apiCall('/admin/professionals/stats');
+    if (!data?.success) return;
+    const d = data.data;
+    document.getElementById('totalVets').textContent    = d.vets.total;
+    document.getElementById('pendingVets').textContent  = d.vets.pending;
+    document.getElementById('approvedVets').textContent = d.vets.approved;
+    document.getElementById('rejectedVets').textContent = d.vets.rejected;
+    document.getElementById('totalKennels').textContent = d.kennels.total;
+
+    const badge = document.getElementById('vetBadge');
+    if (d.vets.pending > 0) {
+      badge.textContent   = d.vets.pending;
+      badge.style.display = 'inline';
+    } else {
+      badge.style.display = 'none';
     }
-  </script>
+  } catch (err) { console.error('Prof stats error:', err); }
+}
+
+async function loadSubStats() {
+  try {
+    const data = await apiCall('/admin/stats/subscriptions');
+    if (!data?.success) return;
+    const s = data.data;
+    document.getElementById('activeSubscriptions').textContent = s.summary.totalActiveSubscriptions;
+    document.getElementById('profRevenue').textContent         = fmt(s.professional?.monthlyRevenue);
+    document.getElementById('userRevenue').textContent         = fmt(s.users?.monthlyRevenue);
+    document.getElementById('totalRevenue').textContent        = fmt(s.summary?.totalMonthlyRevenue);
+
+    // Subscriptions tab
+    document.getElementById('subProfActive').textContent   = s.professional?.active   ?? '—';
+    document.getElementById('subProfPending').textContent  = s.professional?.pending  ?? '—';
+    document.getElementById('subUserActive').textContent   = s.users?.activeSubscribers ?? '—';
+    document.getElementById('subTotalRevenue').textContent = fmt(s.summary?.totalMonthlyRevenue);
+
+    document.getElementById('subBreakdown').innerHTML = `
+      <div class="rev-item">
+        <div class="rev-label">Prof Active</div>
+        <div class="rev-value accent">${s.professional?.active ?? 0}</div>
+      </div>
+      <div class="rev-item">
+        <div class="rev-label">Prof Pending</div>
+        <div class="rev-value">${s.professional?.pending ?? 0}</div>
+      </div>
+      <div class="rev-item">
+        <div class="rev-label">Prof Expired</div>
+        <div class="rev-value">${s.professional?.expired ?? 0}</div>
+      </div>
+      <div class="rev-item">
+        <div class="rev-label">Pet Owner Subs</div>
+        <div class="rev-value blue">${s.users?.activeSubscribers ?? 0}</div>
+      </div>
+      <div class="rev-item">
+        <div class="rev-label">Prof Revenue</div>
+        <div class="rev-value accent">₦${fmt(s.professional?.monthlyRevenue)}</div>
+      </div>
+      <div class="rev-item">
+        <div class="rev-label">User Revenue</div>
+        <div class="rev-value accent">₦${fmt(s.users?.monthlyRevenue)}</div>
+      </div>
+    `;
+  } catch (err) { console.error('Sub stats error:', err); }
+}
+
+// ── Pending vets for dashboard preview
+async function loadDashPendingVets() {
+  const el = document.getElementById('dashPendingVets');
+  try {
+    const data = await apiCall('/admin/professionals/pending?limit=5');
+    if (!data?.data?.length) {
+      el.innerHTML = '<div class="empty"><div class="empty-icon">✅</div><div class="empty-text">No pending verifications</div></div>';
+      return;
+    }
+    el.innerHTML = `
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Name</th><th>VCN #</th><th>Submitted</th><th></th></tr></thead>
+          <tbody>
+            ${data.data.map(v => `
+              <tr>
+                <td>${esc(v.name)}</td>
+                <td class="td-mono">${esc(v.vcnNumber || '—')}</td>
+                <td>${fmtDate(v.createdAt)}</td>
+                <td>
+                  <button class="btn btn-sm btn-accent" onclick="openReview('${esc(v._id)}','approve','${esc(v.name)}')">Approve</button>
+                  <button class="btn btn-sm btn-danger" style="margin-left:6px" onclick="openReview('${esc(v._id)}','reject','${esc(v.name)}')">Reject</button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  } catch (err) {
+    el.innerHTML = `<div class="empty"><div class="empty-text">Failed to load: ${esc(err.message)}</div></div>`;
+  }
+}
+
+// ── Full pending vets table
+async function loadPendingVets() {
+  const tbody = document.getElementById('pendingVetsTable');
+  tbody.innerHTML = '<tr><td colspan="7"><div class="empty"><div class="spinner"></div></div></td></tr>';
+  try {
+    const data = await apiCall('/admin/professionals/pending?limit=50');
+    if (!data?.data?.length) {
+      tbody.innerHTML = '<tr><td colspan="7"><div class="empty"><div class="empty-icon">✅</div><div class="empty-text">No pending verifications</div></div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = data.data.map(v => `
+      <tr>
+        <td><strong>${esc(v.name)}</strong></td>
+        <td class="td-mono">${esc(v.userId?.email || v.email || '—')}</td>
+        <td class="td-mono">${esc(v.vcnNumber || '—')}</td>
+        <td>${esc(v.specialization || '—')}</td>
+        <td style="max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(v.address || '—')}</td>
+        <td>${fmtDate(v.createdAt)}</td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-sm btn-accent" onclick="openReview('${esc(v._id)}','approve','${esc(v.name)}')">Approve</button>
+          <button class="btn btn-sm btn-danger" style="margin-left:6px" onclick="openReview('${esc(v._id)}','reject','${esc(v.name)}')">Reject</button>
+        </td>
+      </tr>
+    `).join('');
+  } catch (err) {
+    showAlert('vetsAlert', 'Error: ' + err.message, 'error');
+  }
+}
+
+// ── All professionals
+async function loadAllProfs(role = '', page = 1) {
+  currentProfRole = role;
+  currentProfPage = page;
+  const tbody = document.getElementById('allProfsTable');
+  tbody.innerHTML = '<tr><td colspan="7"><div class="empty"><div class="spinner"></div></div></td></tr>';
+  try {
+    const q   = new URLSearchParams({ limit: 20, page });
+    if (role) q.set('role', role);
+    const data = await apiCall(`/admin/professionals/all?${q}`);
+    if (!data?.data?.length) {
+      tbody.innerHTML = '<tr><td colspan="7"><div class="empty"><div class="empty-icon">👥</div><div class="empty-text">No professionals found</div></div></td></tr>';
+      document.getElementById('profsPagination').innerHTML = '';
+      return;
+    }
+    tbody.innerHTML = data.data.map(p => `
+      <tr>
+        <td><strong>${esc(p.name)}</strong></td>
+        <td><span class="badge ${p.role === 'vet' ? 'badge-active' : 'badge-pending'}">${esc(p.role)}</span></td>
+        <td class="td-mono">${esc(p.userId?.email || p.email || '—')}</td>
+        <td class="td-mono">${esc(p.phone || '—')}</td>
+        <td><span class="badge badge-${p.verificationStatus}">${esc(p.verificationStatus)}</span></td>
+        <td>${fmtDate(p.createdAt)}</td>
+        <td>
+          ${p.verificationStatus === 'pending' ? `<button class="btn btn-sm btn-accent" onclick="openReview('${esc(p._id)}','approve','${esc(p.name)}')">Approve</button>` : ''}
+          <button class="btn btn-sm btn-danger" style="margin-left:4px" onclick="deleteProf('${esc(p._id)}','${esc(p.name)}')">Delete</button>
+        </td>
+      </tr>
+    `).join('');
+
+    // Pagination
+    const total = data.totalPages || 1;
+    let pages = '';
+    for (let i = 1; i <= total; i++) {
+      pages += `<button class="btn btn-sm ${i===page?'btn-accent':'btn-ghost'}" onclick="loadAllProfs('${esc(role)}',${i})">${i}</button>`;
+    }
+    document.getElementById('profsPagination').innerHTML = pages;
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty"><div class="empty-text">Error: ${esc(err.message)}</div></div></td></tr>`;
+  }
+}
+
+function filterProfs(role, el) {
+  document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  loadAllProfs(role === 'all' ? '' : role, 1);
+}
+
+// ── Delete professional
+async function deleteProf(id, name) {
+  if (!confirm(`Delete ${name}? This cannot be undone.`)) return;
+  try {
+    await apiCall(`/admin/professionals/${id}`, { method:'DELETE' });
+    toast(`${name} deleted`);
+    loadAllProfs(currentProfRole, currentProfPage);
+    loadProfStats();
+  } catch (err) {
+    toast('Delete failed: ' + err.message, 'error');
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// REVIEW MODAL
+// ════════════════════════════════════════════════════════════════════════════
+function openReview(id, action, name) {
+  pendingReviewId     = id;
+  pendingReviewAction = action;
+  document.getElementById('adminNotes').value = '';
+  document.getElementById('modalTitle').textContent = `${action === 'approve' ? '✅ Approve' : '❌ Reject'} Vet`;
+  document.getElementById('modalSub').textContent   = `You are about to ${action} ${name}.`;
+  const btn = document.getElementById('modalConfirmBtn');
+  btn.textContent = action === 'approve' ? 'Approve' : 'Reject';
+  btn.className   = `btn ${action === 'approve' ? 'btn-accent' : 'btn-danger'}`;
+  document.getElementById('reviewModal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('reviewModal').classList.remove('open');
+  pendingReviewId = null; pendingReviewAction = null;
+}
+
+async function confirmReview() {
+  const notes = document.getElementById('adminNotes').value.trim();
+  if (!notes) { toast('Admin notes are required', 'error'); return; }
+
+  const btn = document.getElementById('modalConfirmBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+
+  try {
+    await apiCall(`/admin/professionals/review/${pendingReviewId}`, {
+      method: 'POST',
+      body:   JSON.stringify({ action: pendingReviewAction, adminNotes: notes }),
+    });
+    toast(`Vet ${pendingReviewAction}d successfully`);
+    closeModal();
+    loadPendingVets();
+    loadDashPendingVets();
+    loadProfStats();
+  } catch (err) {
+    toast('Error: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = pendingReviewAction === 'approve' ? 'Approve' : 'Reject';
+  }
+}
+
+// Close modal on overlay click
+document.getElementById('reviewModal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// NAVIGATION
+// ════════════════════════════════════════════════════════════════════════════
+const TAB_META = {
+  dashboardSection:     { title:'Dashboard',          subtitle:'Platform overview' },
+  vetsSection:          { title:'Vet Verification',   subtitle:'Review and approve veterinarian applications' },
+  allProfsSection:      { title:'All Professionals',  subtitle:'Browse and manage all professional profiles' },
+  subscriptionsSection: { title:'Subscriptions',      subtitle:'Revenue and subscription analytics' },
+};
+
+function switchTab(sectionId, navEl) {
+  document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+  if (navEl) navEl.classList.add('active');
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.getElementById(sectionId).classList.add('active');
+  const m = TAB_META[sectionId];
+  document.getElementById('pageTitle').textContent    = m.title;
+  document.getElementById('pageSubtitle').textContent = m.subtitle;
+
+  // Lazy load sections on first visit
+  if (sectionId === 'vetsSection')     loadPendingVets();
+  if (sectionId === 'allProfsSection') loadAllProfs(currentProfRole, currentProfPage);
+  if (sectionId === 'subscriptionsSection') loadSubStats();
+}
+
+function refreshData() { loadData(); }
+</script>
 </body>
 </html>
