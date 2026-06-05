@@ -12,7 +12,7 @@ export const protect = async (req, res, next) => {
       return res.status(401).json({ message: 'Not authorized, invalid token' });
     }
 
-    const supabaseId = supabaseUser.id;     // ← FIXED: was .sub (undefined on User object)
+    const supabaseId = supabaseUser.id;
     const email      = supabaseUser.email;
 
     if (!supabaseId || !email) {
@@ -31,7 +31,7 @@ export const protect = async (req, res, next) => {
           createdAt: new Date(),
         },
       },
-      { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
+      { upsert: true, new: true, setDefaultsOnInsert: true },
     ).select('-password');
 
     if (!user) {
