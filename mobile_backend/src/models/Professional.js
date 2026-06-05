@@ -4,7 +4,7 @@ const professionalSchema = new mongoose.Schema(
   {
     // Images (profile photos)
     images: [{
-      type: String, // URLs to professional images
+      type: String,
     }],
     userId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -145,7 +145,6 @@ const professionalSchema = new mongoose.Schema(
 
 professionalSchema.index({ role: 1, isVerified: 1 });
 professionalSchema.index({ location: '2dsphere' });
-professionalSchema.index({ vcnNumber: 1 }, { sparse: true });
 professionalSchema.index({ name: 'text', businessName: 'text', specialization: 'text' });
 
 // ============================================================================
@@ -175,7 +174,7 @@ professionalSchema.pre('save', function(next) {
 professionalSchema.virtual('displayName').get(function() {
   return this.businessName || this.name;
 });
-
+it 
 const Professional = mongoose.model('Professional', professionalSchema);
 
 export default Professional;
