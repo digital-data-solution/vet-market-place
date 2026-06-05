@@ -9,10 +9,12 @@ import Subscription from '../models/Subscription.js';
 // HELPER FUNCTIONS
 // ============================================================================
 
-// Helper: Geocode address to coordinates using a free geocoding service
+/**
+ * Geocode an address to GeoJSON coordinates using Nominatim (OpenStreetMap).
+ * Returns null on failure — callers must handle null gracefully.
+ */
 const geocodeAddress = async (address) => {
   try {
-    // Using Nominatim (OpenStreetMap) - free, no API key required
     const response = await axios.get('https://nominatim.openstreetmap.org/search', {
       params: {
         q: address,
@@ -21,17 +23,19 @@ const geocodeAddress = async (address) => {
         countrycodes: 'ng', // Restrict to Nigeria for better accuracy
       },
       headers: {
-        'User-Agent': 'VetPlatform/1.0' // Required by Nominatim
-      }
+        'User-Agent': 'VetPlatform/1.0', // Required by Nominatim ToS
+      },
+      timeout: 5000, // FIX: Prevent geocoding from hanging and causing slow 500s
     });
 
     if (response.data && response.data.length > 0) {
       const { lat, lon } = response.data[0];
       return {
         type: 'Point',
-        coordinates: [parseFloat(lon), parseFloat(lat)] // [longitude, latitude] for GeoJSON
+        coordinates: [parseFloat(lon), parseFloat(lat)], // GeoJSON: [longitude, latitude]
       };
     }
+
     return null;
   } catch (error) {
     logger.error('Geocoding error', { error: error.message });
@@ -39,7 +43,10 @@ const geocodeAddress = async (address) => {
   }
 };
 
-// Helper function: Calculate distance between two coordinates (Haversine formula)
+/**
+ * Calculate distance between two lat/lng pairs using the Haversine formula.
+ * Returns distance in kilometres.
+ */
 function calculateDistance(lat1, lon1, lat2, lon2) {
   const R = 6371; // Earth's radius in km
   const dLat = toRad(lat2 - lat1);
@@ -69,12 +76,12 @@ export const onboardProfessional = async (req, res) => {
     const userId = req.user._id || req.user.id;
     const { name, vcnNumber, role, businessName, address, specialization, phone, email } = req.body;
 
-    // Validation
+    // ── Basic validation ────────────────────────────────────────────────────
     if (!name || !role) {
       logger.warn('Onboarding failed: missing name or role', { userId, body: req.body });
       return res.status(400).json({
         success: false,
-        message: 'Name and role are required.'
+        message: 'Name and role are required.',
       });
     }
 
@@ -82,7 +89,14 @@ export const onboardProfessional = async (req, res) => {
       logger.warn('Onboarding failed: invalid role', { userId, role });
       return res.status(400).json({
         success: false,
-        message: 'Role must be either "vet" or "kennel".'
+        message: 'Role must be either "vet" or "kennel".',
+      });
+    }
+
+    if (!address || !address.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Address is required.',
       });
     }
 
@@ -90,101 +104,106 @@ export const onboardProfessional = async (req, res) => {
       logger.warn('Onboarding failed: missing VCN number for vet', { userId, name });
       return res.status(400).json({
         success: false,
-        message: 'VCN number is required for veterinarians.'
+        message: 'VCN number is required for veterinarians.',
       });
     }
 
-    // Check for duplicate VCN number if vet
+    if (role === 'kennel' && !businessName) {
+      logger.warn('Onboarding failed: missing business name for kennel', { userId, name });
+      return res.status(400).json({
+        success: false,
+        message: 'Business name is required for kennels.',
+      });
+    }
+
+    // ── Duplicate checks ────────────────────────────────────────────────────
     if (role === 'vet' && vcnNumber) {
       const vcnExists = await Professional.findOne({ vcnNumber: vcnNumber.trim() });
       if (vcnExists) {
         logger.warn('VCN number already registered', { vcnNumber: vcnNumber.trim() });
         return res.status(400).json({
           success: false,
-          message: 'This VCN number is already registered.'
+          message: 'This VCN number is already registered.',
         });
       }
     }
 
-    // Kennel requires businessName
-    if (role === 'kennel' && !businessName) {
-      logger.warn('Onboarding failed: missing business name for kennel', { userId, name });
-      return res.status(400).json({
-        success: false,
-        message: 'Business name is required for kennels.'
-      });
-    }
-
-    // Check if user already has a professional profile
     const existingProfile = await Professional.findOne({ userId });
     if (existingProfile) {
       logger.warn('Onboarding failed: profile already exists', { userId });
       return res.status(400).json({
         success: false,
-        message: 'You already have a professional profile. Please update your existing profile instead.'
+        message: 'You already have a professional profile. Please update your existing profile instead.',
       });
     }
 
-    logger.info(`Onboarding professional: ${name} (${role})`, { userId, body: req.body });
+    logger.info(`Onboarding professional: ${name} (${role})`, { userId });
 
-    // Geocode the address
+    // ── Geocoding (non-blocking) ────────────────────────────────────────────
+    // A failed geocode does NOT block onboarding — location is optional.
+    // The pre-save hook on Professional.js owns isVerified / verificationStatus.
     let location = null;
     if (address && address.trim()) {
       location = await geocodeAddress(address);
       if (!location) {
         logger.warn(`Failed to geocode address: ${address}`, { userId });
-        // Continue anyway - location is optional
+        // Intentionally continue — profile is saved without coordinates.
       }
     }
 
-    // Create professional profile
+    // ── Create professional profile ─────────────────────────────────────────
+    // FIX: Do NOT pass `isVerified` here. The pre('save') hook in Professional.js
+    // is the single source of truth for verification status. Passing it here
+    // caused a conflict that (when combined with the old missing-`next` bug)
+    // produced the "next is not a function" 500 error.
     const professional = new Professional({
       userId,
       name: name.trim(),
       role,
       vcnNumber: role === 'vet' ? vcnNumber?.trim() : undefined,
       businessName: businessName?.trim(),
-      address: address?.trim(),
+      address: address.trim(),
       specialization: specialization?.trim(),
       phone: phone?.trim(),
       email: email?.trim(),
-      location,
-      isVerified: role === 'kennel', // Auto-verify kennels, vets need admin approval
+      location, // null if geocoding failed — that's fine
     });
 
     await professional.save();
 
-    // Update User model to reflect professional status
+    // ── Sync User model ─────────────────────────────────────────────────────
     await User.findByIdAndUpdate(userId, {
       role: role === 'vet' ? 'vet' : 'kennel_owner',
-      location, // Sync location to User model for nearby search
+      ...(location && { location }), // Only sync location if geocoding succeeded
       ...(role === 'vet' && {
         vetDetails: {
           vcnNumber: vcnNumber?.trim(),
           specialization: specialization?.trim(),
           businessName: businessName?.trim(),
-        }
+        },
       }),
       ...(role === 'kennel' && {
         kennelDetails: {
           businessName: businessName?.trim(),
           services: specialization?.trim(),
-        }
-      })
+        },
+      }),
     });
 
     logger.info('Professional profile created successfully', {
       userId,
       professionalId: professional._id,
-      role
+      role,
+      geocoded: !!location,
     });
 
     res.status(201).json({
       success: true,
-      message: role === 'vet'
-        ? 'Professional profile created. VCN verification pending.'
-        : 'Kennel profile created and activated successfully.',
-      data: professional
+      message:
+        role === 'vet'
+          ? 'Professional profile created. VCN verification pending admin approval.'
+          : 'Kennel profile created and activated successfully.',
+      data: professional,
     });
   } catch (error) {
     logger.error('Onboard professional error', { error: error.message, stack: error.stack });
@@ -195,13 +214,13 @@ export const onboardProfessional = async (req, res) => {
       if (field === 'userId') {
         return res.status(400).json({
           success: false,
-          message: 'You already have a professional profile.'
+          message: 'You already have a professional profile.',
         });
       }
       if (field === 'vcnNumber') {
         return res.status(400).json({
           success: false,
-          message: 'This VCN number is already registered.'
+          message: 'This VCN number is already registered.',
         });
       }
     }
@@ -209,10 +228,14 @@ export const onboardProfessional = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to create professional profile. Please try again.',
-      error: error.message
+      error: error.message,
     });
   }
 };
+
+// ============================================================================
+// UPDATE PROFILE
+// ============================================================================
 
 /**
  * Update professional profile
@@ -223,68 +246,76 @@ export const updateProfessional = async (req, res) => {
     const userId = req.user._id || req.user.id;
     const updates = req.body;
 
-    // Plan-based image limit
+    // ── Plan-based image limit ───────────────────────────────────────────────
     if (updates.images) {
-      const sub = await Subscription.findOne({ user: userId, status: 'active', endDate: { $gte: new Date() } });
+      const sub = await Subscription.findOne({
+        user: userId,
+        status: 'active',
+        endDate: { $gte: new Date() },
+      });
       let maxImages = 1;
       if (sub?.plan === 'premium') maxImages = 5;
       if (sub?.plan === 'enterprise') maxImages = 1000;
       if (updates.images.length > maxImages) {
-        return res.status(400).json({ success: false, message: `Your plan allows up to ${maxImages} profile photos.` });
+        return res.status(400).json({
+          success: false,
+          message: `Your plan allows up to ${maxImages} profile photo(s).`,
+        });
       }
     }
 
-    // Don't allow changing userId or role
+    // ── Protect immutable fields ─────────────────────────────────────────────
     delete updates.userId;
     delete updates.role;
+    delete updates.isVerified;
+    delete updates.verificationStatus;
+    delete updates.verifiedAt;
 
-    // If address is being updated, re-geocode
-    if (updates.address) {
+    // ── Re-geocode if address changed ────────────────────────────────────────
+    if (updates.address && updates.address.trim()) {
       const location = await geocodeAddress(updates.address);
       if (location) {
         updates.location = location;
-
-        // Also sync to User model
         await User.findByIdAndUpdate(userId, { location });
       }
+      // If geocoding fails, keep existing location — don't wipe it
     }
-
-    // Don't allow users to self-verify
-    delete updates.isVerified;
-    delete updates.verificationStatus;
 
     const professional = await Professional.findOneAndUpdate(
       { userId },
       { $set: updates },
-      { returnDocument: 'after', runValidators: true }
+      { new: true, runValidators: true }
     );
 
     if (!professional) {
       return res.status(404).json({
         success: false,
-        message: 'Professional profile not found. Please create one first.'
+        message: 'Professional profile not found. Please create one first.',
       });
     }
 
-    // Clear relevant cache
     await cache.del(`professional:${userId}`);
 
     logger.info('Professional profile updated', { userId, updates: Object.keys(updates) });
 
     res.json({
       success: true,
-      message: 'Profile updated successfully',
-      data: professional
+      message: 'Profile updated successfully.',
+      data: professional,
     });
   } catch (error) {
     logger.error('Update professional error', { error: error.message, stack: error.stack });
     res.status(500).json({
       success: false,
       message: 'Failed to update profile. Please try again.',
-      error: error.message
+      error: error.message,
     });
   }
 };
+
+// ============================================================================
+// READ OPERATIONS
+// ============================================================================
 
 /**
  * Get current user's professional profile
@@ -304,20 +335,20 @@ export const getMyProfessionalProfile = async (req, res) => {
     if (!professional) {
       return res.status(404).json({
         success: false,
-        message: 'Professional profile not found'
+        message: 'Professional profile not found.',
       });
     }
 
     res.json({
       success: true,
-      data: professional
+      data: professional,
     });
   } catch (error) {
-    logger.error('Get professional error', { error: error.message, stack: error.stack });
+    logger.error('Get my professional profile error', { error: error.message, stack: error.stack });
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch profile',
-      error: error.message
+      message: 'Failed to fetch profile.',
+      error: error.message,
     });
   }
 };
@@ -338,31 +369,31 @@ export const getProfessional = async (req, res) => {
     if (!professional) {
       return res.status(404).json({
         success: false,
-        message: 'Professional not found'
+        message: 'Professional not found.',
       });
     }
 
-    // Only show verified professionals publicly (except to themselves)
+    // Only show unverified profiles to the owner
     const requestingUserId = req.user?._id?.toString() || req.user?.id?.toString();
     const profileUserId = professional.userId?._id?.toString();
 
     if (!professional.isVerified && requestingUserId !== profileUserId) {
       return res.status(403).json({
         success: false,
-        message: 'This professional profile is pending verification'
+        message: 'This professional profile is pending verification.',
       });
     }
 
     res.json({
       success: true,
-      data: professional
+      data: professional,
     });
   } catch (error) {
     logger.error('Get professional error', { error: error.message, stack: error.stack });
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch profile',
-      error: error.message
+      message: 'Failed to fetch profile.',
+      error: error.message,
     });
   }
 };
@@ -382,16 +413,13 @@ export const listProfessionals = async (req, res) => {
 
     const filters = { isVerified: true };
 
-    // Filter by role
     if (role && ['vet', 'kennel'].includes(role)) {
       filters.role = role;
     }
 
-    // VCN number filtering for verification lookups
+    // VCN lookup — returns immediately without pagination
     if (vcnNumber) {
       filters.vcnNumber = vcnNumber.trim();
-
-      // For VCN lookup, return immediately without pagination
       const professional = await Professional.findOne(filters)
         .populate('userId', 'name email phone')
         .select('-__v')
@@ -403,11 +431,10 @@ export const listProfessionals = async (req, res) => {
         total: professional ? 1 : 0,
         page: 1,
         totalPages: 1,
-        data: professional ? [professional] : []
+        data: professional ? [professional] : [],
       });
     }
 
-    // Regular list with pagination
     const cacheKey = `professionals:list:${role || 'all'}:${page}:${limit}`;
     const result = await cache.cacheWrap(cacheKey, 120, async () => {
       const [professionals, total] = await Promise.all([
@@ -418,9 +445,8 @@ export const listProfessionals = async (req, res) => {
           .skip((parseInt(page) - 1) * parseInt(limit))
           .sort({ createdAt: -1 })
           .lean(),
-        Professional.countDocuments(filters)
+        Professional.countDocuments(filters),
       ]);
-
       return { professionals, total };
     });
 
@@ -430,14 +456,14 @@ export const listProfessionals = async (req, res) => {
       total: result.total,
       page: parseInt(page),
       totalPages: Math.ceil(result.total / parseInt(limit)),
-      data: result.professionals
+      data: result.professionals,
     });
   } catch (error) {
     logger.error('List professionals error', { error: error.message, stack: error.stack });
     res.status(500).json({
       success: false,
-      message: 'Failed to fetch professionals',
-      error: error.message
+      message: 'Failed to fetch professionals.',
+      error: error.message,
     });
   }
 };
@@ -445,42 +471,38 @@ export const listProfessionals = async (req, res) => {
 /**
  * Search nearby professionals (location-based)
  * GET /api/v1/professionals/nearby
- * Query params: lng, lat, distance, role, search
+ * Query params: lng, lat, distance (km), role, search
  */
 export const getNearbyProfessionals = async (req, res) => {
   try {
     const { lng, lat, distance = 10, role, search } = req.query;
 
     if (!lng || !lat) {
-      logger.warn('Nearby professionals search missing coordinates', { lng, lat });
       return res.status(400).json({
         success: false,
-        message: 'Coordinates (lng, lat) are required for location-based search.'
+        message: 'Coordinates (lng, lat) are required for location-based search.',
       });
     }
 
     const radiusInMeters = parseFloat(distance) * 1000;
 
-    // Build query
     const query = {
       isVerified: true,
       location: {
         $near: {
           $geometry: {
             type: 'Point',
-            coordinates: [parseFloat(lng), parseFloat(lat)]
+            coordinates: [parseFloat(lng), parseFloat(lat)],
           },
-          $maxDistance: radiusInMeters
-        }
-      }
+          $maxDistance: radiusInMeters,
+        },
+      },
     };
 
-    // Filter by role
     if (role && ['vet', 'kennel'].includes(role)) {
       query.role = role;
     }
 
-    // Text search
     if (search && search.trim()) {
       const regex = new RegExp(search.trim(), 'i');
       query.$or = [
@@ -488,7 +510,7 @@ export const getNearbyProfessionals = async (req, res) => {
         { businessName: regex },
         { specialization: regex },
         { address: regex },
-        { vcnNumber: regex }
+        { vcnNumber: regex },
       ];
     }
 
@@ -501,54 +523,46 @@ export const getNearbyProfessionals = async (req, res) => {
         .lean();
     });
 
-    // Calculate distances
+    // Attach computed distance to each result
     const professionalsWithDistance = professionals.map(prof => {
-      if (prof.location && prof.location.coordinates) {
+      if (prof.location?.coordinates?.length === 2) {
         const [profLng, profLat] = prof.location.coordinates;
-        const dist = calculateDistance(
-          parseFloat(lat),
-          parseFloat(lng),
-          profLat,
-          profLng
-        );
+        const dist = calculateDistance(parseFloat(lat), parseFloat(lng), profLat, profLng);
         return { ...prof, distance: parseFloat(dist.toFixed(2)) };
       }
       return prof;
     });
 
     logger.info('Nearby professionals search', {
-      lng,
-      lat,
-      distance,
-      role,
-      search,
-      count: professionalsWithDistance.length
+      lng, lat, distance, role, search,
+      count: professionalsWithDistance.length,
     });
 
     res.json({
       success: true,
       count: professionalsWithDistance.length,
       data: professionalsWithDistance,
-      message: professionalsWithDistance.length > 0
-        ? `Found ${professionalsWithDistance.length} professional(s) nearby`
-        : 'No professionals found in this area'
+      message:
+        professionalsWithDistance.length > 0
+          ? `Found ${professionalsWithDistance.length} professional(s) nearby.`
+          : 'No professionals found in this area.',
     });
   } catch (error) {
     logger.error('Nearby professionals error', { error: error.message, stack: error.stack });
     res.status(500).json({
       success: false,
       message: 'Unable to search for nearby professionals. Please try again.',
-      error: error.message
+      error: error.message,
     });
   }
 };
 
 // ============================================================================
-// PROFILE DELETION
+// DELETE
 // ============================================================================
 
 /**
- * Delete professional profile (user can delete their own)
+ * Delete professional profile (owner only)
  * DELETE /api/v1/professionals/profile
  */
 export const deleteProfessional = async (req, res) => {
@@ -560,31 +574,30 @@ export const deleteProfessional = async (req, res) => {
     if (!professional) {
       return res.status(404).json({
         success: false,
-        message: 'Professional profile not found'
+        message: 'Professional profile not found.',
       });
     }
 
     // Reset user role back to pet_owner
     await User.findByIdAndUpdate(userId, {
       role: 'pet_owner',
-      $unset: { vetDetails: '', kennelDetails: '', location: '' }
+      $unset: { vetDetails: '', kennelDetails: '', location: '' },
     });
 
-    // Clear cache
     await cache.del(`professional:${userId}`);
 
     logger.info('Professional profile deleted', { userId, professionalId: professional._id });
 
     res.json({
       success: true,
-      message: 'Professional profile deleted successfully'
+      message: 'Professional profile deleted successfully.',
     });
   } catch (error) {
     logger.error('Delete professional error', { error: error.message, stack: error.stack });
     res.status(500).json({
       success: false,
-      message: 'Failed to delete profile',
-      error: error.message
+      message: 'Failed to delete profile.',
+      error: error.message,
     });
   }
 };

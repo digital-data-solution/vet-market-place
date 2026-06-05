@@ -151,8 +151,9 @@ professionalSchema.index({ name: 'text', businessName: 'text', specialization: '
 // MIDDLEWARE
 // ============================================================================
 
-// FIX: Added `next` parameter to pre-save hook — was causing "next is not a function" error
 // Auto-approval logic: kennels are auto-approved, vets require admin verification
+// NOTE: isVerified must NOT be set in the controller — this hook is the single
+//       source of truth for verification status on new profiles.
 professionalSchema.pre('save', function (next) {
   try {
     if (this.isNew) {
@@ -175,7 +176,6 @@ professionalSchema.pre('save', function (next) {
 // VIRTUALS
 // ============================================================================
 
-// Virtual for full display name
 professionalSchema.virtual('displayName').get(function() {
   return this.businessName || this.name;
 });
