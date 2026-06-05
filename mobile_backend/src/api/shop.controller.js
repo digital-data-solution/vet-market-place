@@ -4,6 +4,7 @@ import cache from '../lib/cache.js';
 import logger from '../lib/logger.js';
 import Subscription from '../models/Subscription.js';
 import axios from 'axios';
+import mongoose from 'mongoose';
 
 // Helper: Geocode address to coordinates using Nominatim (free)
 const geocodeAddress = async (address) => {
@@ -81,14 +82,14 @@ export const createShop = async (req, res) => {
       description: description?.trim(),
       services: services || [],
       location,
-      isVerified: true, // Auto-verify shops (or set to false for manual verification)
+      isVerified: true,
     });
 
     await shop.save();
 
     // Update user role if needed
     await User.findByIdAndUpdate(userId, {
-      $addToSet: { roles: 'shop_owner' } // Add shop_owner to roles array if it doesn't exist
+      $addToSet: { roles: 'shop_owner' }
     });
 
     res.status(201).json({
@@ -133,9 +134,6 @@ export const updateShop = async (req, res) => {
         updates.location = location;
       }
     }
-
-    // Don't allow users to self-verify (if manual verification is enabled)
-    // delete updates.isVerified;
 
     const shop = await Shop.findOneAndUpdate(
       { owner: userId },
@@ -202,9 +200,19 @@ export const getMyShop = async (req, res) => {
 };
 
 // Get shop by ID (public)
+// FIX: Added ObjectId validation to prevent CastError when non-ID strings hit this route
+// (e.g. GET /api/v1/shops/my reaching here if route order is wrong)
 export const getShopById = async (req, res) => {
   try {
     const { id } = req.params;
+
+    // Guard: reject non-ObjectId values immediately
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid shop ID.'
+      });
+    }
 
     const shop = await Shop.findById(id)
       .populate('owner', 'name email phone')
@@ -448,7 +456,7 @@ export const searchShops = async (req, res) => {
         .populate('owner', 'name email phone')
         .select('-__v')
         .limit(parseInt(limit))
-        .sort({ name: 1 }) // Alphabetical order
+        .sort({ name: 1 })
         .lean();
     });
 

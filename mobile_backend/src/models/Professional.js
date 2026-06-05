@@ -151,20 +151,26 @@ professionalSchema.index({ name: 'text', businessName: 'text', specialization: '
 // MIDDLEWARE
 // ============================================================================
 
+// FIX: Added `next` parameter to pre-save hook — was causing "next is not a function" error
 // Auto-approval logic: kennels are auto-approved, vets require admin verification
-professionalSchema.pre('save', function(next) {
-  if (this.isNew) {
-    if (this.role === 'kennel') {
-      this.isVerified = true;
-      this.verificationStatus = 'approved';
-      this.verifiedAt = new Date();
-    } else if (this.role === 'vet') {
-      this.isVerified = false;
-      this.verificationStatus = 'pending';
+professionalSchema.pre('save', function (next) {
+  try {
+    if (this.isNew) {
+      if (this.role === 'kennel') {
+        this.isVerified = true;
+        this.verificationStatus = 'approved';
+        this.verifiedAt = new Date();
+      } else if (this.role === 'vet') {
+        this.isVerified = false;
+        this.verificationStatus = 'pending';
+      }
     }
+    next();
+  } catch (err) {
+    next(err);
   }
-  next();
 });
+
 // ============================================================================
 // VIRTUALS
 // ============================================================================
@@ -173,6 +179,7 @@ professionalSchema.pre('save', function(next) {
 professionalSchema.virtual('displayName').get(function() {
   return this.businessName || this.name;
 });
+
 const Professional = mongoose.model('Professional', professionalSchema);
 
 export default Professional;

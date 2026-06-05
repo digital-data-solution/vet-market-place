@@ -118,6 +118,7 @@ export const listKennels = async (req, res) => {
       { $skip: (parseInt(page) - 1) * parseInt(limit) },
       { $limit: parseInt(limit) }
     ]);
+
     const total = await Professional.aggregate([
       { $match: query },
       {
@@ -147,22 +148,15 @@ export const listKennels = async (req, res) => {
       { $match: { 'activeSubscription.0': { $exists: true } } },
       { $count: 'count' }
     ]);
-    res.json({
+
+    // FIX: Removed duplicate res.json() block that referenced undefined 'kennels' variable
+    return res.json({
       success: true,
       count: kennelsWithSub.length,
       total: total[0]?.count || 0,
       page: parseInt(page),
       totalPages: Math.ceil((total[0]?.count || 0) / parseInt(limit)),
       data: kennelsWithSub,
-    });
-
-    res.json({
-      success: true,
-      count: kennels.length,
-      total,
-      page: parseInt(page),
-      totalPages: Math.ceil(total / parseInt(limit)),
-      data: kennels,
     });
   } catch (error) {
     logger.error('List kennels error', { error: error.message });
@@ -317,6 +311,7 @@ export const updateKennel = async (req, res) => {
       ...(email?.trim() && { email: email.trim() }),
       ...(images && { images }),
     };
+
     const kennel = await Professional.findOneAndUpdate(
       { userId, role: 'kennel' },
       { $set: updateSet },
