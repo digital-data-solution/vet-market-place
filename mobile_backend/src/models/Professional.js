@@ -174,7 +174,6 @@ professionalSchema.pre('save', function(next) {
 professionalSchema.virtual('displayName').get(function() {
   return this.businessName || this.name;
 });
-it 
 const Professional = mongoose.model('Professional', professionalSchema);
 
 export default Professional;
