@@ -151,7 +151,7 @@ professionalSchema.index({ name: 'text', businessName: 'text', specialization: '
 // MIDDLEWARE
 // ============================================================================
 
-// Pre-save middleware: Auto-approve kennels, vets need admin approval
+// Auto-approval logic: kennels are auto-approved, vets require admin verification
 professionalSchema.pre('save', function(next) {
   if (this.isNew) {
     if (this.role === 'kennel') {
@@ -165,7 +165,6 @@ professionalSchema.pre('save', function(next) {
   }
   next();
 });
-
 // ============================================================================
 // VIRTUALS
 // ============================================================================
