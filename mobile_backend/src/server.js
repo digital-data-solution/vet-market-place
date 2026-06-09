@@ -9,15 +9,17 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.join(__dirname, '../.env') });
 
 // Dynamic imports so all modules read env vars after dotenv.config()
-const { default: app }                  = await import('./app.js');
-const { default: connectDB }            = await import('./config/db.js');
-const { connectRedis }                  = await import('./lib/redis.js');
-const { default: startLicenseCheckJob } = await import('./jobs/licenseCron.js');
+const { default: app }                       = await import('./app.js');
+const { default: connectDB }                 = await import('./config/db.js');
+const { connectRedis }                       = await import('./lib/redis.js');
+const { default: startLicenseCheckJob }      = await import('./jobs/licenseCron.js');
+const { default: startSubscriptionJobs }     = await import('./jobs/subscriptionReminders.js');
 
 // Start services
 await connectDB();
 connectRedis();
 startLicenseCheckJob();
+startSubscriptionJobs();
 
 const PORT = process.env.PORT || 5000;
 

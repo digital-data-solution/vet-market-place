@@ -6,14 +6,28 @@ import axios        from 'axios';
 import crypto       from 'crypto';
 import logger       from '../lib/logger.js';
 import mongoose     from 'mongoose';
+import {
+  sendUserSubscriptionConfirmed,
+  sendProfessionalSubscriptionConfirmed,
+} from '../services/email.service.js';
 
 const PAYSTACK_BASE   = process.env.PAYSTACK_BASE        || 'https://api.paystack.co';
 const PAYSTACK_SECRET = process.env.PAYSTACK_SECRET_KEY  || '';
 
 const PLAN_PRICING = {
-  user_monthly: 500,
-  basic:        3000,
+  // Pet owner plans
+  user_premium: 1500,
+  user_monthly: 1500, // legacy alias — same price
+
+  // Professional plans
+  starter: 2500,
+  pro:     5000,
+  basic:   2500, // legacy alias — same price as starter
 };
+
+// Plans the subscription endpoints accept (guards against arbitrary strings)
+const VALID_USER_PLANS         = new Set(['user_premium', 'user_monthly']);
+const VALID_PROFESSIONAL_PLANS = new Set(['starter', 'pro', 'basic']);
 
 const PENDING_GRACE_MS = 30 * 60 * 1000; // 30 minutes
 
@@ -76,6 +90,7 @@ async function activateUserSubscription(userId, plan, reference) {
 
   await user.save();
   logger.info('User subscription activated', { userId, plan, reference });
+  sendUserSubscriptionConfirmed(user.name, user.email, plan, PLAN_PRICING[plan], endDate).catch(() => {});
   return { plan, status: 'active', expiresAt: endDate };
 }
 
@@ -106,6 +121,17 @@ async function activateProfessionalSubscription(subscriptionId, reference) {
 
   await subscription.save();
   logger.info('Professional subscription activated', { subscriptionId, reference });
+
+  // Send confirmation email — populate user name/email from User model
+  User.findById(subscription.user).select('name email').lean().then((usr) => {
+    if (usr?.email) {
+      sendProfessionalSubscriptionConfirmed(
+        usr.name, usr.email, subscription.plan,
+        subscription.amount || 2500, endDate,
+      ).catch(() => {});
+    }
+  }).catch(() => {});
+
   return { plan: subscription.plan, status: 'active', expiresAt: endDate };
 }
 
@@ -117,9 +143,54 @@ export const getPricing = async (req, res) => {
   res.json({
     success: true,
     data: {
-      petOwners:     { price: PLAN_PRICING.user_monthly, plan: 'user_monthly' },
-      professionals: { price: PLAN_PRICING.basic,        plan: 'basic'        },
       currency: 'NGN',
+      petOwner: {
+        free: {
+          plan:     'free',
+          price:    0,
+          label:    'Free',
+          features: [
+            'Browse vet and shop listings',
+            'See names and specializations',
+            'General location (city only)',
+          ],
+        },
+        premium: {
+          plan:     'user_premium',
+          price:    PLAN_PRICING.user_premium,
+          label:    'Premium',
+          features: [
+            'Full contact details (phone & email)',
+            'Exact address for every listing',
+            'Unlimited search results',
+            'GPS nearby search',
+          ],
+        },
+      },
+      professional: {
+        starter: {
+          plan:     'starter',
+          price:    PLAN_PRICING.starter,
+          label:    'Starter',
+          features: [
+            'Listed in search results',
+            'Full profile visible to subscribers',
+            'Phone & email shown to Premium users',
+            'Appear in nearby searches',
+          ],
+        },
+        pro: {
+          plan:     'pro',
+          price:    PLAN_PRICING.pro,
+          label:    'Pro',
+          features: [
+            'Everything in Starter',
+            'Featured badge on your profile',
+            'Sorted to top of search results',
+            'Priority placement in nearby search',
+          ],
+        },
+      },
     },
   });
 };
@@ -209,8 +280,8 @@ export const createUserSubscription = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Payment system not configured.' });
   }
 
-  if (plan !== 'user_monthly') {
-    return res.status(400).json({ success: false, message: 'Invalid plan. Use "user_monthly".' });
+  if (!VALID_USER_PLANS.has(plan)) {
+    return res.status(400).json({ success: false, message: 'Invalid plan. Use "user_premium".' });
   }
 
   const session = await mongoose.startSession();
@@ -323,8 +394,8 @@ export const createProfessionalSubscription = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Payment system not configured.' });
   }
 
-  if (plan !== 'basic') {
-    return res.status(400).json({ success: false, message: 'Invalid plan. Use "basic".' });
+  if (!VALID_PROFESSIONAL_PLANS.has(plan)) {
+    return res.status(400).json({ success: false, message: 'Invalid plan. Use "starter" or "pro".' });
   }
 
   const session = await mongoose.startSession();
@@ -764,7 +835,8 @@ export const getSubscriptionStats = async (req, res) => {
       professionalPending,
       professionalExpired,
       professionalCancelled,
-      basicCount,
+      starterCount,
+      proCount,
       professionalRevenueAgg,
       userActive,
       totalUsers,
@@ -773,12 +845,13 @@ export const getSubscriptionStats = async (req, res) => {
       Subscription.countDocuments({ status: 'pending' }),
       Subscription.countDocuments({ status: 'expired' }),
       Subscription.countDocuments({ status: 'cancelled' }),
-      Subscription.countDocuments({ plan: 'basic', status: 'active', endDate: { $gte: now } }),
+      Subscription.countDocuments({ plan: { $in: ['starter', 'basic'] }, status: 'active', endDate: { $gte: now } }),
+      Subscription.countDocuments({ plan: 'pro',                        status: 'active', endDate: { $gte: now } }),
       Subscription.aggregate([
         { $match: { status: 'active', endDate: { $gte: now } } },
         { $group: { _id: null, total: { $sum: '$amount' } } },
       ]),
-      User.countDocuments({ 'subscription.status': 'active', 'subscription.plan': 'user_monthly' }),
+      User.countDocuments({ 'subscription.status': 'active', 'subscription.plan': { $in: ['user_premium', 'user_monthly'] } }),
       User.countDocuments({}),
     ]);
 
@@ -794,7 +867,7 @@ export const getSubscriptionStats = async (req, res) => {
           pending:        professionalPending,
           expired:        professionalExpired,
           cancelled:      professionalCancelled,
-          byPlan:         { basic: basicCount },
+          byPlan:         { starter: starterCount, pro: proCount },
           monthlyRevenue: professionalRevenue,
         },
         users: {

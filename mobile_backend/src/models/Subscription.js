@@ -9,17 +9,20 @@ const subscriptionSchema = new mongoose.Schema(
       index: true,
     },
 
-    // 'basic' = professional listing plan (₦3,000/month)
+    // Plan tiers:
+    //   'starter' (₦2,500/mo) – professional listed in search
+    //   'pro'     (₦5,000/mo) – professional featured + sorted first
+    //   'basic'               – legacy alias for 'starter' (kept for existing records)
     plan: {
       type: String,
-      enum: ['basic'],
-      default: 'basic',
+      enum: ['starter', 'pro', 'basic'],
+      default: 'starter',
     },
 
     amount: {
       type: Number,
       required: true,
-      default: 3000,
+      default: 2500,
     },
 
     status: {

@@ -447,6 +447,23 @@ export const listProfessionals = async (req, res) => {
           .lean(),
         Professional.countDocuments(filters),
       ]);
+
+      // Fetch user IDs with active 'pro' subscriptions so we can sort them first
+      const proUserIds = await Subscription.distinct('user', {
+        plan:    'pro',
+        status:  'active',
+        endDate: { $gte: new Date() },
+      });
+      const proSet = new Set(proUserIds.map(id => id.toString()));
+
+      professionals.sort((a, b) => {
+        const aIsPro = proSet.has(a.userId?._id?.toString() ?? a.userId?.toString() ?? '');
+        const bIsPro = proSet.has(b.userId?._id?.toString() ?? b.userId?.toString() ?? '');
+        if (aIsPro && !bIsPro) return -1;
+        if (!aIsPro && bIsPro) return 1;
+        return 0;
+      });
+
       return { professionals, total };
     });
 

@@ -1,6 +1,7 @@
 import User from '../models/User.js';
 import logger from '../lib/logger.js';
 import { supabaseAdmin, verifySupabaseToken } from '../lib/supabase.js';
+import { sendWelcomeEmail } from '../services/email.service.js';
 
 export const register = async (req, res) => {
   const { name, email, password, role, location, vetDetails, kennelDetails, vcnNumber, cacNumber } = req.body;
@@ -48,6 +49,9 @@ export const register = async (req, res) => {
     if (role === 'kennel_owner') user.kennelDetails = kennelDetails;
 
     await user.save();
+
+    // Fire-and-forget — never block the response on email delivery
+    sendWelcomeEmail(name, email).catch(() => {});
 
     logger.info('User registered', { userId: user._id, email });
     return res.status(201).json({
