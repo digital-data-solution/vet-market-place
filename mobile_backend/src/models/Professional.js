@@ -154,21 +154,16 @@ professionalSchema.index({ name: 'text', businessName: 'text', specialization: '
 // Auto-approval logic: kennels are auto-approved, vets require admin verification
 // NOTE: isVerified must NOT be set in the controller — this hook is the single
 //       source of truth for verification status on new profiles.
-professionalSchema.pre('save', function (next) {
-  try {
-    if (this.isNew) {
-      if (this.role === 'kennel') {
-        this.isVerified = true;
-        this.verificationStatus = 'approved';
-        this.verifiedAt = new Date();
-      } else if (this.role === 'vet') {
-        this.isVerified = false;
-        this.verificationStatus = 'pending';
-      }
+professionalSchema.pre('save', async function () {
+  if (this.isNew) {
+    if (this.role === 'kennel') {
+      this.isVerified = true;
+      this.verificationStatus = 'approved';
+      this.verifiedAt = new Date();
+    } else if (this.role === 'vet') {
+      this.isVerified = false;
+      this.verificationStatus = 'pending';
     }
-    next();
-  } catch (err) {
-    next(err);
   }
 });
 

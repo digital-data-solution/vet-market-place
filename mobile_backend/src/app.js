@@ -44,6 +44,7 @@ app.use(helmet({
       imgSrc:     ["'self'", "data:", "https://res.cloudinary.com", "https://vmzbvaybnohfxfkrungj.supabase.co"],
       connectSrc: [
         "'self'",
+        "blob:",
         "https://xpressvetmarketplace.com",
         "https://vet-market-place-jsj5.onrender.com",
         "https://vmzbvaybnohfxfkrungj.supabase.co",
