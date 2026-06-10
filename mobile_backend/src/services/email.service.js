@@ -4,7 +4,7 @@
  * Configure one provider via environment variables:
  *   RESEND_API_KEY  → uses Resend (resend.com)
  *   BREVO_API_KEY   → uses Brevo (brevo.com)
- *   EMAIL_FROM      → sender address, e.g. "Xpress Vet <noreply@xpressvet.com.ng>"
+ *   EMAIL_FROM      → sender address, e.g. "Xpress Vet <noreply@xpressvetmarketplace.com>"
  *
  * If neither key is set, all send calls are logged and skipped silently
  * so the app works correctly in dev without email credentials.
@@ -13,7 +13,7 @@
 import fetch from 'node-fetch';
 import logger from '../lib/logger.js';
 
-const FROM    = process.env.EMAIL_FROM    || 'Xpress Vet <noreply@xpressvet.com.ng>';
+const FROM    = process.env.EMAIL_FROM    || 'Xpress Vet <noreply@xpressvetmarketplace.com>';
 const RESEND  = process.env.RESEND_API_KEY;
 const BREVO   = process.env.BREVO_API_KEY;
 

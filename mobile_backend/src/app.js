@@ -41,8 +41,15 @@ app.use(helmet({
       defaultSrc: ["'self'"],
       scriptSrc:  ["'self'", "'unsafe-inline'"],
       styleSrc:   ["'self'", "'unsafe-inline'"],
-      imgSrc:     ["'self'", "data:"],
-      connectSrc: ["'self'", "https://vet-market-place-jsj5.onrender.com"],
+      imgSrc:     ["'self'", "data:", "https://res.cloudinary.com", "https://vmzbvaybnohfxfkrungj.supabase.co"],
+      connectSrc: [
+        "'self'",
+        "https://xpressvetmarketplace.com",
+        "https://vet-market-place-jsj5.onrender.com",
+        "https://vmzbvaybnohfxfkrungj.supabase.co",
+        "wss://vmzbvaybnohfxfkrungj.supabase.co",
+        "https://api.resend.com",
+      ],
     },
   },
 }));
