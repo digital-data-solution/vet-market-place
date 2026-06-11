@@ -11,36 +11,31 @@ import Subscription from '../models/Subscription.js';
 
 /**
  * Geocode an address to GeoJSON coordinates using Nominatim (OpenStreetMap).
+ * Results are cached in Redis for 30 days — same address hits Nominatim only once.
  * Returns null on failure — callers must handle null gracefully.
  */
 const geocodeAddress = async (address) => {
-  try {
-    const response = await axios.get('https://nominatim.openstreetmap.org/search', {
-      params: {
-        q: address,
-        format: 'json',
-        limit: 1,
-        countrycodes: 'ng', // Restrict to Nigeria for better accuracy
-      },
-      headers: {
-        'User-Agent': 'VetPlatform/1.0', // Required by Nominatim ToS
-      },
-      timeout: 5000, // FIX: Prevent geocoding from hanging and causing slow 500s
-    });
+  const key = `geocode:${address.trim().toLowerCase()}`;
 
-    if (response.data && response.data.length > 0) {
-      const { lat, lon } = response.data[0];
-      return {
-        type: 'Point',
-        coordinates: [parseFloat(lon), parseFloat(lat)], // GeoJSON: [longitude, latitude]
-      };
+  return cache.cacheWrap(key, 30 * 24 * 3600, async () => {
+    try {
+      const response = await axios.get('https://nominatim.openstreetmap.org/search', {
+        params: { q: address, format: 'json', limit: 1, countrycodes: 'ng' },
+        headers: { 'User-Agent': 'XpressVet/1.0 (xpressvetmarketplace.com)' },
+        timeout: 5000,
+      });
+
+      if (response.data && response.data.length > 0) {
+        const { lat, lon } = response.data[0];
+        return { type: 'Point', coordinates: [parseFloat(lon), parseFloat(lat)] };
+      }
+
+      return null;
+    } catch (error) {
+      logger.error('Geocoding error', { error: error.message });
+      return null;
     }
-
-    return null;
-  } catch (error) {
-    logger.error('Geocoding error', { error: error.message });
-    return null;
-  }
+  });
 };
 
 /**

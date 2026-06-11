@@ -6,32 +6,30 @@ import Subscription from '../models/Subscription.js';
 import axios from 'axios';
 import mongoose from 'mongoose';
 
-// Helper: Geocode address to coordinates using Nominatim (free)
+// Geocode address → GeoJSON Point. Results cached 30 days so same address
+// only hits Nominatim once, avoiding rate-limit 429s.
 const geocodeAddress = async (address) => {
-  try {
-    const response = await axios.get('https://nominatim.openstreetmap.org/search', {
-      params: {
-        q: address,
-        format: 'json',
-        limit: 1,
-        countrycodes: 'ng', // Restrict to Nigeria
-      },
-      headers: {
-        'User-Agent': 'PetShopPlatform/1.0'
+  const key = `geocode:${address.trim().toLowerCase()}`;
+
+  return cache.cacheWrap(key, 30 * 24 * 3600, async () => {
+    try {
+      const response = await axios.get('https://nominatim.openstreetmap.org/search', {
+        params: { q: address, format: 'json', limit: 1, countrycodes: 'ng' },
+        headers: { 'User-Agent': 'XpressVet/1.0 (xpressvetmarketplace.com)' },
+        timeout: 5000,
+      });
+
+      if (response.data && response.data.length > 0) {
+        const { lat, lon } = response.data[0];
+        return { type: 'Point', coordinates: [parseFloat(lon), parseFloat(lat)] };
       }
-    });
-    if (response.data && response.data.length > 0) {
-      const { lat, lon } = response.data[0];
-      return {
-        type: 'Point',
-        coordinates: [parseFloat(lon), parseFloat(lat)]
-      };
+
+      return null;
+    } catch (error) {
+      console.error('Geocoding error:', error.message);
+      return null;
     }
-    return null;
-  } catch (error) {
-    console.error('Geocoding error:', error.message);
-    return null;
-  }
+  });
 };
 
 // Create a new shop
