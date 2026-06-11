@@ -246,7 +246,9 @@ router.post('/media', protect, singleImage('image'), async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 router.delete('/delete', protect, async (req, res) => {
   try {
-    const { imageUrl } = req.body;
+    // Accept imageUrl from query string (preferred — some proxies strip DELETE bodies)
+    // or fall back to req.body for backwards compatibility.
+    const imageUrl = (req.query.imageUrl || req.body?.imageUrl || '').trim();
 
     if (!imageUrl) {
       return res.status(400).json({ success: false, message: 'imageUrl is required.' });
