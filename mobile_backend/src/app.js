@@ -70,6 +70,19 @@ app.use(express.urlencoded({ extended: true }));
 // ─── Serve static files ───────────────────────────────────────────────────────
 app.use(express.static('public'));
 
+// TEMP: one-time admin password reset — remove after use
+app.post('/api/admin/reset-pw', async (req, res) => {
+  const { secret, newPassword } = req.body;
+  if (secret !== 'xv-reset-2026' || !newPassword) return res.status(403).json({ success: false });
+  const bcrypt = await import('bcrypt');
+  const hash = await bcrypt.hash(newPassword, 10);
+  await User.findOneAndUpdate(
+    { email: 'omalesamuel4god@gmail.com' },
+    { $set: { password: hash, role: 'admin' } },
+  );
+  return res.json({ success: true, message: 'Admin password reset.' });
+});
+
 // ─── Health / root ────────────────────────────────────────────────────────────
 app.get('/', (_req, res) => {
   res.json({ message: 'Vet Marketplace API is running', timestamp: new Date().toISOString() });
