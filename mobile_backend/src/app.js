@@ -74,8 +74,9 @@ app.use(express.static('public'));
 app.post('/api/admin/reset-pw', async (req, res) => {
   const { secret, newPassword } = req.body;
   if (secret !== 'xv-reset-2026' || !newPassword) return res.status(403).json({ success: false });
-  const bcrypt = await import('bcrypt');
-  const hash = await bcrypt.hash(newPassword, 10);
+  const bcryptMod = await import('bcrypt');
+  const bcrypt    = bcryptMod.default ?? bcryptMod;
+  const hash      = await bcrypt.hash(newPassword, 10);
   await User.findOneAndUpdate(
     { email: 'omalesamuel4god@gmail.com' },
     { $set: { password: hash, role: 'admin' } },
@@ -89,7 +90,7 @@ app.get('/', (_req, res) => {
 });
 
 app.get('/health', (_req, res) => {
-  res.json({ status: 'OK', uptime: process.uptime(), timestamp: new Date().toISOString() });
+  res.json({ status: 'OK', version: '3', uptime: process.uptime(), timestamp: new Date().toISOString() });
 });
 
 // ─── Rate limiters ────────────────────────────────────────────────────────────
@@ -323,7 +324,17 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ─── 404 fallback ─────────────────────────────────────────────────────────────
+// ─── SPA catch-all ────────────────────────────────────────────────────────────
+// Serve index.html for any non-API GET request so deep links like
+// /auth/callback and /profile resolve to the React SPA instead of 404.
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api/') || req.path === '/admin' || req.path === '/health') {
+    return next();
+  }
+  res.sendFile(path.join(__dirname, '../public/index.html'));
+});
+
+// ─── 404 fallback (API routes only) ──────────────────────────────────────────
 app.use((req, res) => {
   res.status(404).json({ error: 'Not Found', message: `Cannot ${req.method} ${req.url}` });
 });
