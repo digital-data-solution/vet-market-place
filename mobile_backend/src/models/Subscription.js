@@ -10,12 +10,13 @@ const subscriptionSchema = new mongoose.Schema(
     },
 
     // Plan tiers:
-    //   'starter' (₦2,500/mo) – professional listed in search
-    //   'pro'     (₦5,000/mo) – professional featured + sorted first
-    //   'basic'               – legacy alias for 'starter' (kept for existing records)
+    //   'user_premium' (₦1,500/mo) – pet owner: full contact details + GPS search
+    //   'starter'      (₦2,500/mo) – professional listed in search results
+    //   'pro'          (₦5,000/mo) – professional featured + sorted first
+    //   'basic' / 'user_monthly'   – legacy aliases kept for existing records
     plan: {
       type: String,
-      enum: ['starter', 'pro', 'basic'],
+      enum: ['user_premium', 'starter', 'pro', 'basic', 'user_monthly'],
       default: 'starter',
     },
 

@@ -87,10 +87,8 @@ export const createShop = async (req, res) => {
 
     await shop.save();
 
-    // Update user role if needed
-    await User.findByIdAndUpdate(userId, {
-      $addToSet: { roles: 'shop_owner' }
-    });
+    // Promote user to shop_owner role
+    await User.findByIdAndUpdate(userId, { $set: { role: 'shop_owner' } });
 
     res.status(201).json({
       success: true,
@@ -492,10 +490,8 @@ export const deleteShop = async (req, res) => {
       });
     }
 
-    // Remove shop_owner role from user
-    await User.findByIdAndUpdate(userId, {
-      $pull: { roles: 'shop_owner' }
-    });
+    // Revert user to pet_owner when shop is deleted
+    await User.findByIdAndUpdate(userId, { $set: { role: 'pet_owner' } });
 
     // Clear cache
     await cache.del(`shop:${userId}`);

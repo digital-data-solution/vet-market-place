@@ -32,23 +32,30 @@ const router = express.Router();
 const MEDIA_LIMITS = {
   vet: {
     free:         3,
-    user_monthly: 10,
-    basic:        30,
+    starter:      10,
+    pro:          30,
+    basic:        30,        // legacy alias for starter
+    user_monthly: 10,        // legacy alias
   },
   kennel_owner: {
     free:         5,
-    user_monthly: 15,
-    basic:        50,
+    starter:      15,
+    pro:          50,
+    basic:        50,        // legacy alias
+    user_monthly: 15,        // legacy alias
   },
   shop_owner: {
     free:         5,
-    user_monthly: 20,
-    basic:        75,
+    starter:      20,
+    pro:          75,
+    basic:        75,        // legacy alias
+    user_monthly: 20,        // legacy alias
   },
   pet_owner: {
-    free:         2,
-    user_monthly: 5,
-    basic:        10,
+    free:          2,
+    user_premium:  8,
+    user_monthly:  5,        // legacy alias
+    basic:         10,       // legacy alias
   },
 };
 

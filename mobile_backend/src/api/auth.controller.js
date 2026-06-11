@@ -84,17 +84,19 @@ export const syncUser = async (req, res) => {
       return res.status(400).json({ message: 'Token missing required fields.' });
     }
 
+    const isVerified = !!supabaseUser.email_confirmed_at;
+
     const user = await User.findOneAndUpdate(
       { supabaseId },
       {
         $setOnInsert: {
           supabaseId,
           email,
-          name:       supabaseUser.user_metadata?.name || email.split('@')[0],
-          role:       supabaseUser.user_metadata?.role || 'pet_owner',
-          password:   'supabase_managed',
-          isVerified: true,
+          name:     supabaseUser.user_metadata?.name || email.split('@')[0],
+          role:     supabaseUser.user_metadata?.role || 'pet_owner',
+          password: 'supabase_managed',
         },
+        $set: { isVerified },
       },
       { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
     );
