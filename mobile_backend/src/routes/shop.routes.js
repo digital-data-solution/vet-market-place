@@ -1,19 +1,32 @@
 import express from 'express';
-import { protect } from '../middlewares/authMiddleware.js';
-import { createShop, getNearbyShops, getShopById, searchShops } from '../api/shop.controller.js';
+import {
+  createShop,
+  updateShop,
+  getMyShop,
+  getShopById,
+  listShops,
+  getNearbyShops,
+  searchShops,
+  deleteShop,
+} from '../api/shop.controller.js';
+import { protect }          from '../middlewares/authMiddleware.js';
+import { enforceSubscription } from '../middlewares/subscriptionMiddleware.js';
+import { requireShopOwner } from '../middlewares/ownershipMiddleware.js';
 
 const router = express.Router();
 
-// POST /api/v1/shops/create
-router.post('/create', protect, createShop);
+// ─── Public named routes ──────────────────────────────────────────────────────
+router.get('/nearby', protect, enforceSubscription, getNearbyShops);
+router.get('/search', protect, enforceSubscription, searchShops);
+router.get('/list',   protect, enforceSubscription, listShops);
 
-// GET /api/v1/shops/search?q=&lng=&lat=&distance=
-router.get('/search', searchShops);
+// ─── Protected /me routes ─────────────────────────────────────────────────────
+router.get('/me/shop',    protect, getMyShop);
+router.post('/create',    protect, createShop);                         // anyone can create (creates ownership)
+router.put('/me/shop',    protect, requireShopOwner, updateShop);       // must own shop
+router.delete('/me/shop', protect, requireShopOwner, deleteShop);       // must own shop
 
-// GET /api/v1/shops/nearby?lng=&lat=&distance=
-router.get('/nearby', getNearbyShops);
-
-// GET /api/v1/shops/:id
-router.get('/:id', getShopById);
+// ─── Wildcard last ────────────────────────────────────────────────────────────
+router.get('/:id', protect, enforceSubscription, getShopById);
 
 export default router;

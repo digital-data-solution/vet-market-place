@@ -8,7 +8,6 @@ This document outlines the complete database schema for the Xpress Pet & Vet app
 ### 1. User Model
 **File:** `src/models/User.js`
 
-```javascript
 {
   name: String (required),
   email: String (required, unique),
@@ -30,7 +29,7 @@ This document outlines the complete database schema for the Xpress Pet & Vet app
   },
   timestamps: true
 }
-```
+
 
 **Relationships:**
 - One-to-Many with Subscription
@@ -50,7 +49,6 @@ This document outlines the complete database schema for the Xpress Pet & Vet app
   paymentReference: String, // Paystack reference
   timestamps: true
 }
-```
 
 **Relationships:**
 - Belongs to User
@@ -58,7 +56,7 @@ This document outlines the complete database schema for the Xpress Pet & Vet app
 ## Proposed Additional Models (Future Features)
 
 ### 3. Review Model
-```javascript
+
 {
   reviewer: ObjectId (ref: 'User', required), // pet_owner
   professional: ObjectId (ref: 'User', required), // vet or kennel_owner
@@ -68,10 +66,8 @@ This document outlines the complete database schema for the Xpress Pet & Vet app
   isVerified: Boolean (default: false), // verified booking
   timestamps: true
 }
-```
 
 ### 4. Appointment Model
-```javascript
 {
   petOwner: ObjectId (ref: 'User', required),
   professional: ObjectId (ref: 'User', required),
@@ -83,10 +79,8 @@ This document outlines the complete database schema for the Xpress Pet & Vet app
   paymentAmount: Number,
   timestamps: true
 }
-```
 
 ### 5. Pet Model
-```javascript
 {
   owner: ObjectId (ref: 'User', required),
   name: String (required),
@@ -102,10 +96,9 @@ This document outlines the complete database schema for the Xpress Pet & Vet app
   }],
   timestamps: true
 }
-```
 
 ### 6. Notification Model
-```javascript
+javascript
 {
   recipient: ObjectId (ref: 'User', required),
   type: Enum ['appointment_reminder', 'subscription_expiry', 'review_request', 'promotion'],
@@ -115,7 +108,6 @@ This document outlines the complete database schema for the Xpress Pet & Vet app
   data: Object, // additional context
   timestamps: true
 }
-```
 
 ## API Controllers Structure
 
@@ -149,7 +141,7 @@ This document outlines the complete database schema for the Xpress Pet & Vet app
 - `Review.professional`: index for professional reviews
 
 ## Environment Variables
-```env
+env
 PORT=5000
 NODE_ENV=development
 MONGODB_URI=mongodb+srv://...
@@ -157,7 +149,6 @@ JWT_SECRET=xpress_super_secret_2026
 ONESIGNAL_APP_ID=...
 ONESIGNAL_REST_API_KEY=...
 REDIS_URL=redis://localhost:6379 (optional)
-```
 
 ## Migration Strategy
 For future schema changes:

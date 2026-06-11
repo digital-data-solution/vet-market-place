@@ -1,160 +1,143 @@
 import User from '../models/User.js';
-import jwt from 'jsonwebtoken';
-import { sendSMSOTP } from '../services/onesignal.service.js';
-import { redisClient } from '../lib/redis.js';
-
-// OTP config
-const OTP_TTL = parseInt(process.env.OTP_TTL_SECONDS || '300', 10); // default 5 minutes
-// Fallback in-memory OTP store if Redis unavailable
-const otpStore = new Map();
+import logger from '../lib/logger.js';
+import { supabaseAdmin, verifySupabaseToken } from '../lib/supabase.js';
+import { sendWelcomeEmail } from '../services/email.service.js';
 
 export const register = async (req, res) => {
-  const { name, email, password, phone, role, location } = req.body;
+  const { name, email, password, role, location, vetDetails, kennelDetails, vcnNumber, cacNumber } = req.body;
 
   try {
-    // Check if user exists
-    const existingUser = await User.findOne({ $or: [{ email }, { 'vetDetails.vcnNumber': req.body.vcnNumber }, { 'kennelDetails.cacNumber': req.body.cacNumber }] });
-    if (existingUser) return res.status(400).json({ message: 'User already exists' });
+    if (!email || !password || !name) {
+      return res.status(400).json({ message: 'Name, email and password are required.' });
+    }
 
-    // Create user (password hashed by pre-save hook)
-    const user = new User({ name, email, password, phone, role, location });
-    if (role === 'vet') user.vetDetails = req.body.vetDetails;
-    if (role === 'kennel_owner') user.kennelDetails = req.body.kennelDetails;
+    const existing = await User.findOne({
+      $or: [
+        { email },
+        ...(vcnNumber ? [{ 'vetDetails.vcnNumber': vcnNumber }] : []),
+        ...(cacNumber ? [{ 'kennelDetails.cacNumber': cacNumber }] : []),
+      ],
+    });
+    if (existing) {
+      return res.status(400).json({ message: 'An account with these details already exists.' });
+    }
+
+    const { data: supabaseData, error: supabaseError } = await supabaseAdmin.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { name, role: role || 'pet_owner' },
+      },
+    });
+
+    if (supabaseError) {
+      logger.error('Supabase registration error', { error: supabaseError.message });
+      return res.status(500).json({ message: supabaseError.message });
+    }
+
+    const user = new User({
+      supabaseId: supabaseData.user.id,
+      name,
+      email,
+      password,
+      role: role || 'pet_owner',
+      location,
+      isVerified: false,
+    });
+
+    if (role === 'vet')          user.vetDetails    = vetDetails;
+    if (role === 'kennel_owner') user.kennelDetails = kennelDetails;
 
     await user.save();
 
-    // Generate server-side OTP and store in Redis with TTL
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const otpResult = await sendSMSOTP(phone, otpCode);
-    if (!otpResult.success) return res.status(500).json({ message: 'Failed to send OTP' });
+    // Fire-and-forget — never block the response on email delivery
+    sendWelcomeEmail(name, email).catch(() => {});
 
-    // store OTP in Redis: key otp:<phone> -> JSON { otp, userId }
-    try {
-      await redisClient.setEx(`otp:${phone}`, OTP_TTL, JSON.stringify({ otp: otpCode, userId: user._id.toString() }));
-    } catch (err) {
-      // Fallback to in-memory only if Redis not available
-      console.warn('Redis setEx failed, falling back to in-memory OTP store');
-      otpStore.set(phone, { otp: otpCode, userId: user._id.toString(), expiresAt: Date.now() + OTP_TTL * 1000 });
-    }
-
-    res.status(201).json({ message: 'User registered. Verify OTP.' });
+    logger.info('User registered', { userId: user._id, email });
+    return res.status(201).json({
+      message: 'Registration successful. Please check your email to verify your account.',
+    });
   } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-export const verifyOTP = async (req, res) => {
-  const { phone, otp } = req.body;
-
-  try {
-    // Try Redis first
-    let storedRaw;
-    try {
-      storedRaw = await redisClient.get(`otp:${phone}`);
-    } catch (err) {
-      storedRaw = null;
-    }
-
-    let stored = null;
-    if (storedRaw) {
-      stored = JSON.parse(storedRaw);
-    } else if (otpStore.has(phone)) {
-      const s = otpStore.get(phone);
-      if (s.expiresAt && s.expiresAt > Date.now()) stored = s;
-    }
-
-    if (!stored || stored.otp !== otp) return res.status(400).json({ message: 'Invalid or expired OTP' });
-
-    // Mark user as phone-verified
-    await User.findByIdAndUpdate(stored.userId, { isVerified: true });
-
-    // cleanup
-    try { await redisClient.del(`otp:${phone}`); } catch (e) { /* ignore */ }
-    if (otpStore.has(phone)) otpStore.delete(phone);
-
-    res.json({ message: 'OTP verified. Registration complete.' });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+    logger.error('Registration error', { error: error.message });
+    return res.status(500).json({ message: error.message });
   }
 };
 
 export const login = async (req, res) => {
-  const { email, password } = req.body;
+  return res.status(410).json({
+    message: 'Direct login is handled by the Supabase client SDK. Use supabase.auth.signInWithPassword() on the frontend.',
+  });
+};
 
+export const syncUser = async (req, res) => {
   try {
-    const user = await User.findOne({ email });
-    if (!user || !(await user.comparePassword(password))) return res.status(401).json({ message: 'Invalid credentials' });
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ message: 'No token provided.' });
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+    const supabaseUser = await verifySupabaseToken(token);
+    if (!supabaseUser) return res.status(401).json({ message: 'Invalid token.' });
 
-    res.json({ token, user: { id: user._id, name: user.name, role: user.role, isVerified: user.isVerified } });
+    const supabaseId = supabaseUser.id;     // ← FIXED: was .sub
+    const email      = supabaseUser.email;
+
+    if (!supabaseId || !email) {
+      return res.status(400).json({ message: 'Token missing required fields.' });
+    }
+
+    const isVerified = !!supabaseUser.email_confirmed_at;
+
+    const user = await User.findOneAndUpdate(
+      { supabaseId },
+      {
+        $setOnInsert: {
+          supabaseId,
+          email,
+          name:     supabaseUser.user_metadata?.name || email.split('@')[0],
+          role:     supabaseUser.user_metadata?.role || 'pet_owner',
+          password: 'supabase_managed',
+        },
+        $set: { isVerified },
+      },
+      { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
+    );
+
+    return res.json({ message: 'User synced.', userId: user._id });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    logger.error('Sync error', { error: error.message });
+    return res.status(500).json({ message: error.message });
   }
 };
 
-// Login with phone - sends OTP
-export const loginWithPhone = async (req, res) => {
-  const { phone } = req.body;
-
-  try {
-    const user = await User.findOne({ phone });
-    if (!user) return res.status(404).json({ message: 'User not found' });
-
-    // Generate OTP and store in Redis
-    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const otpResult = await sendSMSOTP(phone, otpCode);
-    if (!otpResult.success) return res.status(500).json({ message: 'Failed to send OTP' });
-
-    try {
-      await redisClient.setEx(`otp:${phone}`, OTP_TTL, JSON.stringify({ otp: otpCode, userId: user._id.toString() }));
-    } catch (err) {
-      console.warn('Redis setEx failed, falling back to in-memory OTP store');
-      otpStore.set(phone, { otp: otpCode, userId: user._id.toString(), expiresAt: Date.now() + OTP_TTL * 1000 });
-    }
-
-    res.json({ message: 'OTP sent to your phone' });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
+// GET /api/auth/me — returns the authenticated user loaded by protect middleware
+export const getMe = async (req, res) => {
+  return res.json({ user: req.user });
 };
 
-// Verify login OTP
-export const verifyLoginOTP = async (req, res) => {
-  const { phone, otp } = req.body;
-
+export const updateProfile = async (req, res) => {
   try {
-    let storedRaw;
-    try {
-      storedRaw = await redisClient.get(`otp:${phone}`);
-    } catch (err) {
-      storedRaw = null;
+    const { profileImage, profileImagePath } = req.body;
+
+    if (profileImage === undefined && profileImagePath === undefined) {
+      return res.status(400).json({ message: 'No profile data provided.' });
     }
 
-    let stored = null;
-    if (storedRaw) {
-      stored = JSON.parse(storedRaw);
-    } else if (otpStore.has(phone)) {
-      const s = otpStore.get(phone);
-      if (s.expiresAt && s.expiresAt > Date.now()) stored = s;
+    const updatePayload = {};
+    if (profileImage !== undefined) updatePayload.profileImage = profileImage;
+    if (profileImagePath !== undefined) updatePayload.profileImagePath = profileImagePath;
+
+    const updatedUser = await User.findOneAndUpdate(
+      { _id: req.user._id },
+      { $set: updatePayload },
+      { returnDocument: 'after' },
+    ).select('-password');
+
+    if (!updatedUser) {
+      return res.status(404).json({ message: 'User not found.' });
     }
 
-    if (!stored || stored.otp !== otp) return res.status(400).json({ message: 'Invalid or expired OTP' });
-
-    const user = await User.findById(stored.userId);
-    if (!user) return res.status(404).json({ message: 'User not found' });
-
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
-
-    // cleanup
-    try { await redisClient.del(`otp:${phone}`); } catch (e) { /* ignore */ }
-    if (otpStore.has(phone)) otpStore.delete(phone);
-
-    res.json({ token, user: { id: user._id, name: user.name, role: user.role, isVerified: user.isVerified } });
+    return res.json({ message: 'Profile updated successfully.', user: updatedUser });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    logger.error('Update profile error', { error: error.message });
+    return res.status(500).json({ message: error.message });
   }
 };
-
-// Add comparePassword method to User model
-// In User.js, add: userSchema.methods.comparePassword = async function (password) { return await bcrypt.compare(password, this.password); };

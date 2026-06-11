@@ -1,21 +1,37 @@
 import express from 'express';
-import { register, verifyOTP, login, loginWithPhone, verifyLoginOTP } from '../api/auth.controller.js';
+
+// Supabase-based auth (regular users: pet owners, vets, kennel owners)
+import { register, login, syncUser, getMe, updateProfile } from '../api/auth.controller.js';
+
+// JWT-based auth (admin dashboard only)
+import {
+  login          as adminLogin,
+  logout         as adminLogout,
+  register       as adminRegister,
+  refreshToken   as adminRefreshToken,
+  getCurrentUser as adminGetCurrentUser,
+  changePassword as adminChangePassword,
+  verifyTokenEndpoint as adminVerifyToken,
+} from '../api/admin.auth.controller.js';
+
+import { protect } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
-// POST /api/auth/register
+// ─── Regular user routes (Supabase) ──────────────────────────────────────────
 router.post('/register', register);
+router.post('/login',    login);       // returns 410 — safe to remove later
+router.post('/sync',     syncUser);    // called once after first Supabase login
+router.get('/me',        protect, getMe);
+router.put('/update-profile', protect, updateProfile);
 
-// POST /api/auth/verify-otp
-router.post('/verify-otp', verifyOTP);
-
-// POST /api/auth/login (email/password)
-router.post('/login', login);
-
-// POST /api/auth/login-phone (sends OTP)
-router.post('/login-phone', loginWithPhone);
-
-// POST /api/auth/verify-login-otp
-router.post('/verify-login-otp', verifyLoginOTP);
+// ─── Admin JWT routes ─────────────────────────────────────────────────────────
+router.post('/admin/register',        adminRegister);
+router.post('/admin/login',           adminLogin);
+router.post('/admin/logout',          adminLogout);
+router.post('/admin/refresh',         adminRefreshToken);
+router.post('/admin/verify',          adminVerifyToken);
+router.get('/admin/me',               adminGetCurrentUser);
+router.post('/admin/change-password', adminChangePassword);
 
 export default router;
