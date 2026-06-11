@@ -70,27 +70,13 @@ app.use(express.urlencoded({ extended: true }));
 // ─── Serve static files ───────────────────────────────────────────────────────
 app.use(express.static('public'));
 
-// TEMP: one-time admin password reset — remove after use
-app.post('/api/admin/reset-pw', async (req, res) => {
-  const { secret, newPassword } = req.body;
-  if (secret !== 'xv-reset-2026' || !newPassword) return res.status(403).json({ success: false });
-  const bcryptMod = await import('bcrypt');
-  const bcrypt    = bcryptMod.default ?? bcryptMod;
-  const hash      = await bcrypt.hash(newPassword, 10);
-  await User.findOneAndUpdate(
-    { email: 'omalesamuel4god@gmail.com' },
-    { $set: { password: hash, role: 'admin' } },
-  );
-  return res.json({ success: true, message: 'Admin password reset.' });
-});
-
 // ─── Health / root ────────────────────────────────────────────────────────────
 app.get('/', (_req, res) => {
   res.json({ message: 'Vet Marketplace API is running', version: '2', timestamp: new Date().toISOString() });
 });
 
 app.get('/health', (_req, res) => {
-  res.json({ status: 'OK', version: '5-force', uptime: process.uptime(), timestamp: new Date().toISOString() });
+  res.json({ status: 'OK', version: '6-spa-fixed', uptime: process.uptime(), timestamp: new Date().toISOString() });
 });
 
 // ─── Rate limiters ────────────────────────────────────────────────────────────
@@ -325,9 +311,10 @@ app.use((err, req, res, next) => {
 });
 
 // ─── SPA catch-all ────────────────────────────────────────────────────────────
-// Serve index.html for any non-API GET request so deep links like
-// /auth/callback and /profile resolve to the React SPA instead of 404.
-app.get('*', (req, res, next) => {
+// app.use() avoids path-to-regexp v8 wildcard syntax (Express 5 broke app.get('*')).
+// Only serves index.html for GET requests not matched by any API or static route.
+app.use((req, res, next) => {
+  if (req.method !== 'GET') return next();
   if (req.path.startsWith('/api/') || req.path === '/admin' || req.path === '/health') {
     return next();
   }
