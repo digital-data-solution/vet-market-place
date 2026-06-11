@@ -17,12 +17,12 @@ const PAYSTACK_SECRET = process.env.PAYSTACK_SECRET_KEY  || '';
 const PLAN_PRICING = {
   // Pet owner plans
   user_premium: 1500,
-  user_monthly: 1500, // legacy alias — same price
+  user_monthly: 1500, // legacy alias
 
   // Professional plans
+  basic:   1500, // entry-level listing tier
   starter: 2500,
   pro:     5000,
-  basic:   2500, // legacy alias — same price as starter
 };
 
 // Plans the subscription endpoints accept (guards against arbitrary strings)

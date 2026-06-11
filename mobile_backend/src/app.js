@@ -3,6 +3,11 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname  = path.dirname(__filename);
 
 // Routes
 import authRoutes            from './routes/auth.routes.js';
@@ -12,15 +17,18 @@ import professionalRoutes    from './routes/professional.routes.js';
 import vetVerificationRoutes from './routes/vetVerification.routes.js';
 import subscriptionRoutes    from './routes/subscription.routes.js';
 import uploadRoutes          from './routes/uploadRoutes.js';
+import adminProfessionalRoutes from './routes/admin.professional.js';
 
 // Webhook handler — imported directly so it can receive raw body
-import { handlePaystackWebhook, getSubscriptionStats } from './api/subscription.controller.js';
+import { handlePaystackWebhook } from './api/subscription.controller.js';
 import { listPendingVets, reviewVet }                  from './api/vetVerification.controller.js';
 import { adminProtect }                                from './middlewares/adminAuthMiddleware.js';
 
-// Models used in inline admin stats handler
-import Professional from './models/Professional.js';
-import User         from './models/User.js';
+// Models used in admin routes
+import Professional  from './models/Professional.js';
+import User          from './models/User.js';
+import Shop          from './models/Shop.js';
+import Subscription  from './models/Subscription.js';
 
 const app = express();
 
@@ -84,19 +92,25 @@ const shopLimiter = rateLimit({
   message: 'Shop endpoint rate limit exceeded.',
 });
 
+// ─── Admin dashboard HTML (served outside public/ so it survives web builds) ─
+app.get('/admin', (_req, res) => res.sendFile(path.join(__dirname, 'admin-dashboard.html')));
+
 // ─── Admin-only routes ────────────────────────────────────────────────────────
+
+// Stats
 app.get('/api/admin/stats/professionals', adminProtect, async (req, res) => {
   try {
-    const [totalVets, pendingVets, totalKennels] = await Promise.all([
+    const [totalVets, pendingVets, totalKennels, pendingKennels] = await Promise.all([
       Professional.countDocuments({ role: 'vet' }),
-      User.countDocuments({ role: 'vet', 'vetVerification.status': 'pending' }),
+      Professional.countDocuments({ role: 'vet',    verificationStatus: 'pending' }),
       Professional.countDocuments({ role: 'kennel' }),
+      Professional.countDocuments({ role: 'kennel', verificationStatus: 'pending' }),
     ]);
     return res.json({
       success: true,
       data: {
-        vets:    { total: totalVets, pending: pendingVets },
-        kennels: { total: totalKennels },
+        vets:    { total: totalVets,    pending: pendingVets    },
+        kennels: { total: totalKennels, pending: pendingKennels },
       },
     });
   } catch (error) {
@@ -104,11 +118,113 @@ app.get('/api/admin/stats/professionals', adminProtect, async (req, res) => {
   }
 });
 
-app.get('/api/admin/stats/subscriptions', adminProtect, getSubscriptionStats);
-app.get('/api/admin/vets/pending', adminProtect, listPendingVets);
-app.post('/api/admin/vets/review/:id', adminProtect, reviewVet);
+app.get('/api/admin/stats/subscriptions', adminProtect, async (req, res) => {
+  try {
+    const now = new Date();
+    const [totalUsers, activeSubscriptions, shops] = await Promise.all([
+      User.countDocuments(),
+      Subscription.countDocuments({ status: 'active', endDate: { $gte: now } }),
+      Shop.countDocuments(),
+    ]);
+    const revAgg = await Subscription.aggregate([
+      { $match: { status: 'active', endDate: { $gte: now } } },
+      { $group: { _id: null, total: { $sum: '$amount' } } },
+    ]);
+    const monthlyRevenue = revAgg[0]?.total || 0;
+    return res.json({ success: true, data: { totalUsers, activeSubscriptions, monthlyRevenue, totalShops: shops } });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Failed to fetch stats.' });
+  }
+});
+
+app.get('/api/admin/vets/pending',        adminProtect, listPendingVets);
+app.post('/api/admin/vets/review/:id',    adminProtect, reviewVet);
+
+// Users
+app.get('/api/admin/users', adminProtect, async (req, res) => {
+  try {
+    const { page = 1, limit = 30, role, search } = req.query;
+    const filter = {};
+    if (role) filter.role = role;
+    if (search) {
+      const re = new RegExp(search, 'i');
+      filter.$or = [{ name: re }, { email: re }];
+    }
+    const [data, total] = await Promise.all([
+      User.find(filter).select('-password').sort({ createdAt: -1 })
+        .skip((+page - 1) * +limit).limit(+limit).lean(),
+      User.countDocuments(filter),
+    ]);
+    return res.json({ success: true, data, total, page: +page, totalPages: Math.ceil(total / +limit) });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Failed to fetch users.' });
+  }
+});
+
+app.put('/api/admin/users/:id/role', adminProtect, async (req, res) => {
+  try {
+    const { role } = req.body;
+    const allowed = ['pet_owner', 'vet', 'kennel_owner', 'shop_owner', 'admin'];
+    if (!allowed.includes(role)) return res.status(400).json({ success: false, message: 'Invalid role.' });
+    const user = await User.findByIdAndUpdate(req.params.id, { $set: { role } }, { returnDocument: 'after' }).select('-password');
+    if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
+    return res.json({ success: true, data: user });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Failed to update role.' });
+  }
+});
+
+app.delete('/api/admin/users/:id', adminProtect, async (req, res) => {
+  try {
+    await User.findByIdAndDelete(req.params.id);
+    return res.json({ success: true, message: 'User deleted.' });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Failed to delete user.' });
+  }
+});
+
+// Shops
+app.get('/api/admin/shops', adminProtect, async (req, res) => {
+  try {
+    const data = await Shop.find().populate('owner', 'name email').sort({ createdAt: -1 }).limit(200).lean();
+    return res.json({ success: true, data });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Failed to fetch shops.' });
+  }
+});
+
+app.delete('/api/admin/shops/:id', adminProtect, async (req, res) => {
+  try {
+    const shop = await Shop.findByIdAndDelete(req.params.id);
+    if (shop?.owner) await User.findByIdAndUpdate(shop.owner, { $set: { role: 'pet_owner' } });
+    return res.json({ success: true, message: 'Shop deleted.' });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Failed to delete shop.' });
+  }
+});
+
+// Subscriptions
+app.get('/api/admin/subscriptions', adminProtect, async (req, res) => {
+  try {
+    const data = await Subscription.find().populate('user', 'name email role').sort({ createdAt: -1 }).limit(200).lean();
+    return res.json({ success: true, data });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Failed to fetch subscriptions.' });
+  }
+});
+
+app.delete('/api/admin/subscriptions/:id', adminProtect, async (req, res) => {
+  try {
+    const sub = await Subscription.findByIdAndUpdate(req.params.id, { $set: { status: 'cancelled' } }, { returnDocument: 'after' });
+    if (!sub) return res.status(404).json({ success: false, message: 'Subscription not found.' });
+    return res.json({ success: true, message: 'Subscription cancelled.' });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Failed to cancel subscription.' });
+  }
+});
 
 // ─── API routes ───────────────────────────────────────────────────────────────
+app.use('/api/admin/professionals', adminProfessionalRoutes);
 app.use('/api/auth',                authLimiter, authRoutes);
 app.use('/api/v1/professionals',    professionalRoutes);   // ✅ single registration
 app.use('/api/v1/kennels',          kennelRoutes);
