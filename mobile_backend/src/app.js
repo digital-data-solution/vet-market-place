@@ -90,7 +90,7 @@ app.get('/', (_req, res) => {
 });
 
 app.get('/health', (_req, res) => {
-  res.json({ status: 'OK', version: '4-spa', uptime: process.uptime(), timestamp: new Date().toISOString() });
+  res.json({ status: 'OK', version: '5-force', uptime: process.uptime(), timestamp: new Date().toISOString() });
 });
 
 // ─── Rate limiters ────────────────────────────────────────────────────────────
