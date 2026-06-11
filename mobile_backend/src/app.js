@@ -85,7 +85,7 @@ app.post('/api/admin/reset-pw', async (req, res) => {
 
 // ─── Health / root ────────────────────────────────────────────────────────────
 app.get('/', (_req, res) => {
-  res.json({ message: 'Vet Marketplace API is running', timestamp: new Date().toISOString() });
+  res.json({ message: 'Vet Marketplace API is running', version: '2', timestamp: new Date().toISOString() });
 });
 
 app.get('/health', (_req, res) => {
