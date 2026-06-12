@@ -584,6 +584,12 @@ async function quickReview(id, action, name) {
   if (r?.ok) { toast(`${name} ${action}d!`); loadOverview(); } else toast(r?.body?.message || 'Failed', 'error');
 }
 
+async function quickReviewProfessional(id, action, name) {
+  if (!confirm(`${action === 'approve' ? 'Approve' : 'Reject'} ${name}?`)) return;
+  const r = await api('POST', `/api/admin/professionals/review/${id}`, { action });
+  if (r?.ok) { toast(`${name} ${action}d!`); loadProfessionals(); } else toast(r?.body?.message || 'Failed', 'error');
+}
+
 async function submitReview(action) {
   const notes = document.getElementById('review-notes').value.trim();
   const r = await api('POST', `/api/admin/vets/review/${_reviewId}`, { action, adminNotes: notes });
@@ -619,8 +625,8 @@ async function loadProfessionals() {
       <td>${fmt(p.createdAt)}</td>
       <td style="white-space:nowrap">
         ${p.verificationStatus==='pending'
-          ? `<button class="btn btn-success btn-sm" onclick="quickReview('${p._id}','approve','${p.userId?.name||''}')">Approve</button>
-             <button class="btn btn-danger  btn-sm" onclick="quickReview('${p._id}','reject','${p.userId?.name||''}')">Reject</button>`
+          ? `<button class="btn btn-success btn-sm" onclick="quickReviewProfessional('${p._id}','approve','${p.userId?.name||''}')">Approve</button>
+             <button class="btn btn-danger  btn-sm" onclick="quickReviewProfessional('${p._id}','reject','${p.userId?.name||''}')">Reject</button>`
           : ''}
         <button class="btn btn-ghost btn-sm" onclick="deleteProfessional('${p._id}','${p.userId?.name||''}')">Delete</button>
       </td>
