@@ -235,7 +235,7 @@
         <div class="tbl-wrap">
           <table>
             <thead><tr>
-              <th>Name</th><th>Role</th><th>Clinic / Practice</th><th>Location</th><th>Submitted</th><th>Actions</th>
+              <th>Name</th><th>Role</th><th>VCN Number</th><th>Location</th><th>Submitted</th><th>Actions</th>
             </tr></thead>
             <tbody id="pending-tbody"></tbody>
           </table>
@@ -529,18 +529,18 @@ async function loadOverview() {
   const pend = await api('GET', '/api/admin/vets/pending?limit=5');
   const rows = (pend?.body?.data || []).map(v => `
     <tr>
-      <td>${v.userId?.name || '—'}</td>
+      <td>${v.name || '—'}</td>
       <td>${roleBadge(v.role)}</td>
-      <td>${v.clinicName || v.name || '—'}</td>
-      <td>${fmt(v.createdAt)}</td>
-      <td><button class="btn btn-success btn-sm" onclick="quickReview('${v._id}','approve','${v.userId?.name||''}')">Approve</button>
-          <button class="btn btn-danger  btn-sm" onclick="quickReview('${v._id}','reject','${v.userId?.name||''}')">Reject</button></td>
+      <td>${v.vetDetails?.vcnNumber ? `<a href="https://vcn.gov.ng" target="_blank" rel="noopener noreferrer">${v.vetDetails.vcnNumber}</a>` : '—'}</td>
+      <td>${fmt(v.vetVerification?.submittedAt || v.createdAt)}</td>
+      <td><button class="btn btn-success btn-sm" onclick="quickReview('${v._id}','approve','${v.name||''}')">Approve</button>
+          <button class="btn btn-danger  btn-sm" onclick="quickReview('${v._id}','reject','${v.name||''}')">Reject</button></td>
     </tr>`).join('');
 
   document.getElementById('pending-preview').innerHTML = rows ? `
     <div class="card">
       <div class="card-head"><h3>Pending Verifications</h3><a href="#" onclick="showSection('pending')" style="font-size:13px;color:#E8610A;font-weight:600">View all →</a></div>
-      <div class="tbl-wrap"><table><thead><tr><th>Name</th><th>Role</th><th>Clinic</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="tbl-wrap"><table><thead><tr><th>Name</th><th>Role</th><th>VCN Number</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>
     </div>` : '';
 }
 
@@ -555,14 +555,14 @@ async function loadPending() {
   }
   document.getElementById('pending-tbody').innerHTML = data.map(v => `
     <tr>
-      <td><strong>${v.userId?.name || '—'}</strong><br><small style="color:#64748B">${v.userId?.email || ''}</small></td>
+      <td><strong>${v.name || '—'}</strong><br><small style="color:#64748B">${v.email || ''}</small></td>
       <td>${roleBadge(v.role)}</td>
-      <td>${v.clinicName || v.name || '—'}</td>
-      <td>${v.address || '—'}</td>
-      <td>${fmt(v.createdAt)}</td>
+      <td>${v.vetDetails?.vcnNumber ? `<a href="https://vcn.gov.ng" target="_blank" rel="noopener noreferrer">${v.vetDetails.vcnNumber}</a>` : '—'}</td>
+      <td>${v.professional?.address || '—'}</td>
+      <td>${fmt(v.vetVerification?.submittedAt || v.createdAt)}</td>
       <td style="white-space:nowrap">
-        <button class="btn btn-success btn-sm" onclick="openReview('${v._id}','${v.userId?.name||''}','approve')">Approve</button>
-        <button class="btn btn-danger  btn-sm" onclick="openReview('${v._id}','${v.userId?.name||''}','reject')">Reject</button>
+        <button class="btn btn-success btn-sm" onclick="openReview('${v._id}','${v.name||''}','approve')">Approve</button>
+        <button class="btn btn-danger  btn-sm" onclick="openReview('${v._id}','${v.name||''}','reject')">Reject</button>
       </td>
     </tr>`).join('');
 }

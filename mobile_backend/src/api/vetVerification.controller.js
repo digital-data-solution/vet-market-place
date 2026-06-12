@@ -126,15 +126,28 @@ export const listPendingVets = async (req, res) => {
       'vetVerification.status': 'pending',
     });
 
-    logger.info('Admin fetched pending vets', { count: pending.length, total });
+    // Join Professional docs to surface address and clinic/practice name
+    const userIds = pending.map(u => u._id);
+    const professionals = await Professional.find({ userId: { $in: userIds } })
+      .select('userId name address')
+      .lean();
+    const proByUserId = Object.fromEntries(
+      professionals.map(p => [p.userId.toString(), p])
+    );
+    const data = pending.map(u => {
+      const pro = proByUserId[u._id.toString()];
+      return { ...u, professional: pro ? { name: pro.name, address: pro.address } : null };
+    });
+
+    logger.info('Admin fetched pending vets', { count: data.length, total });
 
     res.json({
       success: true,
-      count: pending.length,
+      count: data.length,
       total,
       page: parseInt(page),
       totalPages: Math.ceil(total / parseInt(limit)),
-      data: pending,
+      data,
     });
   } catch (error) {
     logger.error('List pending vets error', { error: error.message, stack: error.stack });
