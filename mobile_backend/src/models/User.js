@@ -60,6 +60,7 @@ const userSchema = new mongoose.Schema({
     cacNumber: String,
     capacity:  Number,
   },
+  freeSearchUsed: { type: Boolean, default: false },
 }, { timestamps: true });
 
 userSchema.index({ supabaseId: 1 }, { unique: true, sparse: true });

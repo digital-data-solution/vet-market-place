@@ -58,6 +58,49 @@ function toRad(degrees) {
   return degrees * (Math.PI / 180);
 }
 
+/**
+ * Strip contact details and truncate address to city/state for non-subscribed users
+ * who have already consumed their one free full-detail search.
+ */
+function redactProfessional(prof) {
+  const parts = (prof.address || '').split(',').map(s => s.trim()).filter(Boolean);
+  return {
+    _id:            prof._id,
+    name:           prof.name,
+    businessName:   prof.businessName,
+    role:           prof.role,
+    specialization: prof.specialization,
+    address:        parts.slice(-2).join(', '),
+    rating:         prof.rating,
+    reviewCount:    prof.reviewCount,
+    isVerified:     prof.isVerified,
+    distance:       prof.distance,
+  };
+}
+
+/**
+ * Freemium gate — determines what data shape to return based on subscription state.
+ *
+ * Subscribed  → full data, isPreview: false
+ * Not subscribed, first search  → full data, isPreview: false, usedFreeSearch: true
+ * Not subscribed, search used   → redacted data, isPreview: true
+ */
+async function applyFreemiumGate(req, data) {
+  if (req.subscription?.isActive === true) {
+    return { data, isPreview: false, usedFreeSearch: false };
+  }
+
+  const userId = req.user._id || req.user.id;
+  const user = await User.findById(userId).select('freeSearchUsed').lean();
+
+  if (!user?.freeSearchUsed) {
+    await User.findByIdAndUpdate(userId, { freeSearchUsed: true });
+    return { data, isPreview: false, usedFreeSearch: true };
+  }
+
+  return { data: data.map(redactProfessional), isPreview: true, usedFreeSearch: false };
+}
+
 // ============================================================================
 // ONBOARDING & PROFILE MANAGEMENT
 // ============================================================================
@@ -462,13 +505,17 @@ export const listProfessionals = async (req, res) => {
       return { professionals, total };
     });
 
+    const { data, isPreview, usedFreeSearch } = await applyFreemiumGate(req, result.professionals);
+
     res.json({
       success: true,
-      count: result.professionals.length,
+      count: data.length,
       total: result.total,
       page: parseInt(page),
       totalPages: Math.ceil(result.total / parseInt(limit)),
-      data: result.professionals,
+      data,
+      isPreview,
+      ...(usedFreeSearch && { usedFreeSearch: true }),
     });
   } catch (error) {
     logger.error('List professionals error', { error: error.message, stack: error.stack });
@@ -545,18 +592,22 @@ export const getNearbyProfessionals = async (req, res) => {
       return prof;
     });
 
+    const { data, isPreview, usedFreeSearch } = await applyFreemiumGate(req, professionalsWithDistance);
+
     logger.info('Nearby professionals search', {
       lng, lat, distance, role, search,
-      count: professionalsWithDistance.length,
+      count: data.length,
     });
 
     res.json({
       success: true,
-      count: professionalsWithDistance.length,
-      data: professionalsWithDistance,
+      count: data.length,
+      data,
+      isPreview,
+      ...(usedFreeSearch && { usedFreeSearch: true }),
       message:
-        professionalsWithDistance.length > 0
-          ? `Found ${professionalsWithDistance.length} professional(s) nearby.`
+        data.length > 0
+          ? `Found ${data.length} professional(s) nearby.`
           : 'No professionals found in this area.',
     });
   } catch (error) {
