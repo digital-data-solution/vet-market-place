@@ -69,7 +69,17 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // ─── Serve static files ───────────────────────────────────────────────────────
-app.use(express.static('public'));
+// index.html must never be cached (content changes on each web build).
+// Hashed JS/CSS bundles (/_expo/static/...) are safe to cache forever.
+app.use(express.static('public', {
+  setHeaders(res, filePath) {
+    if (filePath.endsWith('index.html')) {
+      res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    } else {
+      res.set('Cache-Control', 'public, max-age=31536000, immutable');
+    }
+  },
+}));
 
 // ─── Health / root ────────────────────────────────────────────────────────────
 app.get('/', (_req, res) => {
@@ -319,6 +329,7 @@ app.use((req, res, next) => {
   if (req.path.startsWith('/api/') || req.path === '/admin' || req.path === '/health') {
     return next();
   }
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 

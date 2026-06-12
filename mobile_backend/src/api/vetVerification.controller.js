@@ -203,7 +203,7 @@ export const reviewVet = async (req, res) => {
       if (adminNotes) user.vetVerification.adminNotes = adminNotes;
 
       user.markModified('vetVerification');
-      await user.save();
+      await user.save({ validateModifiedOnly: true });
 
       // Sync to Professional model — make profile visible
       const professionalUpdate = await Professional.findOneAndUpdate(
@@ -244,7 +244,7 @@ export const reviewVet = async (req, res) => {
       if (adminNotes) user.vetVerification.adminNotes = adminNotes;
 
       user.markModified('vetVerification');
-      await user.save();
+      await user.save({ validateModifiedOnly: true });
 
       // Professional profile remains hidden (isVerified = false)
 
