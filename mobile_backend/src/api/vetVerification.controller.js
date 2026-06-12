@@ -210,6 +210,7 @@ export const reviewVet = async (req, res) => {
         { userId: user._id },
         {
           isVerified: true,
+          verificationStatus: 'approved',
           verifiedAt: new Date(),
           verifiedBy: adminId,
         },
@@ -246,7 +247,15 @@ export const reviewVet = async (req, res) => {
       user.markModified('vetVerification');
       await user.save({ validateBeforeSave: false });
 
-      // Professional profile remains hidden (isVerified = false)
+      // Sync to Professional model — mark as rejected
+      await Professional.findOneAndUpdate(
+        { userId: user._id },
+        {
+          isVerified: false,
+          verificationStatus: 'rejected',
+          ...(adminNotes && { adminNotes }),
+        },
+      );
 
       // FIX #4: Clear cache on reject too — avoids serving stale approved data
       await cache.del(`professional:${user._id}`);
