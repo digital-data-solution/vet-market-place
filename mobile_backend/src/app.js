@@ -50,6 +50,7 @@ app.use(helmet({
       scriptSrc:  ["'self'", "'unsafe-inline'"],
       styleSrc:   ["'self'", "'unsafe-inline'"],
       imgSrc:     ["'self'", "data:", "https://res.cloudinary.com", "https://vmzbvaybnohfxfkrungj.supabase.co"],
+      scriptSrcAttr: ["'unsafe-inline'"],
       connectSrc: [
         "'self'",
         "blob:",
