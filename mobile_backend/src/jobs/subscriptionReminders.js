@@ -156,8 +156,14 @@ async function runPendingCleanup() {
   // Pet owner subscriptions stuck in 'pending' > 48h → reset to inactive
   const userResult = await User.updateMany(
     {
-      'subscription.status':    'pending',
-      'subscription.createdAt': { $lte: cutoff },
+      'subscription.status': 'pending',
+      $or: [
+        { 'subscription.paymentInitiatedAt': { $lte: cutoff } },
+        {
+          'subscription.paymentInitiatedAt': { $exists: false },
+          updatedAt: { $lte: cutoff },
+        },
+      ],
     },
     {
       $set: {
