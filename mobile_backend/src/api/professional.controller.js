@@ -400,7 +400,7 @@ export const getProfessional = async (req, res) => {
     const { id } = req.params;
 
     const professional = await Professional.findById(id)
-      .populate('userId', 'name email phone')
+      .populate('userId', 'name email phone supabaseId') // ← supabaseId added
       .select('-__v')
       .lean();
 

@@ -149,7 +149,6 @@ export const listKennels = async (req, res) => {
       { $count: 'count' }
     ]);
 
-    // FIX: Removed duplicate res.json() block that referenced undefined 'kennels' variable
     return res.json({
       success: true,
       count: kennelsWithSub.length,
@@ -238,12 +237,13 @@ export const getKennel = async (req, res) => {
     const { id } = req.params;
 
     const cacheKey = `kennel:${id}`;
-    const cached = await cache.get(cacheKey);
+    const cached = await cache.cacheGet(cacheKey); // FIX: cacheGet not get
     if (cached) {
       return res.json({ success: true, data: cached, fromCache: true });
     }
 
     const kennel = await Professional.findOne({ _id: id, role: 'kennel', isVerified: true })
+      .populate('userId', 'name email phone supabaseId') // supabaseId for Message button
       .select('-__v')
       .lean();
 
@@ -251,7 +251,7 @@ export const getKennel = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Kennel not found' });
     }
 
-    await cache.set(cacheKey, kennel, 300); // 5 min cache
+    await cache.cacheSet(cacheKey, kennel, 300); // FIX: cacheSet not set
 
     res.json({ success: true, data: kennel });
   } catch (error) {
@@ -322,7 +322,7 @@ export const updateKennel = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Kennel profile not found' });
     }
 
-    await cache.del(`kennel:${kennel._id}`);
+    await cache.cacheDel(`kennel:${kennel._id}`); // FIX: cacheDel not del
 
     logger.info('Kennel updated', { userId, kennelId: kennel._id });
 
@@ -349,7 +349,7 @@ export const deleteKennel = async (req, res) => {
 
     // Revert user role
     await User.findByIdAndUpdate(userId, { role: 'user' });
-    await cache.del(`kennel:${kennel._id}`);
+    await cache.cacheDel(`kennel:${kennel._id}`); // FIX: cacheDel not del
 
     logger.info('Kennel deleted', { userId, kennelId: kennel._id });
 

@@ -150,6 +150,21 @@ export const getReferralInfo = async (req, res) => {
   }
 };
 
+export const getPublicProfile = async (req, res) => {
+  try {
+    const { supabaseId } = req.params;
+    const user = await User.findOne({ supabaseId }).select('name profileImage').lean();
+    if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
+    return res.json({
+      success: true,
+      data: { name: user.name, profileImage: user.profileImage ?? null },
+    });
+  } catch (error) {
+    logger.error('Get public profile error', { error: error.message });
+    return res.status(500).json({ success: false, message: 'Failed to fetch profile.' });
+  }
+};
+
 export const updateProfile = async (req, res) => {
   try {
     const { profileImage, profileImagePath } = req.body;
