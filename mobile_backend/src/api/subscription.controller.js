@@ -10,6 +10,7 @@ import {
   sendUserSubscriptionConfirmed,
   sendProfessionalSubscriptionConfirmed,
 } from '../services/email.service.js';
+import { applyReferralReward } from '../lib/referralHelper.js';
 
 const PAYSTACK_BASE   = process.env.PAYSTACK_BASE        || 'https://api.paystack.co';
 const PAYSTACK_SECRET = process.env.PAYSTACK_SECRET_KEY  || '';
@@ -91,6 +92,9 @@ async function activateUserSubscription(userId, plan, reference) {
   await user.save();
   logger.info('User subscription activated', { userId, plan, reference });
   sendUserSubscriptionConfirmed(user.name, user.email, plan, PLAN_PRICING[plan], endDate).catch(() => {});
+  if (user.referredBy && !user.referralRewardApplied) {
+    applyReferralReward(user, 30).catch(() => {});
+  }
   return { plan, status: 'active', expiresAt: endDate };
 }
 
@@ -122,13 +126,22 @@ async function activateProfessionalSubscription(subscriptionId, reference) {
   await subscription.save();
   logger.info('Professional subscription activated', { subscriptionId, reference });
 
-  // Send confirmation email — populate user name/email from User model
-  User.findById(subscription.user).select('name email').lean().then((usr) => {
+  // Email + referral reward — fire-and-forget to avoid blocking the webhook response
+  User.findById(subscription.user).then(async (usr) => {
     if (usr?.email) {
       sendProfessionalSubscriptionConfirmed(
         usr.name, usr.email, subscription.plan,
         subscription.amount || 2500, endDate,
       ).catch(() => {});
+    }
+    if (usr?.referredBy && !usr?.referralRewardApplied) {
+      const isVet       = usr.role === 'vet';
+      const vetApproved = usr.vetVerification?.status === 'approved';
+      if (!isVet || vetApproved) {
+        const bonusDays = isVet ? 60 : 30;
+        await applyReferralReward(usr, bonusDays);
+      }
+      // Vet not yet approved: referral reward deferred to verification-approval time
     }
   }).catch(() => {});
 
@@ -319,7 +332,10 @@ export const createUserSubscription = async (req, res) => {
       });
     }
 
-    const amount      = PLAN_PRICING[plan];
+    const baseAmount  = PLAN_PRICING[plan];
+    const isFirstSub  = !user.subscription?.paymentReference;
+    const hasReferral = isFirstSub && !!user.referredBy;
+    const amount      = hasReferral ? Math.round(baseAmount * 0.8 / 50) * 50 : baseAmount;
     const displayName = user.name || user.email.split('@')[0];
     const initiatedAt = new Date();
 
@@ -371,6 +387,7 @@ export const createUserSubscription = async (req, res) => {
         authorization_url: data.data.authorization_url,
         reference:         data.data.reference,
         amount,
+        ...(hasReferral && { referralDiscount: true, originalAmount: baseAmount }),
       },
     });
   } catch (error) {
@@ -457,13 +474,17 @@ export const createProfessionalSubscription = async (req, res) => {
       });
     }
 
+    const priorSubCount = await Subscription.countDocuments({ user: userId }).session(session);
+
     await Subscription.updateMany(
       { user: userId, status: 'pending' },
       { $set: { status: 'cancelled' } },
       { session },
     );
 
-    const amount      = PLAN_PRICING[plan];
+    const baseAmount  = PLAN_PRICING[plan];
+    const hasReferral = priorSubCount === 0 && !!user.referredBy;
+    const amount      = hasReferral ? Math.round(baseAmount * 0.8 / 50) * 50 : baseAmount;
     const displayName = user.name || user.email.split('@')[0];
     const initiatedAt = new Date();
 
@@ -524,6 +545,7 @@ export const createProfessionalSubscription = async (req, res) => {
         reference:         data.data.reference,
         amount,
         subscription: { id: subscription._id, plan, amount },
+        ...(hasReferral && { referralDiscount: true, originalAmount: baseAmount }),
       },
     });
   } catch (error) {

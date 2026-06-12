@@ -60,7 +60,13 @@ const userSchema = new mongoose.Schema({
     cacNumber: String,
     capacity:  Number,
   },
-  freeSearchUsed: { type: Boolean, default: false },
+  freeSearchUsed:         { type: Boolean, default: false },
+
+  // Referral system
+  referralCode:           { type: String, unique: true, sparse: true },
+  referredBy:             { type: String, default: null },
+  referralRewardsEarned:  { type: Number, default: 0 },
+  referralRewardApplied:  { type: Boolean, default: false },
 }, { timestamps: true });
 
 userSchema.index({ supabaseId: 1 }, { unique: true, sparse: true });
@@ -70,6 +76,17 @@ userSchema.pre('save', async function () {
   if (!this.isModified('password')) return;
   if (this.password === 'supabase_managed') return;
   this.password = await bcrypt.hash(this.password, 12);
+});
+
+userSchema.pre('save', async function () {
+  if (this.referralCode) return;
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let code, exists;
+  do {
+    code = Array.from({ length: 6 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    exists = await this.constructor.exists({ referralCode: code });
+  } while (exists);
+  this.referralCode = code;
 });
 
 userSchema.methods.comparePassword = async function (password) {

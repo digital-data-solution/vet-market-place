@@ -4,7 +4,7 @@ import { supabaseAdmin, verifySupabaseToken } from '../lib/supabase.js';
 import { sendWelcomeEmail } from '../services/email.service.js';
 
 export const register = async (req, res) => {
-  const { name, email, password, role, location, vetDetails, kennelDetails, vcnNumber, cacNumber } = req.body;
+  const { name, email, password, role, location, vetDetails, kennelDetails, vcnNumber, cacNumber, referralCode } = req.body;
 
   try {
     if (!email || !password || !name) {
@@ -48,6 +48,11 @@ export const register = async (req, res) => {
     if (role === 'vet')          user.vetDetails    = vetDetails;
     if (role === 'kennel_owner') user.kennelDetails = kennelDetails;
 
+    if (referralCode) {
+      const referrer = await User.findOne({ referralCode: referralCode.trim().toUpperCase() }).select('_id').lean();
+      if (referrer) user.referredBy = referralCode.trim().toUpperCase();
+    }
+
     await user.save();
 
     // Fire-and-forget — never block the response on email delivery
@@ -86,15 +91,28 @@ export const syncUser = async (req, res) => {
 
     const isVerified = !!supabaseUser.email_confirmed_at;
 
+    // Validate referral code if provided — only applied on first sync (new users)
+    const { referralCode } = req.body;
+    let referredBy = null;
+    if (referralCode) {
+      const referrer = await User.findOne({ referralCode: referralCode.trim().toUpperCase() }).select('_id').lean();
+      if (referrer) referredBy = referralCode.trim().toUpperCase();
+    }
+
+    // Pre-generate a referral code for new users ($setOnInsert won't run for existing ones)
+    const newCode = Array.from({ length: 6 }, () => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'[Math.floor(Math.random() * 36)]).join('');
+
     const user = await User.findOneAndUpdate(
       { supabaseId },
       {
         $setOnInsert: {
           supabaseId,
           email,
-          name:     supabaseUser.user_metadata?.name || email.split('@')[0],
-          role:     supabaseUser.user_metadata?.role || 'pet_owner',
-          password: 'supabase_managed',
+          name:         supabaseUser.user_metadata?.name || email.split('@')[0],
+          role:         supabaseUser.user_metadata?.role || 'pet_owner',
+          password:     'supabase_managed',
+          referralCode: newCode,
+          ...(referredBy && { referredBy }),
         },
         $set: { isVerified },
       },
@@ -111,6 +129,25 @@ export const syncUser = async (req, res) => {
 // GET /api/auth/me — returns the authenticated user loaded by protect middleware
 export const getMe = async (req, res) => {
   return res.json({ user: req.user });
+};
+
+export const getReferralInfo = async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const user   = await User.findById(userId).select('referralCode referralRewardsEarned').lean();
+    if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
+    return res.json({
+      success: true,
+      data: {
+        referralCode:          user.referralCode,
+        shareMessage:          `Join Xpress Vet and get 20% off your first subscription! Use my code: ${user.referralCode}`,
+        referralRewardsEarned: user.referralRewardsEarned ?? 0,
+      },
+    });
+  } catch (error) {
+    logger.error('Get referral info error', { error: error.message });
+    return res.status(500).json({ success: false, message: 'Failed to fetch referral info.' });
+  }
 };
 
 export const updateProfile = async (req, res) => {

@@ -2,6 +2,7 @@ import User from '../models/User.js';
 import Professional from '../models/Professional.js';
 import cache from '../lib/cache.js';
 import logger from '../lib/logger.js';
+import { applyReferralReward } from '../lib/referralHelper.js';
 
 // ============================================================================
 // VET VCN VERIFICATION WORKFLOW
@@ -223,6 +224,11 @@ export const reviewVet = async (req, res) => {
 
       // FIX #4: Clear cache on approve
       await cache.del(`professional:${user._id}`);
+
+      // Deferred referral reward — vet referrals are only rewarded once verified (60 days)
+      if (user.referredBy && !user.referralRewardApplied) {
+        applyReferralReward(user, 60).catch(() => {});
+      }
 
       logger.info('Vet verification approved', {
         userId: user._id,
