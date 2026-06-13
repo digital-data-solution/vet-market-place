@@ -41,9 +41,8 @@ async function runExpiryReminders() {
   for (const daysLeft of [7, 3, 1]) {
     const [windowStart, windowEnd] = dayWindow(daysLeft);
 
-    // ── Professional subscriptions (listing plans only — not messaging) ─────
+    // ── Professional subscriptions ────────────────────────────────────────────
     const expiringPro = await Subscription.find({
-      plan:    { $ne: 'messaging' },
       status:  'active',
       endDate: { $gte: windowStart, $lte: windowEnd },
     }).populate('user', 'name email').lean();
@@ -62,30 +61,6 @@ async function runExpiryReminders() {
         reminded++;
       } catch (err) {
         logger.error('Reminder email failed (professional)', { userId: sub.user._id, error: err.message });
-      }
-    }
-
-    // ── Messaging subscriptions ─────────────────────────────────────────────
-    const expiringMessaging = await Subscription.find({
-      plan:    'messaging',
-      status:  'active',
-      endDate: { $gte: windowStart, $lte: windowEnd },
-    }).populate('user', 'name email').lean();
-
-    for (const sub of expiringMessaging) {
-      if (!sub.user?.email) continue;
-      try {
-        await sendSubscriptionExpiryReminder(
-          sub.user.name,
-          sub.user.email,
-          'messaging',
-          daysLeft,
-          sub.endDate,
-          false, // use pet-owner style email — messaging is user-facing
-        );
-        reminded++;
-      } catch (err) {
-        logger.error('Reminder email failed (messaging)', { userId: sub.user._id, error: err.message });
       }
     }
 
@@ -126,9 +101,8 @@ async function runExpiredNotices() {
 
   const [windowStart, windowEnd] = dayWindow(0);
 
-  // ── Professional listing plans that just flipped to expired ────────────────
+  // ── Professional subscriptions that just expired ─────────────────────────
   const justExpiredPro = await Subscription.find({
-    plan:    { $ne: 'messaging' },
     status:  'expired',
     endDate: { $gte: windowStart, $lte: windowEnd },
   }).populate('user', 'name email').lean();
@@ -140,23 +114,6 @@ async function runExpiredNotices() {
       notified++;
     } catch (err) {
       logger.error('Expired notice failed (professional)', { error: err.message });
-    }
-  }
-
-  // ── Messaging subscriptions that just expired ──────────────────────────────
-  const justExpiredMessaging = await Subscription.find({
-    plan:    'messaging',
-    status:  'expired',
-    endDate: { $gte: windowStart, $lte: windowEnd },
-  }).populate('user', 'name email').lean();
-
-  for (const sub of justExpiredMessaging) {
-    if (!sub.user?.email) continue;
-    try {
-      await sendSubscriptionExpired(sub.user.name, sub.user.email, 'messaging', false);
-      notified++;
-    } catch (err) {
-      logger.error('Expired notice failed (messaging)', { error: err.message });
     }
   }
 
@@ -187,7 +144,7 @@ async function runPendingCleanup() {
   logger.info('--- Running Pending Payment Cleanup ---');
   const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000); // 48 hours ago
 
-  // Professional + messaging subscriptions stuck in 'pending' > 48h → expire them
+  // Professional subscriptions stuck in 'pending' > 48h → expire them
   const proResult = await Subscription.updateMany(
     {
       status:    'pending',
@@ -217,7 +174,7 @@ async function runPendingCleanup() {
   );
 
   logger.info(
-    `Pending cleanup: ${proResult.modifiedCount} professional/messaging, ${userResult.modifiedCount} pet owner records cleaned.`,
+    `Pending cleanup: ${proResult.modifiedCount} professional, ${userResult.modifiedCount} pet owner records cleaned.`,
   );
 }
 

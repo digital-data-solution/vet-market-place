@@ -2,8 +2,6 @@ import express from 'express';
 import {
   createUserSubscription,
   createProfessionalSubscription,
-  createMessagingSubscription,
-  getMessagingSubscription,
   getUserSubscription,
   cancelSubscription,
   cancelPendingSubscription,
@@ -63,12 +61,6 @@ router.post('/user', createUserSubscription);
 
 // Initiate payment — professionals / shop owners
 router.post('/professional', createProfessionalSubscription);
-
-// Messaging subscription — check status
-router.get('/messaging/me', getMessagingSubscription);
-
-// Messaging subscription — initiate payment (₦500/month, all user types)
-router.post('/messaging', createMessagingSubscription);
 
 // Paystack redirect callback (manual verify fallback — webhook is primary)
 router.get('/verify', verifyPayment);

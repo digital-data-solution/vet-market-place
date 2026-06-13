@@ -492,78 +492,9 @@ export const checkExpiryWarning = (req, res, next) => {
   next();
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// enforceMessagingSubscription
-// Hard gate — blocks with 402 if user has no active messaging subscription.
-// Used on any route that sends or reads messages.
-// ─────────────────────────────────────────────────────────────────────────────
-export const enforceMessagingSubscription = async (req, res, next) => {
-  const userId = req.user?._id?.toString() || req.user?.id;
-
-  if (!userId) {
-    return res.status(401).json({ success: false, message: 'Authentication required.' });
-  }
-
-  try {
-    const now = new Date();
-
-    // Check for active messaging subscription
-    const activeSub = await Subscription.findOne({
-      user:    userId,
-      plan:    'messaging',
-      status:  'active',
-      endDate: { $gte: now },
-    })
-      .select('plan status endDate')
-      .lean();
-
-    if (activeSub) {
-      req.messagingSubscription = {
-        isActive: true,
-        plan:     'messaging',
-        endDate:  new Date(activeSub.endDate),
-      };
-      return next();
-    }
-
-    // Check for pending within grace window
-    const pendingSub = await Subscription.findOne({
-      user:   userId,
-      plan:   'messaging',
-      status: 'pending',
-    })
-      .sort({ createdAt: -1 })
-      .lean();
-
-    if (pendingSub && isWithinPendingGrace(pendingSub)) {
-      req.messagingSubscription = {
-        isActive:  true,
-        isPending: true,
-        plan:      'messaging',
-        endDate:   pendingSub.endDate ? new Date(pendingSub.endDate) : null,
-      };
-      logger.info('Messaging pending subscription allowed via grace window', { userId });
-      return next();
-    }
-
-    logger.warn('Messaging subscription required', { userId, path: req.path });
-    return res.status(402).json({
-      success:    false,
-      message:    'A messaging subscription (₦500/month) is required to send and receive messages.',
-      action:     'subscribe_messaging',
-      redirectTo: '/subscribe/messaging',
-      data:       { plan: 'messaging', amount: 500 },
-    });
-  } catch (error) {
-    logger.error('enforceMessagingSubscription error', { error: error.message, userId });
-    return res.status(500).json({ success: false, message: 'Server error. Please try again.' });
-  }
-};
-
 export default {
   enforceSubscription,
   professionalOnly,
   attachSubscription,
   checkExpiryWarning,
-  enforceMessagingSubscription,
 };
