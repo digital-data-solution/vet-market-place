@@ -40,6 +40,6 @@ router.post('/vet-verification/review/:id', protect, authorize('admin'), reviewV
 router.get('/vet-verification/:id',        protect, authorize('admin'), getVetVerification);
 
 // ─── Wildcard last ────────────────────────────────────────────────────────────
-router.get('/:id', enforceSubscription, getProfessional);
+router.get('/:id', protect, enforceSubscription, getProfessional);
 
 export default router;
