@@ -366,7 +366,7 @@ export const getMyProfessionalProfile = async (req, res) => {
     const cacheKey = `professional:${userId}`;
     const professional = await cache.cacheWrap(cacheKey, 300, async () => {
       return await Professional.findOne({ userId })
-        .populate('userId', 'name email phone isVerified')
+        .populate('userId', 'name email phone isVerified mediaImages')
         .lean();
     });
 
@@ -377,9 +377,12 @@ export const getMyProfessionalProfile = async (req, res) => {
       });
     }
 
+    // Expose mediaImages at the top level so the onboarding screen can read it directly
+    const mediaImages = professional.userId?.mediaImages ?? [];
+
     res.json({
       success: true,
-      data: professional,
+      data: { ...professional, mediaImages },
     });
   } catch (error) {
     logger.error('Get my professional profile error', { error: error.message, stack: error.stack });

@@ -17,6 +17,7 @@ import professionalRoutes    from './routes/professional.routes.js';
 import vetVerificationRoutes from './routes/vetVerification.routes.js';
 import subscriptionRoutes    from './routes/subscription.routes.js';
 import uploadRoutes          from './routes/uploadRoutes.js';
+import messagesRoutes        from './routes/messages.routes.js';
 import adminProfessionalRoutes from './routes/admin.professional.js';
 
 // Webhook handler — imported directly so it can receive raw body
@@ -101,6 +102,13 @@ const shopLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 100,
   message: 'Shop endpoint rate limit exceeded.',
+});
+
+const messageLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  keyGenerator: (req) => req.user?._id?.toString() ?? req.ip,
+  message: { success: false, message: 'Too many messages sent. Please wait a moment before trying again.' },
 });
 
 // ─── Admin dashboard HTML (served outside public/ so it survives web builds) ─
@@ -243,6 +251,7 @@ app.use('/api/v1/shops',            shopLimiter, shopRoutes);
 app.use('/api/v1/vet-verification', vetVerificationRoutes);
 app.use('/api/subscriptions',       subscriptionRoutes);
 app.use('/api/upload',              uploadRoutes);
+app.use('/api/messages',            messageLimiter, messagesRoutes);
 
 // ─── Global Error Handler ─────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
