@@ -7,13 +7,12 @@ import {
   deleteProfessionalByAdmin,
   getProfessionalStats,
 } from '../api/admin.professional.controller.js';
-import { protect, authorize } from '../middlewares/authMiddleware.js';
+import { adminProtect } from '../middlewares/adminAuthMiddleware.js';
 
 const router = express.Router();
 
 // All admin routes require authentication and admin role
-router.use(protect);
-router.use(authorize('admin'));
+router.use(adminProtect);
 
 // Admin routes
 router.get('/stats', getProfessionalStats); // Get professional statistics

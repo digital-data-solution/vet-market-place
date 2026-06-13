@@ -2,6 +2,7 @@ import User from '../models/User.js';
 import Professional from '../models/Professional.js';
 import cache from '../lib/cache.js';
 import logger from '../lib/logger.js';
+import { applyReferralReward } from '../lib/referralHelper.js';
 
 // ============================================================================
 // VET VCN VERIFICATION WORKFLOW
@@ -126,15 +127,28 @@ export const listPendingVets = async (req, res) => {
       'vetVerification.status': 'pending',
     });
 
-    logger.info('Admin fetched pending vets', { count: pending.length, total });
+    // Join Professional docs to surface address and clinic/practice name
+    const userIds = pending.map(u => u._id);
+    const professionals = await Professional.find({ userId: { $in: userIds } })
+      .select('userId name address')
+      .lean();
+    const proByUserId = Object.fromEntries(
+      professionals.map(p => [p.userId.toString(), p])
+    );
+    const data = pending.map(u => {
+      const pro = proByUserId[u._id.toString()];
+      return { ...u, professional: pro ? { name: pro.name, address: pro.address } : null };
+    });
+
+    logger.info('Admin fetched pending vets', { count: data.length, total });
 
     res.json({
       success: true,
-      count: pending.length,
+      count: data.length,
       total,
       page: parseInt(page),
       totalPages: Math.ceil(total / parseInt(limit)),
-      data: pending,
+      data,
     });
   } catch (error) {
     logger.error('List pending vets error', { error: error.message, stack: error.stack });
@@ -190,13 +204,14 @@ export const reviewVet = async (req, res) => {
       if (adminNotes) user.vetVerification.adminNotes = adminNotes;
 
       user.markModified('vetVerification');
-      await user.save();
+      await user.save({ validateBeforeSave: false });
 
       // Sync to Professional model — make profile visible
       const professionalUpdate = await Professional.findOneAndUpdate(
         { userId: user._id },
         {
           isVerified: true,
+          verificationStatus: 'approved',
           verifiedAt: new Date(),
           verifiedBy: adminId,
         },
@@ -209,6 +224,11 @@ export const reviewVet = async (req, res) => {
 
       // FIX #4: Clear cache on approve
       await cache.del(`professional:${user._id}`);
+
+      // Deferred referral reward — vet referrals are only rewarded once verified (60 days)
+      if (user.referredBy && !user.referralRewardApplied) {
+        applyReferralReward(user, 60).catch(() => {});
+      }
 
       logger.info('Vet verification approved', {
         userId: user._id,
@@ -231,9 +251,17 @@ export const reviewVet = async (req, res) => {
       if (adminNotes) user.vetVerification.adminNotes = adminNotes;
 
       user.markModified('vetVerification');
-      await user.save();
+      await user.save({ validateBeforeSave: false });
 
-      // Professional profile remains hidden (isVerified = false)
+      // Sync to Professional model — mark as rejected
+      await Professional.findOneAndUpdate(
+        { userId: user._id },
+        {
+          isVerified: false,
+          verificationStatus: 'rejected',
+          ...(adminNotes && { adminNotes }),
+        },
+      );
 
       // FIX #4: Clear cache on reject too — avoids serving stale approved data
       await cache.del(`professional:${user._id}`);

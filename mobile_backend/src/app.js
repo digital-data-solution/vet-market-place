@@ -17,6 +17,7 @@ import professionalRoutes    from './routes/professional.routes.js';
 import vetVerificationRoutes from './routes/vetVerification.routes.js';
 import subscriptionRoutes    from './routes/subscription.routes.js';
 import uploadRoutes          from './routes/uploadRoutes.js';
+import messagesRoutes        from './routes/messages.routes.js';
 import adminProfessionalRoutes from './routes/admin.professional.js';
 
 // Webhook handler — imported directly so it can receive raw body
@@ -50,6 +51,7 @@ app.use(helmet({
       scriptSrc:  ["'self'", "'unsafe-inline'"],
       styleSrc:   ["'self'", "'unsafe-inline'"],
       imgSrc:     ["'self'", "data:", "https://res.cloudinary.com", "https://vmzbvaybnohfxfkrungj.supabase.co"],
+      scriptSrcAttr: ["'unsafe-inline'"],
       connectSrc: [
         "'self'",
         "blob:",
@@ -68,21 +70,17 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // ─── Serve static files ───────────────────────────────────────────────────────
-app.use(express.static('public'));
-
-// TEMP: one-time admin password reset — remove after use
-app.post('/api/admin/reset-pw', async (req, res) => {
-  const { secret, newPassword } = req.body;
-  if (secret !== 'xv-reset-2026' || !newPassword) return res.status(403).json({ success: false });
-  const bcryptMod = await import('bcrypt');
-  const bcrypt    = bcryptMod.default ?? bcryptMod;
-  const hash      = await bcrypt.hash(newPassword, 10);
-  await User.findOneAndUpdate(
-    { email: 'omalesamuel4god@gmail.com' },
-    { $set: { password: hash, role: 'admin' } },
-  );
-  return res.json({ success: true, message: 'Admin password reset.' });
-});
+// index.html must never be cached (content changes on each web build).
+// Hashed JS/CSS bundles (/_expo/static/...) are safe to cache forever.
+app.use(express.static('public', {
+  setHeaders(res, filePath) {
+    if (filePath.endsWith('index.html')) {
+      res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    } else {
+      res.set('Cache-Control', 'public, max-age=31536000, immutable');
+    }
+  },
+}));
 
 // ─── Health / root ────────────────────────────────────────────────────────────
 app.get('/', (_req, res) => {
@@ -90,7 +88,7 @@ app.get('/', (_req, res) => {
 });
 
 app.get('/health', (_req, res) => {
-  res.json({ status: 'OK', version: '4-spa', uptime: process.uptime(), timestamp: new Date().toISOString() });
+  res.json({ status: 'OK', version: '6-spa-fixed', uptime: process.uptime(), timestamp: new Date().toISOString() });
 });
 
 // ─── Rate limiters ────────────────────────────────────────────────────────────
@@ -104,6 +102,13 @@ const shopLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 100,
   message: 'Shop endpoint rate limit exceeded.',
+});
+
+const messageLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  keyGenerator: (req) => req.user?._id?.toString() ?? req.ip,
+  message: { success: false, message: 'Too many messages sent. Please wait a moment before trying again.' },
 });
 
 // ─── Admin dashboard HTML (served outside public/ so it survives web builds) ─
@@ -246,6 +251,7 @@ app.use('/api/v1/shops',            shopLimiter, shopRoutes);
 app.use('/api/v1/vet-verification', vetVerificationRoutes);
 app.use('/api/subscriptions',       subscriptionRoutes);
 app.use('/api/upload',              uploadRoutes);
+app.use('/api/messages',            messageLimiter, messagesRoutes);
 
 // ─── Global Error Handler ─────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
@@ -325,12 +331,14 @@ app.use((err, req, res, next) => {
 });
 
 // ─── SPA catch-all ────────────────────────────────────────────────────────────
-// Serve index.html for any non-API GET request so deep links like
-// /auth/callback and /profile resolve to the React SPA instead of 404.
-app.get('*', (req, res, next) => {
+// app.use() avoids path-to-regexp v8 wildcard syntax (Express 5 broke app.get('*')).
+// Only serves index.html for GET requests not matched by any API or static route.
+app.use((req, res, next) => {
+  if (req.method !== 'GET') return next();
   if (req.path.startsWith('/api/') || req.path === '/admin' || req.path === '/health') {
     return next();
   }
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 

@@ -17,9 +17,9 @@ import {
   getMyVerificationStatus,
 } from '../api/vetVerification.controller.js';
 
-import { protect, authorize }        from '../middlewares/authMiddleware.js';
-import { enforceSubscription }       from '../middlewares/subscriptionMiddleware.js';
-import { requireProfessionalOwner }  from '../middlewares/ownershipMiddleware.js';
+import { protect, authorize }                         from '../middlewares/authMiddleware.js';
+import { enforceSubscription, attachSubscription }   from '../middlewares/subscriptionMiddleware.js';
+import { requireProfessionalOwner }                  from '../middlewares/ownershipMiddleware.js';
 
 const router = express.Router();
 
@@ -29,8 +29,8 @@ router.get('/me',       protect, getMyProfessionalProfile);
 router.put('/profile',  protect, requireProfessionalOwner, updateProfessional);   // must own profile
 router.delete('/profile', protect, requireProfessionalOwner, deleteProfessional); // must own profile
 
-router.get('/list',   protect, enforceSubscription, listProfessionals);
-router.get('/nearby', protect, enforceSubscription, getNearbyProfessionals);
+router.get('/list',   protect, attachSubscription, listProfessionals);
+router.get('/nearby', protect, attachSubscription, getNearbyProfessionals);
 
 // ─── Vet verification ─────────────────────────────────────────────────────────
 router.post('/vet-verification/submit',    protect, authorize('vet'), submitVCN);
@@ -40,6 +40,6 @@ router.post('/vet-verification/review/:id', protect, authorize('admin'), reviewV
 router.get('/vet-verification/:id',        protect, authorize('admin'), getVetVerification);
 
 // ─── Wildcard last ────────────────────────────────────────────────────────────
-router.get('/:id', enforceSubscription, getProfessional);
+router.get('/:id', protect, enforceSubscription, getProfessional);
 
 export default router;

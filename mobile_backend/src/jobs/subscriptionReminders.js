@@ -41,7 +41,7 @@ async function runExpiryReminders() {
   for (const daysLeft of [7, 3, 1]) {
     const [windowStart, windowEnd] = dayWindow(daysLeft);
 
-    // ── Professional subscriptions ──────────────────────────────────────────
+    // ── Professional subscriptions ────────────────────────────────────────────
     const expiringPro = await Subscription.find({
       status:  'active',
       endDate: { $gte: windowStart, $lte: windowEnd },
@@ -101,7 +101,7 @@ async function runExpiredNotices() {
 
   const [windowStart, windowEnd] = dayWindow(0);
 
-  // Professional subscriptions that just flipped to expired
+  // ── Professional subscriptions that just expired ─────────────────────────
   const justExpiredPro = await Subscription.find({
     status:  'expired',
     endDate: { $gte: windowStart, $lte: windowEnd },
@@ -117,7 +117,7 @@ async function runExpiredNotices() {
     }
   }
 
-  // Pet owner subscriptions that just expired
+  // ── Pet owner subscriptions that just expired ──────────────────────────────
   const justExpiredUsers = await User.find({
     'subscription.status':  'expired',
     'subscription.endDate': { $gte: windowStart, $lte: windowEnd },
@@ -156,8 +156,14 @@ async function runPendingCleanup() {
   // Pet owner subscriptions stuck in 'pending' > 48h → reset to inactive
   const userResult = await User.updateMany(
     {
-      'subscription.status':    'pending',
-      'subscription.createdAt': { $lte: cutoff },
+      'subscription.status': 'pending',
+      $or: [
+        { 'subscription.paymentInitiatedAt': { $lte: cutoff } },
+        {
+          'subscription.paymentInitiatedAt': { $exists: false },
+          updatedAt: { $lte: cutoff },
+        },
+      ],
     },
     {
       $set: {

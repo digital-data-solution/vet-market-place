@@ -211,7 +211,7 @@ export const getShopById = async (req, res) => {
     }
 
     const shop = await Shop.findById(id)
-      .populate('owner', 'name email phone')
+      .populate('owner', 'name email phone supabaseId') // ← supabaseId added
       .select('-__v')
       .lean();
 

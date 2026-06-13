@@ -25,6 +25,6 @@ router.put('/profile',  protect, requireKennelOwner, updateKennel);     // must 
 router.delete('/profile', protect, requireKennelOwner, deleteKennel);   // must own kennel
 
 // ─── Wildcard last ────────────────────────────────────────────────────────────
-router.get('/:id', getKennel);
+router.get('/:id', protect, enforceSubscription, getKennel);
 
 export default router;

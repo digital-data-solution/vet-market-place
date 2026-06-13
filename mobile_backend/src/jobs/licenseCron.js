@@ -53,11 +53,11 @@ const startLicenseCheckJob = () => {
 
       const activeSubscriptions = await Subscription.find(
         { status: 'active' },
-        { userId: 1, _id: 0 },
+        { user: 1, _id: 0 },
       ).lean();
 
       const userIdsWithActiveSub = activeSubscriptions.map((s) =>
-        s.userId.toString(),
+        s.user.toString(),
       );
 
       const deactivateResult = await User.updateMany(
