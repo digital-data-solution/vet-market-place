@@ -9,8 +9,8 @@ import {
   searchShops,
   deleteShop,
 } from '../api/shop.controller.js';
-import { protect }          from '../middlewares/authMiddleware.js';
-import { enforceSubscription } from '../middlewares/subscriptionMiddleware.js';
+import { protect }                                 from '../middlewares/authMiddleware.js';
+import { enforceSubscription, attachSubscription } from '../middlewares/subscriptionMiddleware.js';
 import { requireShopOwner } from '../middlewares/ownershipMiddleware.js';
 
 const router = express.Router();
@@ -18,7 +18,7 @@ const router = express.Router();
 // ─── Public named routes ──────────────────────────────────────────────────────
 router.get('/nearby', protect, enforceSubscription, getNearbyShops);
 router.get('/search', protect, enforceSubscription, searchShops);
-router.get('/list',   protect, enforceSubscription, listShops);
+router.get('/list',   protect, attachSubscription,  listShops);
 
 // ─── Protected /me routes ─────────────────────────────────────────────────────
 router.get('/me/shop',    protect, getMyShop);
@@ -27,6 +27,6 @@ router.put('/me/shop',    protect, requireShopOwner, updateShop);       // must 
 router.delete('/me/shop', protect, requireShopOwner, deleteShop);       // must own shop
 
 // ─── Wildcard last ────────────────────────────────────────────────────────────
-router.get('/:id', protect, enforceSubscription, getShopById);
+router.get('/:id', protect, attachSubscription, getShopById);
 
 export default router;

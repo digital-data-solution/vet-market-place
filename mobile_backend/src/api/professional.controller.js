@@ -425,9 +425,41 @@ export const getProfessional = async (req, res) => {
       });
     }
 
-    res.json({
+    // Profile owner always sees full data
+    if (requestingUserId === profileUserId) {
+      return res.json({ success: true, data: { ...professional, isPreview: false } });
+    }
+
+    // Freemium gate for everyone else
+    if (req.subscription?.isActive === true) {
+      return res.json({ success: true, data: { ...professional, isPreview: false } });
+    }
+
+    const userId = req.user._id || req.user.id;
+    const user = await User.findById(userId).select('freeSearchUsed').lean();
+
+    if (!user?.freeSearchUsed) {
+      await User.findByIdAndUpdate(userId, { freeSearchUsed: true });
+      return res.json({ success: true, data: { ...professional, isPreview: false }, usedFreeSearch: true });
+    }
+
+    const parts = (professional.address || '').split(',').map(s => s.trim()).filter(Boolean);
+    return res.json({
       success: true,
-      data: professional,
+      data: {
+        _id:            professional._id,
+        name:           professional.name,
+        businessName:   professional.businessName,
+        role:           professional.role,
+        vcnNumber:      professional.vcnNumber,
+        specialization: professional.specialization,
+        address:        parts.slice(-2).join(', '),
+        rating:         professional.rating,
+        reviewCount:    professional.reviewCount,
+        isVerified:     professional.isVerified,
+        images:         professional.images,
+        isPreview:      true,
+      },
     });
   } catch (error) {
     logger.error('Get professional error', { error: error.message, stack: error.stack });

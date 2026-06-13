@@ -6,6 +6,36 @@ import Subscription from '../models/Subscription.js';
 import axios from 'axios';
 import mongoose from 'mongoose';
 
+function redactShop(shop) {
+  const addr = typeof shop.address === 'string' ? shop.address : (shop.address?.full || '');
+  const parts = addr.split(',').map(s => s.trim()).filter(Boolean);
+  return {
+    _id:         shop._id,
+    name:        shop.name,
+    ownerName:   shop.ownerName,
+    description: shop.description,
+    services:    shop.services,
+    address:     parts.slice(-2).join(', '),
+    rating:      shop.rating,
+    reviewCount: shop.reviewCount,
+    isVerified:  shop.isVerified,
+    distance:    shop.distance,
+  };
+}
+
+async function applyFreemiumGate(req, data) {
+  if (req.subscription?.isActive === true) {
+    return { data, isPreview: false, usedFreeSearch: false };
+  }
+  const userId = req.user._id || req.user.id;
+  const user = await User.findById(userId).select('freeSearchUsed').lean();
+  if (!user?.freeSearchUsed) {
+    await User.findByIdAndUpdate(userId, { freeSearchUsed: true });
+    return { data, isPreview: false, usedFreeSearch: true };
+  }
+  return { data: data.map(redactShop), isPreview: true, usedFreeSearch: false };
+}
+
 // Geocode address → GeoJSON Point. Results cached 30 days so same address
 // only hits Nominatim once, avoiding rate-limit 429s.
 const geocodeAddress = async (address) => {
@@ -222,10 +252,35 @@ export const getShopById = async (req, res) => {
       });
     }
 
-    res.json({
+    // Freemium gate — applied per-request
+    if (req.subscription?.isActive === true) {
+      return res.json({ success: true, data: { ...shop, isPreview: false } });
+    }
+
+    const userId = req.user._id || req.user.id;
+    const user = await User.findById(userId).select('freeSearchUsed').lean();
+    if (!user?.freeSearchUsed) {
+      await User.findByIdAndUpdate(userId, { freeSearchUsed: true });
+      return res.json({ success: true, data: { ...shop, isPreview: false }, usedFreeSearch: true });
+    }
+
+    const addr = typeof shop.address === 'string' ? shop.address : (shop.address?.full || '');
+    const parts = addr.split(',').map(s => s.trim()).filter(Boolean);
+    return res.json({
       success: true,
-      data: shop,
-      message: 'Shop details retrieved successfully'
+      data: {
+        _id:         shop._id,
+        name:        shop.name,
+        ownerName:   shop.ownerName,
+        description: shop.description,
+        services:    shop.services,
+        address:     parts.slice(-2).join(', '),
+        rating:      shop.rating,
+        reviewCount: shop.reviewCount,
+        isVerified:  shop.isVerified,
+        images:      shop.images,
+        isPreview:   true,
+      },
     });
   } catch (error) {
     console.error('Get shop by ID error:', error);
@@ -309,13 +364,17 @@ export const listShops = async (req, res) => {
       return { shops: shopsWithSub, total: total[0]?.count || 0 };
     });
 
+    const { data, isPreview, usedFreeSearch } = await applyFreemiumGate(req, result.shops);
+
     res.json({
       success: true,
-      count: result.shops.length,
+      count: data.length,
       total: result.total,
       page: parseInt(page),
       totalPages: Math.ceil(result.total / parseInt(limit)),
-      data: result.shops
+      data,
+      isPreview,
+      ...(usedFreeSearch && { usedFreeSearch: true }),
     });
   } catch (error) {
     console.error('List shops error:', error);
