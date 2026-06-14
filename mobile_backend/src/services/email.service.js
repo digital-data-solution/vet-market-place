@@ -130,6 +130,9 @@ function layout(title, body) {
   <div class="footer">
     <p>© ${new Date().getFullYear()} Xpress Vet &nbsp;•&nbsp; Lagos, Nigeria<br/>
     You're receiving this because you have an account on Xpress Vet.<br/>
+    <a href="https://xpressvetmarketplace.com/privacy-policy" style="color:#94A3B8;text-decoration:none;">Privacy Policy</a>
+    &nbsp;·&nbsp;
+    <a href="https://xpressvetmarketplace.com/terms-and-conditions" style="color:#94A3B8;text-decoration:none;">Terms of Service</a><br/>
     Questions? Reply to this email — we're happy to help.</p>
   </div>
 </div>

@@ -19,11 +19,25 @@ import subscriptionRoutes    from './routes/subscription.routes.js';
 import uploadRoutes          from './routes/uploadRoutes.js';
 import messagesRoutes        from './routes/messages.routes.js';
 import adminProfessionalRoutes from './routes/admin.professional.js';
+import reviewRoutes           from './routes/review.routes.js';
 
 // Webhook handler — imported directly so it can receive raw body
 import { handlePaystackWebhook } from './api/subscription.controller.js';
 import { listPendingVets, reviewVet }                  from './api/vetVerification.controller.js';
 import { adminProtect }                                from './middlewares/adminAuthMiddleware.js';
+import {
+  getRevenueStats,
+  getGrowthStats,
+  getVerificationStats,
+  getReferralStats,
+  getContentStats,
+  getGeographicStats,
+  getMessagingStats,
+  getSystemHealth,
+  exportUsers,
+  exportSubscriptions,
+  exportProfessionals,
+} from './api/admin.stats.controller.js';
 
 // Models used in admin routes
 import Professional  from './models/Professional.js';
@@ -242,6 +256,19 @@ app.delete('/api/admin/subscriptions/:id', adminProtect, async (req, res) => {
   }
 });
 
+// ─── Admin BI stats routes ────────────────────────────────────────────────────
+app.get('/api/admin/stats/revenue',      adminProtect, getRevenueStats);
+app.get('/api/admin/stats/growth',       adminProtect, getGrowthStats);
+app.get('/api/admin/stats/verification', adminProtect, getVerificationStats);
+app.get('/api/admin/stats/referrals',    adminProtect, getReferralStats);
+app.get('/api/admin/stats/content',      adminProtect, getContentStats);
+app.get('/api/admin/stats/geographic',   adminProtect, getGeographicStats);
+app.get('/api/admin/stats/messaging',    adminProtect, getMessagingStats);
+app.get('/api/admin/stats/system',       adminProtect, getSystemHealth);
+app.get('/api/admin/export/users',          adminProtect, exportUsers);
+app.get('/api/admin/export/subscriptions',  adminProtect, exportSubscriptions);
+app.get('/api/admin/export/professionals',  adminProtect, exportProfessionals);
+
 // ─── API routes ───────────────────────────────────────────────────────────────
 app.use('/api/admin/professionals', adminProfessionalRoutes);
 app.use('/api/auth',                authLimiter, authRoutes);
@@ -252,6 +279,7 @@ app.use('/api/v1/vet-verification', vetVerificationRoutes);
 app.use('/api/subscriptions',       subscriptionRoutes);
 app.use('/api/upload',              uploadRoutes);
 app.use('/api/messages',            messageLimiter, messagesRoutes);
+app.use('/api/v1/reviews',          reviewRoutes);
 
 // ─── Global Error Handler ─────────────────────────────────────────────────────
 app.use((err, req, res, next) => {

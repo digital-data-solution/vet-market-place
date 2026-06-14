@@ -3,6 +3,7 @@ import Professional from '../models/Professional.js';
 import cache from '../lib/cache.js';
 import logger from '../lib/logger.js';
 import { applyReferralReward } from '../lib/referralHelper.js';
+import { sendVerificationApproved, sendVerificationRejected } from '../services/email.service.js';
 
 // ============================================================================
 // VET VCN VERIFICATION WORKFLOW
@@ -230,6 +231,9 @@ export const reviewVet = async (req, res) => {
         applyReferralReward(user, 60).catch(() => {});
       }
 
+      // Send approval email (fire-and-forget — email failure must not block the response)
+      sendVerificationApproved(user.name, user.email).catch(() => {});
+
       logger.info('Vet verification approved', {
         userId: user._id,
         vcnNumber: user.vetDetails?.vcnNumber,
@@ -265,6 +269,9 @@ export const reviewVet = async (req, res) => {
 
       // FIX #4: Clear cache on reject too — avoids serving stale approved data
       await cache.del(`professional:${user._id}`);
+
+      // Send rejection email (fire-and-forget)
+      sendVerificationRejected(user.name, user.email, adminNotes).catch(() => {});
 
       logger.info('Vet verification rejected', {
         userId: user._id,

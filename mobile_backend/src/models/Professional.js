@@ -21,7 +21,17 @@ const professionalSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['vet', 'kennel'],
+      enum: [
+        'vet',
+        'kennel',
+        'groomer',
+        'trainer',
+        'pet_sitter',
+        'pet_transport',
+        'cremation_service',
+        'agro_vet_supplier',
+        'insurance_provider',
+      ],
       required: [true, 'Role is required'],
       index: true,
     },
@@ -131,6 +141,13 @@ const professionalSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+
+    // Analytics
+    profileViews: {
+      type:    Number,
+      default: 0,
+      min:     0,
+    },
   },
   {
     timestamps: true,
@@ -151,18 +168,21 @@ professionalSchema.index({ name: 'text', businessName: 'text', specialization: '
 // MIDDLEWARE
 // ============================================================================
 
-// Auto-approval logic: kennels are auto-approved, vets require admin verification
-// NOTE: isVerified must NOT be set in the controller — this hook is the single
-//       source of truth for verification status on new profiles.
+// Roles that require admin review before going live.
+// insurance_provider needs hard approval; vets need VCN verification.
+const REQUIRES_ADMIN_REVIEW = new Set(['vet', 'insurance_provider']);
+
+// Auto-approval logic — this hook is the single source of truth for
+// verification status on new profiles. Never set isVerified in controllers.
 professionalSchema.pre('save', async function () {
   if (this.isNew) {
-    if (this.role === 'kennel') {
-      this.isVerified = true;
-      this.verificationStatus = 'approved';
-      this.verifiedAt = new Date();
-    } else if (this.role === 'vet') {
-      this.isVerified = false;
+    if (REQUIRES_ADMIN_REVIEW.has(this.role)) {
+      this.isVerified        = false;
       this.verificationStatus = 'pending';
+    } else {
+      this.isVerified        = true;
+      this.verificationStatus = 'approved';
+      this.verifiedAt        = new Date();
     }
   }
 });

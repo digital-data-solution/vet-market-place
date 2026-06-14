@@ -114,7 +114,7 @@ export const syncUser = async (req, res) => {
           referralCode: newCode,
           ...(referredBy && { referredBy }),
         },
-        $set: { isVerified },
+        $set: { isVerified, lastLoginAt: new Date() },
       },
       { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
     );

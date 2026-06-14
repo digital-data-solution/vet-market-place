@@ -61,6 +61,7 @@ const userSchema = new mongoose.Schema({
     capacity:  Number,
   },
   freeSearchUsed:         { type: Boolean, default: false },
+  lastLoginAt:            { type: Date,    default: null },
 
   // Referral system
   referralCode:           { type: String, unique: true, sparse: true },

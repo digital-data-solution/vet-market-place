@@ -200,6 +200,34 @@
       <div class="nav-item" onclick="showSection('subscriptions')" id="nav-subscriptions">
         <span class="nav-icon">💳</span> Subscriptions
       </div>
+      <div style="padding:8px 20px;font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.6px;margin-top:8px;">Analytics</div>
+      <div class="nav-item" onclick="showSection('revenue')" id="nav-revenue">
+        <span class="nav-icon">📈</span> Revenue
+      </div>
+      <div class="nav-item" onclick="showSection('growth')" id="nav-growth">
+        <span class="nav-icon">👤</span> User Growth
+      </div>
+      <div class="nav-item" onclick="showSection('geographic')" id="nav-geographic">
+        <span class="nav-icon">🗺️</span> Geographic
+      </div>
+      <div class="nav-item" onclick="showSection('verifstats')" id="nav-verifstats">
+        <span class="nav-icon">✅</span> Verif. Analytics
+      </div>
+      <div class="nav-item" onclick="showSection('referrals')" id="nav-referrals">
+        <span class="nav-icon">🎁</span> Referrals
+      </div>
+      <div class="nav-item" onclick="showSection('content')" id="nav-content">
+        <span class="nav-icon">🖼️</span> Content
+      </div>
+      <div class="nav-item" onclick="showSection('messaging')" id="nav-messaging">
+        <span class="nav-icon">💬</span> Messaging
+      </div>
+      <div class="nav-item" onclick="showSection('exports')" id="nav-exports">
+        <span class="nav-icon">📥</span> Exports
+      </div>
+      <div class="nav-item" onclick="showSection('system')" id="nav-system">
+        <span class="nav-icon">⚙️</span> System Health
+      </div>
     </nav>
     <div class="sidebar-footer">
       <div id="admin-name"></div>
@@ -347,6 +375,202 @@
           </table>
         </div>
       </div>
+    </div>
+
+    <!-- ── Revenue ──────────────────────────────────────────── -->
+    <div id="section-revenue" class="section">
+      <div class="topbar">
+        <h2>Revenue</h2>
+        <button class="btn btn-ghost btn-sm" onclick="loadRevenue()">↻ Refresh</button>
+      </div>
+      <div id="revenue-stats-grid" class="stats-grid"><div class="spinner"></div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+        <div class="card">
+          <div class="card-head"><h3>Plan Breakdown</h3></div>
+          <div class="tbl-wrap">
+            <table><thead><tr><th>Plan</th><th>Subs</th><th>Revenue (₦)</th></tr></thead>
+            <tbody id="revenue-plan-tbody"></tbody></table>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>Expiry Calendar</h3></div>
+          <div style="padding:20px" id="revenue-expiry"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Monthly Revenue Trend</h3></div>
+        <div class="tbl-wrap">
+          <table><thead><tr><th>Month</th><th>New Subscriptions</th><th>Revenue (₦)</th></tr></thead>
+          <tbody id="revenue-trend-tbody"></tbody></table>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Stuck Pending Payments</h3></div>
+        <div class="tbl-wrap">
+          <table><thead><tr><th>User</th><th>Plan</th><th>Amount (₦)</th><th>Initiated</th></tr></thead>
+          <tbody id="revenue-pending-tbody"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── User Growth ────────────────────────────────────── -->
+    <div id="section-growth" class="section">
+      <div class="topbar">
+        <h2>User Growth</h2>
+        <button class="btn btn-ghost btn-sm" onclick="loadGrowth()">↻ Refresh</button>
+      </div>
+      <div id="growth-stats-grid" class="stats-grid"><div class="spinner"></div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+        <div class="card">
+          <div class="card-head"><h3>Signups by Role</h3></div>
+          <div class="tbl-wrap">
+            <table><thead><tr><th>Role</th><th>Total Users</th></tr></thead>
+            <tbody id="growth-role-tbody"></tbody></table>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>Signups Last 30 Days</h3></div>
+          <div class="tbl-wrap" style="max-height:260px;overflow-y:auto">
+            <table><thead><tr><th>Date</th><th>New Users</th></tr></thead>
+            <tbody id="growth-daily-tbody"></tbody></table>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Dormant Users <small style="font-size:12px;font-weight:400;color:#64748B">(no login in 30+ days)</small></h3></div>
+        <div class="tbl-wrap">
+          <table><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Last Login</th><th>Joined</th></tr></thead>
+          <tbody id="growth-dormant-tbody"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Geographic ────────────────────────────────────── -->
+    <div id="section-geographic" class="section">
+      <div class="topbar">
+        <h2>Geographic Density</h2>
+        <button class="btn btn-ghost btn-sm" onclick="loadGeographic()">↻ Refresh</button>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Professionals &amp; Shops by Region</h3></div>
+        <div class="tbl-wrap">
+          <table><thead><tr><th>Region</th><th>Vets</th><th>Kennels</th><th>Shops</th><th>Total</th></tr></thead>
+          <tbody id="geo-tbody"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Verification Analytics ────────────────────────── -->
+    <div id="section-verifstats" class="section">
+      <div class="topbar">
+        <h2>Verification Analytics</h2>
+        <button class="btn btn-ghost btn-sm" onclick="loadVerifStats()">↻ Refresh</button>
+      </div>
+      <div id="verif-stats-grid" class="stats-grid"><div class="spinner"></div></div>
+      <div class="card">
+        <div class="card-head"><h3>Recent Review Decisions (last 90 days)</h3></div>
+        <div class="tbl-wrap">
+          <table><thead><tr><th>Name</th><th>Email</th><th>Decision</th><th>Reviewed</th><th>Notes</th></tr></thead>
+          <tbody id="verif-log-tbody"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Referrals ────────────────────────────────────── -->
+    <div id="section-referrals" class="section">
+      <div class="topbar">
+        <h2>Referral Program</h2>
+        <button class="btn btn-ghost btn-sm" onclick="loadReferrals()">↻ Refresh</button>
+      </div>
+      <div id="ref-stats-grid" class="stats-grid"><div class="spinner"></div></div>
+      <div class="card">
+        <div class="card-head"><h3>Top 10 Referrers</h3></div>
+        <div class="tbl-wrap">
+          <table><thead><tr><th>Name</th><th>Email</th><th>Code</th><th>Rewards Earned (months)</th></tr></thead>
+          <tbody id="ref-top-tbody"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Content ──────────────────────────────────────── -->
+    <div id="section-content" class="section">
+      <div class="topbar">
+        <h2>Content &amp; Profiles</h2>
+        <button class="btn btn-ghost btn-sm" onclick="loadContent()">↻ Refresh</button>
+      </div>
+      <div id="content-stats-grid" class="stats-grid"><div class="spinner"></div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
+        <div class="card">
+          <div class="card-head"><h3>Top Gallery Uploaders</h3></div>
+          <div class="tbl-wrap">
+            <table><thead><tr><th>Name</th><th>Role</th><th>Images</th></tr></thead>
+            <tbody id="content-uploaders-tbody"></tbody></table>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>Top Profile Views</h3></div>
+          <div class="tbl-wrap">
+            <table><thead><tr><th>Name</th><th>Role</th><th>Views</th><th>Verified</th></tr></thead>
+            <tbody id="content-views-tbody"></tbody></table>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Incomplete Professional Profiles</h3></div>
+        <div class="tbl-wrap">
+          <table><thead><tr><th>Name</th><th>Role</th><th>Missing</th><th>Address</th></tr></thead>
+          <tbody id="content-incomplete-tbody"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Messaging ────────────────────────────────────── -->
+    <div id="section-messaging" class="section">
+      <div class="topbar">
+        <h2>Messaging Activity</h2>
+        <button class="btn btn-ghost btn-sm" onclick="loadMessaging()">↻ Refresh</button>
+      </div>
+      <div id="msg-stats-grid" class="stats-grid"><div class="spinner"></div></div>
+    </div>
+
+    <!-- ── Exports ──────────────────────────────────────── -->
+    <div id="section-exports" class="section">
+      <div class="topbar"><h2>Data Exports</h2></div>
+      <div class="card">
+        <div class="card-head"><h3>Download CSV Reports</h3></div>
+        <div style="padding:24px;display:flex;flex-direction:column;gap:14px">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:16px;background:#F8FAFC;border-radius:10px;border:1px solid #E2E8F0">
+            <div>
+              <div style="font-weight:700;font-size:14px">All Users</div>
+              <div style="font-size:12px;color:#64748B;margin-top:2px">Name, email, role, referral info, last login</div>
+            </div>
+            <a id="export-users-btn" href="#" onclick="exportCsv('users')" class="btn btn-ghost btn-sm">⬇ Download</a>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:16px;background:#F8FAFC;border-radius:10px;border:1px solid #E2E8F0">
+            <div>
+              <div style="font-weight:700;font-size:14px">All Subscriptions</div>
+              <div style="font-size:12px;color:#64748B;margin-top:2px">Plan, amount, status, start/end dates, payment ref</div>
+            </div>
+            <a href="#" onclick="exportCsv('subscriptions')" class="btn btn-ghost btn-sm">⬇ Download</a>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:16px;background:#F8FAFC;border-radius:10px;border:1px solid #E2E8F0">
+            <div>
+              <div style="font-weight:700;font-size:14px">All Professionals</div>
+              <div style="font-size:12px;color:#64748B;margin-top:2px">Name, role, address, verification status, profile views</div>
+            </div>
+            <a href="#" onclick="exportCsv('professionals')" class="btn btn-ghost btn-sm">⬇ Download</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── System Health ─────────────────────────────────── -->
+    <div id="section-system" class="section">
+      <div class="topbar">
+        <h2>System Health</h2>
+        <button class="btn btn-ghost btn-sm" onclick="loadSystem()">↻ Refresh</button>
+      </div>
+      <div id="system-stats-grid" class="stats-grid"><div class="spinner"></div></div>
     </div>
 
   </main>
@@ -502,7 +726,14 @@ function showSection(name) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('section-' + name).classList.add('active');
   document.getElementById('nav-' + name).classList.add('active');
-  const loaders = { overview: loadOverview, pending: loadPending, professionals: loadProfessionals, users: loadUsers, shops: loadShops, subscriptions: loadSubscriptions };
+  const loaders = {
+    overview: loadOverview, pending: loadPending, professionals: loadProfessionals,
+    users: loadUsers, shops: loadShops, subscriptions: loadSubscriptions,
+    revenue: loadRevenue, growth: loadGrowth, geographic: loadGeographic,
+    verifstats: loadVerifStats, referrals: loadReferrals, content: loadContent,
+    messaging: loadMessaging, system: loadSystem,
+    exports: () => {},
+  };
   loaders[name]?.();
 }
 
@@ -747,6 +978,226 @@ async function cancelSub(id, name) {
   if (!confirm(`Cancel subscription for ${name}?`)) return;
   const r = await api('DELETE', `/api/admin/subscriptions/${id}`);
   if (r?.ok) { toast('Subscription cancelled'); loadSubscriptions(); } else toast(r?.body?.message || 'Failed', 'error');
+}
+
+// ── Revenue ───────────────────────────────────────────────────────────────────
+async function loadRevenue() {
+  document.getElementById('revenue-stats-grid').innerHTML = '<div class="spinner"></div>';
+  document.getElementById('revenue-plan-tbody').innerHTML     = '<tr><td colspan="3"><div class="spinner"></div></td></tr>';
+  document.getElementById('revenue-trend-tbody').innerHTML    = '<tr><td colspan="3"><div class="spinner"></div></td></tr>';
+  document.getElementById('revenue-pending-tbody').innerHTML  = '<tr><td colspan="4"><div class="spinner"></div></td></tr>';
+
+  const r = await api('GET', '/api/admin/stats/revenue');
+  const d = r?.body?.data || {};
+
+  document.getElementById('revenue-stats-grid').innerHTML = `
+    <div class="stat-card"><div class="stat-label">MRR</div><div class="stat-value">₦${(d.mrr||0).toLocaleString()}</div><div class="stat-sub">${d.activeCount||0} active subs</div></div>
+    <div class="stat-card"><div class="stat-label">Expiring &lt; 7 days</div><div class="stat-value" style="color:#E8610A">${d.expiring?.in7||0}</div></div>
+    <div class="stat-card"><div class="stat-label">Expiring 8–14 days</div><div class="stat-value">${d.expiring?.in14||0}</div></div>
+    <div class="stat-card"><div class="stat-label">Expiring 15–30 days</div><div class="stat-value">${d.expiring?.in30||0}</div></div>
+    <div class="stat-card"><div class="stat-label">Stuck Pending</div><div class="stat-value" style="color:#EF4444">${(d.pendingSubs||[]).length}</div></div>
+  `;
+
+  document.getElementById('revenue-plan-tbody').innerHTML = (d.planBreakdown||[]).length
+    ? (d.planBreakdown||[]).map(p => `<tr><td><span class="badge badge-blue">${p._id||'—'}</span></td><td>${p.count}</td><td>₦${(p.revenue||0).toLocaleString()}</td></tr>`).join('')
+    : '<tr><td colspan="3" class="no-data">No active subscriptions</td></tr>';
+
+  document.getElementById('revenue-expiry').innerHTML = `
+    <div style="display:grid;gap:10px">
+      ${[{label:'Next 7 days',val:d.expiring?.in7,color:'#EF4444'},{label:'8–14 days',val:d.expiring?.in14,color:'#E8610A'},{label:'15–30 days',val:d.expiring?.in30,color:'#F59E0B'}]
+        .map(e=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#F8FAFC;border-radius:8px;border-left:4px solid ${e.color}"><span style="font-size:13px;font-weight:600">${e.label}</span><span style="font-size:18px;font-weight:800;color:${e.color}">${e.val||0}</span></div>`)
+        .join('')}
+    </div>`;
+
+  document.getElementById('revenue-trend-tbody').innerHTML = (d.trend||[]).length
+    ? (d.trend||[]).slice().reverse().map(t => `<tr><td>${t.label}</td><td>${t.count}</td><td>₦${(t.revenue||0).toLocaleString()}</td></tr>`).join('')
+    : '<tr><td colspan="3" class="no-data">No trend data</td></tr>';
+
+  document.getElementById('revenue-pending-tbody').innerHTML = (d.pendingSubs||[]).length
+    ? (d.pendingSubs||[]).map(p => `<tr><td><strong>${p.user?.name||'—'}</strong><br><small>${p.user?.email||''}</small></td><td><span class="badge badge-yellow">${p.plan||'—'}</span></td><td>₦${(p.amount||0).toLocaleString()}</td><td>${fmt(p.createdAt)}</td></tr>`).join('')
+    : '<tr><td colspan="4" class="no-data">No stuck payments 🎉</td></tr>';
+}
+
+// ── User Growth ───────────────────────────────────────────────────────────────
+async function loadGrowth() {
+  document.getElementById('growth-stats-grid').innerHTML = '<div class="spinner"></div>';
+  document.getElementById('growth-role-tbody').innerHTML    = '<tr><td colspan="2"><div class="spinner"></div></td></tr>';
+  document.getElementById('growth-daily-tbody').innerHTML   = '<tr><td colspan="2"><div class="spinner"></div></td></tr>';
+  document.getElementById('growth-dormant-tbody').innerHTML = '<tr><td colspan="5"><div class="spinner"></div></td></tr>';
+
+  const r = await api('GET', '/api/admin/stats/growth');
+  const d = r?.body?.data || {};
+
+  document.getElementById('growth-stats-grid').innerHTML = `
+    <div class="stat-card"><div class="stat-label">DAU (24h)</div><div class="stat-value">${d.dau||0}</div></div>
+    <div class="stat-card"><div class="stat-label">WAU (7d)</div><div class="stat-value">${d.wau||0}</div></div>
+    <div class="stat-card"><div class="stat-label">MAU (30d)</div><div class="stat-value">${d.mau||0}</div></div>
+    <div class="stat-card"><div class="stat-label">Dormant</div><div class="stat-value" style="color:#64748B">${d.dormantCount||0}</div><div class="stat-sub">no login 30+ days</div></div>
+    <div class="stat-card"><div class="stat-label">New (last 30d)</div><div class="stat-value">${(d.signupsByDay||[]).reduce((s,x)=>s+x.count,0)}</div></div>
+  `;
+
+  document.getElementById('growth-role-tbody').innerHTML = (d.signupsByRole||[]).length
+    ? (d.signupsByRole||[]).map(r => `<tr><td>${roleBadge(r._id)}</td><td>${r.count}</td></tr>`).join('')
+    : '<tr><td colspan="2" class="no-data">—</td></tr>';
+
+  document.getElementById('growth-daily-tbody').innerHTML = (d.signupsByDay||[]).length
+    ? (d.signupsByDay||[]).slice().reverse().map(d => `<tr><td>${d.label}</td><td>${d.count}</td></tr>`).join('')
+    : '<tr><td colspan="2" class="no-data">No signups</td></tr>';
+
+  document.getElementById('growth-dormant-tbody').innerHTML = (d.dormantSample||[]).length
+    ? (d.dormantSample||[]).map(u => `<tr><td>${u.name||'—'}</td><td><small>${u.email||'—'}</small></td><td>${roleBadge(u.role)}</td><td>${u.lastLoginAt ? fmt(u.lastLoginAt) : '— (never)'}</td><td>${fmt(u.createdAt)}</td></tr>`).join('')
+    : '<tr><td colspan="5" class="no-data">No dormant users 🎉</td></tr>';
+}
+
+// ── Geographic ────────────────────────────────────────────────────────────────
+async function loadGeographic() {
+  document.getElementById('geo-tbody').innerHTML = '<tr><td colspan="5"><div class="spinner"></div></td></tr>';
+  const r = await api('GET', '/api/admin/stats/geographic');
+  const rows = r?.body?.data?.byRegion || [];
+  document.getElementById('geo-tbody').innerHTML = rows.length
+    ? rows.map(g => `<tr><td><strong>${g.region}</strong></td><td>${g.vets}</td><td>${g.kennels}</td><td>${g.shops}</td><td>${g.total}</td></tr>`).join('')
+    : '<tr><td colspan="5" class="no-data">No location data</td></tr>';
+}
+
+// ── Verification Analytics ────────────────────────────────────────────────────
+async function loadVerifStats() {
+  document.getElementById('verif-stats-grid').innerHTML = '<div class="spinner"></div>';
+  document.getElementById('verif-log-tbody').innerHTML  = '<tr><td colspan="5"><div class="spinner"></div></td></tr>';
+
+  const r = await api('GET', '/api/admin/stats/verification');
+  const d = r?.body?.data || {};
+
+  document.getElementById('verif-stats-grid').innerHTML = `
+    <div class="stat-card"><div class="stat-label">Pending Queue</div><div class="stat-value" style="color:#E8610A">${d.pendingCount||0}</div></div>
+    <div class="stat-card"><div class="stat-label">Approved (90d)</div><div class="stat-value" style="color:#059669">${d.approvedCount||0}</div></div>
+    <div class="stat-card"><div class="stat-label">Rejected (90d)</div><div class="stat-value" style="color:#EF4444">${d.rejectedCount||0}</div></div>
+    <div class="stat-card"><div class="stat-label">Approval Rate</div><div class="stat-value">${d.approvalRate != null ? d.approvalRate+'%' : '—'}</div></div>
+    <div class="stat-card"><div class="stat-label">Avg Review Time</div><div class="stat-value">${d.avgReviewHours != null ? d.avgReviewHours+'h' : '—'}</div></div>
+  `;
+
+  document.getElementById('verif-log-tbody').innerHTML = (d.recentReviews||[]).length
+    ? (d.recentReviews||[]).map(v => `
+        <tr>
+          <td><strong>${v.name||'—'}</strong></td>
+          <td><small>${v.email||'—'}</small></td>
+          <td>${statusBadge(v.status)}</td>
+          <td>${fmt(v.reviewedAt)}</td>
+          <td><small style="color:#64748B">${v.adminNotes||'—'}</small></td>
+        </tr>`).join('')
+    : '<tr><td colspan="5" class="no-data">No reviews in last 90 days</td></tr>';
+}
+
+// ── Referrals ─────────────────────────────────────────────────────────────────
+async function loadReferrals() {
+  document.getElementById('ref-stats-grid').innerHTML = '<div class="spinner"></div>';
+  document.getElementById('ref-top-tbody').innerHTML  = '<tr><td colspan="4"><div class="spinner"></div></td></tr>';
+
+  const r = await api('GET', '/api/admin/stats/referrals');
+  const d = r?.body?.data || {};
+
+  document.getElementById('ref-stats-grid').innerHTML = `
+    <div class="stat-card"><div class="stat-label">Total Referral Codes</div><div class="stat-value">${d.totalCodes||0}</div></div>
+    <div class="stat-card"><div class="stat-label">Referred Signups</div><div class="stat-value">${d.totalReferred||0}</div></div>
+    <div class="stat-card"><div class="stat-label">Converted to Paid</div><div class="stat-value">${d.converted||0}</div><div class="stat-sub">${d.conversionRate||0}% rate</div></div>
+    <div class="stat-card"><div class="stat-label">Reward Cost</div><div class="stat-value">${d.rewardCost||0}</div><div class="stat-sub">free months given</div></div>
+  `;
+
+  document.getElementById('ref-top-tbody').innerHTML = (d.topReferrers||[]).length
+    ? (d.topReferrers||[]).map(u => `<tr><td><strong>${u.name||'—'}</strong></td><td><small>${u.email||'—'}</small></td><td><code style="background:#F1F5F9;padding:2px 6px;border-radius:4px;font-size:12px">${u.referralCode||'—'}</code></td><td>${u.referralRewardsEarned||0} month(s)</td></tr>`).join('')
+    : '<tr><td colspan="4" class="no-data">No referral rewards yet</td></tr>';
+}
+
+// ── Content ───────────────────────────────────────────────────────────────────
+async function loadContent() {
+  document.getElementById('content-stats-grid').innerHTML   = '<div class="spinner"></div>';
+  document.getElementById('content-uploaders-tbody').innerHTML  = '<tr><td colspan="3"><div class="spinner"></div></td></tr>';
+  document.getElementById('content-views-tbody').innerHTML      = '<tr><td colspan="4"><div class="spinner"></div></td></tr>';
+  document.getElementById('content-incomplete-tbody').innerHTML = '<tr><td colspan="4"><div class="spinner"></div></td></tr>';
+
+  const r = await api('GET', '/api/admin/stats/content');
+  const d = r?.body?.data || {};
+
+  document.getElementById('content-stats-grid').innerHTML = `
+    <div class="stat-card"><div class="stat-label">Total Gallery Images</div><div class="stat-value">${d.totalImages||0}</div></div>
+    <div class="stat-card"><div class="stat-label">Users With Galleries</div><div class="stat-value">${d.usersWithImages||0}</div></div>
+    <div class="stat-card"><div class="stat-label">Incomplete Profiles</div><div class="stat-value" style="color:#E8610A">${(d.incompleteProfiles||[]).length}</div></div>
+  `;
+
+  document.getElementById('content-uploaders-tbody').innerHTML = (d.topUploaders||[]).length
+    ? (d.topUploaders||[]).map(u => `<tr><td><strong>${u.name||'—'}</strong></td><td>${roleBadge(u.role)}</td><td>${u.count}</td></tr>`).join('')
+    : '<tr><td colspan="3" class="no-data">No galleries yet</td></tr>';
+
+  document.getElementById('content-views-tbody').innerHTML = (d.profileViewsTop||[]).length
+    ? (d.profileViewsTop||[]).map(p => `<tr><td><strong>${p.name||'—'}</strong></td><td>${roleBadge(p.role)}</td><td>${p.profileViews}</td><td>${p.isVerified ? '<span class="badge badge-green">✓</span>' : '<span class="badge badge-gray">—</span>'}</td></tr>`).join('')
+    : '<tr><td colspan="4" class="no-data">No views recorded yet</td></tr>';
+
+  document.getElementById('content-incomplete-tbody').innerHTML = (d.incompleteProfiles||[]).length
+    ? (d.incompleteProfiles||[]).map(p => {
+        const missing = [];
+        if (!p.phone)         missing.push('phone');
+        if (!p.email)         missing.push('email');
+        if (!p.specialization) missing.push('specialization');
+        return `<tr><td><strong>${p.name||'—'}</strong></td><td>${roleBadge(p.role)}</td><td>${missing.map(m=>`<span class="badge badge-yellow">${m}</span>`).join(' ')}</td><td><small>${p.address||'—'}</small></td></tr>`;
+      }).join('')
+    : '<tr><td colspan="4" class="no-data">All profiles are complete 🎉</td></tr>';
+}
+
+// ── Messaging ─────────────────────────────────────────────────────────────────
+async function loadMessaging() {
+  document.getElementById('msg-stats-grid').innerHTML = '<div class="spinner"></div>';
+  const r = await api('GET', '/api/admin/stats/messaging');
+  const d = r?.body?.data || {};
+  document.getElementById('msg-stats-grid').innerHTML = `
+    <div class="stat-card"><div class="stat-label">Total Messages</div><div class="stat-value">${(d.totalMessages||0).toLocaleString()}</div></div>
+    <div class="stat-card"><div class="stat-label">Active Convos (7d)</div><div class="stat-value">${d.activeConversations7d||0}</div></div>
+    <div class="stat-card"><div class="stat-label">Last Message</div><div class="stat-value" style="font-size:14px">${d.lastMessageAt ? fmt(d.lastMessageAt) : '—'}</div></div>
+    ${d.supabaseError ? `<div class="stat-card" style="border:1px solid #FEE2E2"><div class="stat-label" style="color:#991B1B">Supabase Error</div><div style="font-size:12px;color:#991B1B;margin-top:4px">${d.supabaseError}</div></div>` : ''}
+  `;
+}
+
+// ── System Health ─────────────────────────────────────────────────────────────
+async function loadSystem() {
+  document.getElementById('system-stats-grid').innerHTML = '<div class="spinner"></div>';
+  const r = await api('GET', '/api/admin/stats/system');
+  const d = r?.body?.data || {};
+
+  const redisBg  = d.redis  === 'ok' ? '#DCFCE7' : '#FEE2E2';
+  const redisClr = d.redis  === 'ok' ? '#166534' : '#991B1B';
+  const mongoBg  = d.mongo  === 'connected' ? '#DCFCE7' : '#FEE2E2';
+  const mongoClr = d.mongo  === 'connected' ? '#166534' : '#991B1B';
+
+  document.getElementById('system-stats-grid').innerHTML = `
+    <div class="stat-card" style="background:${redisBg}"><div class="stat-label" style="color:${redisClr}">Redis</div><div class="stat-value" style="color:${redisClr}">${d.redis||'—'}</div></div>
+    <div class="stat-card" style="background:${mongoBg}"><div class="stat-label" style="color:${mongoClr}">MongoDB</div><div class="stat-value" style="color:${mongoClr}">${d.mongo||'—'}</div></div>
+    <div class="stat-card"><div class="stat-label">Uptime</div><div class="stat-value" style="font-size:16px">${d.uptimeStr||'—'}</div></div>
+    <div class="stat-card"><div class="stat-label">Node Version</div><div class="stat-value" style="font-size:18px">${d.nodeVersion||'—'}</div></div>
+    <div class="stat-card"><div class="stat-label">Heap Used</div><div class="stat-value">${d.memoryMb?.heapUsed||0} MB</div><div class="stat-sub">of ${d.memoryMb?.heapTotal||0} MB</div></div>
+    <div class="stat-card"><div class="stat-label">RSS Memory</div><div class="stat-value">${d.memoryMb?.rss||0} MB</div></div>
+  `;
+}
+
+// ── CSV Exports ───────────────────────────────────────────────────────────────
+async function exportCsv(type) {
+  toast(`Preparing ${type}.csv…`);
+  try {
+    const res = await fetch(`/api/admin/export/${type}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) { toast('Export failed', 'error'); return false; }
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `${type}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast(`${type}.csv downloaded!`);
+  } catch {
+    toast('Export failed', 'error');
+  }
+  return false;
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────

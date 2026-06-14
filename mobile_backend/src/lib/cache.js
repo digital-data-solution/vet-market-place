@@ -79,4 +79,4 @@ export async function cacheDel(key) {
   inMemory.delete(key);
 }
 
-export default { initCache, cacheGet, cacheSet, cacheWrap, cacheDel };
+export default { initCache, cacheGet, cacheSet, cacheWrap, cacheDel, del: cacheDel };
