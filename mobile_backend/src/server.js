@@ -14,12 +14,14 @@ const { default: connectDB }                 = await import('./config/db.js');
 const { connectRedis }                       = await import('./lib/redis.js');
 const { default: startLicenseCheckJob }      = await import('./jobs/licenseCron.js');
 const { default: startSubscriptionJobs }     = await import('./jobs/subscriptionReminders.js');
+const { default: startProfessionalJobs }     = await import('./jobs/professionalJobs.js');
 
 // Start services
 await connectDB();
 connectRedis();
 startLicenseCheckJob();
 startSubscriptionJobs();
+startProfessionalJobs();
 
 const PORT = process.env.PORT || 5000;
 

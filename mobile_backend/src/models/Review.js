@@ -42,6 +42,10 @@ const reviewSchema = new mongoose.Schema(
       type:    Date,
       default: null,
     },
+    // Set by professionalJobs.js after the professional has been notified by email
+    notifiedAt: {
+      type: Date,
+    },
   },
   { timestamps: true },
 );

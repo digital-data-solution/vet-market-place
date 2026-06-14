@@ -295,3 +295,229 @@ export async function sendNewVerificationRequest(adminEmail, professionalName, p
   `);
   await sendEmail(adminEmail, `New verification request from ${professionalName}`, html);
 }
+
+/**
+ * Sent to a service provider immediately after they register and submit documents.
+ * Confirms receipt and tells them what happens next.
+ */
+export async function sendDocumentSubmissionReceived(name, email, role) {
+  const firstName = name?.split(' ')[0] || 'there';
+  const roleLabel = role?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) || 'Professional';
+  const html = layout('Documents Received — We\'re Reviewing Your Profile', `
+    <h1>We've received your submission, ${firstName}! 📄</h1>
+    <p>Thank you for registering as a <strong>${roleLabel}</strong> on Xpress Vet. Your profile and identity documents have been received and are now in our review queue.</p>
+    <div class="highlight">
+      <p>⏱️ <strong>What happens next?</strong><br/>
+      Our admin team will review your submitted details — including your government ID and any business registration documents. This typically takes <strong>24–48 hours</strong> on business days.</p>
+    </div>
+    <p>You will receive another email as soon as a decision is made. If your profile is approved, you will immediately appear in Xpress Vet listings. If we need more information, we will explain exactly what is required.</p>
+    <p><strong>Why do we ask for these documents?</strong><br/>
+    Xpress Vet is committed to protecting pet owners. Verifying the identity of every service provider builds the trust that makes our platform valuable — for you and for the clients you will reach.</p>
+    <p>If you have any questions in the meantime, simply reply to this email.</p>
+    <p style="margin-top:24px;">Thank you for joining Xpress Vet,<br/><strong>The Xpress Vet Team</strong> 🐾</p>
+  `);
+  await sendEmail(email, 'Xpress Vet: Your profile is under review', html);
+}
+
+/**
+ * Sent to admin when a new professional with documents needs review.
+ * Includes a summary of submitted documents so admin can act quickly.
+ */
+export async function sendAdminDocumentReviewAlert(adminEmail, professional) {
+  const { name, email, role, verificationDocuments: d, businessName } = professional;
+  const roleLabel = role?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) || role;
+
+  let docsHtml = '';
+  if (role === 'vet') {
+    docsHtml = `<p>VCN Number: <strong>${professional.vcnNumber || 'Not provided'}</strong></p>`;
+  } else if (d) {
+    if (d.governmentIdNumber) docsHtml += `<p>${d.governmentIdType || 'Gov ID'}: <strong>${d.governmentIdNumber}</strong></p>`;
+    if (d.cacNumber)           docsHtml += `<p>CAC Number: <strong>${d.cacNumber}</strong></p>`;
+    if (d.professionalCertNumber) docsHtml += `<p>Prof. Cert: <strong>${d.professionalCertNumber}</strong></p>`;
+  }
+  if (!docsHtml) docsHtml = '<p style="color:#92400E">⚠️ No identity documents submitted</p>';
+
+  const html = layout('New Professional Awaiting Review', `
+    <h1>New ${roleLabel} Needs Review 🔍</h1>
+    <div class="highlight">
+      <p>Name: <strong>${name}</strong>${businessName ? ` (${businessName})` : ''}<br/>
+      Email: ${email}<br/>
+      Role: ${roleLabel}</p>
+    </div>
+    <p><strong>Submitted Documents:</strong></p>
+    ${docsHtml}
+    <p>Please log in to the <a href="https://vet-market-place-jsj5.onrender.com/admin">admin dashboard</a> to review and approve or reject this request.</p>
+    <p style="color:#64748B;font-size:13px">This professional is currently hidden from all listings until you approve them.</p>
+  `);
+  await sendEmail(adminEmail, `Action needed: ${name} (${roleLabel}) awaiting review`, html);
+}
+
+/**
+ * Sent to admin as a morning digest: pending count, new signups, revenue snapshot.
+ */
+export async function sendAdminMorningDigest(adminEmail, { pendingCount, newSignups24h, activeSubscriptions, pendingList }) {
+  const pendingRows = (pendingList || []).slice(0, 10).map(p => {
+    const role = p.role?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) || p.role;
+    const age  = p.createdAt ? Math.round((Date.now() - new Date(p.createdAt)) / 3600000) : '?';
+    return `<tr>
+      <td style="padding:6px 10px;border-bottom:1px solid #F1F5F9">${p.name || '—'}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #F1F5F9">${role}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #F1F5F9">${age}h ago</td>
+    </tr>`;
+  }).join('');
+
+  const html = layout('Xpress Vet — Daily Admin Digest', `
+    <h1>Good morning! Here's your daily snapshot ☀️</h1>
+    <div class="highlight">
+      <p>🕐 <strong>Pending Reviews:</strong> ${pendingCount}<br/>
+      👥 <strong>New Sign-ups (24h):</strong> ${newSignups24h}<br/>
+      ✅ <strong>Active Subscriptions:</strong> ${activeSubscriptions}</p>
+    </div>
+    ${pendingCount > 0 ? `
+    <p><strong>Professionals awaiting your review:</strong></p>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="background:#F8FAFC">
+        <th style="padding:8px 10px;text-align:left;border-bottom:2px solid #E2E8F0">Name</th>
+        <th style="padding:8px 10px;text-align:left;border-bottom:2px solid #E2E8F0">Role</th>
+        <th style="padding:8px 10px;text-align:left;border-bottom:2px solid #E2E8F0">Waiting</th>
+      </tr></thead>
+      <tbody>${pendingRows}</tbody>
+    </table>
+    <p style="margin-top:12px"><a href="https://vet-market-place-jsj5.onrender.com/admin">→ Open Admin Dashboard</a></p>
+    ` : '<p style="color:#059669">✅ No professionals awaiting review — you\'re all caught up!</p>'}
+    <p style="color:#64748B;font-size:13px">This digest is sent every morning at 8:00 AM WAT.</p>
+  `);
+  await sendEmail(adminEmail, `Xpress Vet Daily Digest — ${pendingCount} pending, ${newSignups24h} new sign-ups`, html);
+}
+
+/**
+ * Sent to a professional when they receive a new review.
+ */
+export async function sendNewReviewNotification(name, email, reviewerName, rating, comment, role) {
+  const firstName = name?.split(' ')[0] || 'there';
+  const stars = '⭐'.repeat(Math.min(Math.round(rating), 5));
+  const roleLabel = role?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) || 'Professional';
+  const html = layout('You have a new review!', `
+    <h1>New review on your ${roleLabel} profile, ${firstName}! ${stars}</h1>
+    <p><strong>${reviewerName || 'A pet owner'}</strong> just left you a review:</p>
+    <div class="highlight">
+      <p style="font-size:18px;font-weight:700;color:#F59E0B">${stars} ${rating}/5</p>
+      ${comment ? `<p style="font-style:italic;color:#374151">"${comment}"</p>` : ''}
+    </div>
+    <p>Reviews help you build trust and attract more clients. Keep up the great service!</p>
+    <p style="margin-top:24px;">The Xpress Vet Team 🐾</p>
+  `);
+  await sendEmail(email, `You have a new ${rating}-star review on Xpress Vet!`, html);
+}
+
+/**
+ * Sent to admin when professionals have been stuck in pending > 48h.
+ */
+export async function sendAdminStaleReviewAlert(adminEmail, staleList) {
+  const rows = staleList.slice(0, 20).map(p => {
+    const role = p.role?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) || p.role;
+    const hours = Math.round((Date.now() - new Date(p.createdAt)) / 3600000);
+    return `<tr>
+      <td style="padding:6px 10px;border-bottom:1px solid #F1F5F9">${p.name || '—'}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #F1F5F9">${role}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #F1F5F9;color:#E8610A"><strong>${hours}h</strong></td>
+    </tr>`;
+  }).join('');
+
+  const html = layout('Stale Review Queue Alert', `
+    <h1>⚠️ ${staleList.length} Professional${staleList.length !== 1 ? 's' : ''} Waiting Over 48 Hours</h1>
+    <p>The following professionals have been pending review for more than 48 hours. They cannot appear in listings until approved:</p>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="background:#FEF2F2">
+        <th style="padding:8px 10px;text-align:left;border-bottom:2px solid #FECACA">Name</th>
+        <th style="padding:8px 10px;text-align:left;border-bottom:2px solid #FECACA">Role</th>
+        <th style="padding:8px 10px;text-align:left;border-bottom:2px solid #FECACA">Waiting</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p style="margin-top:14px"><a href="https://vet-market-place-jsj5.onrender.com/admin">→ Review now in Admin Dashboard</a></p>
+  `);
+  await sendEmail(adminEmail, `⚠️ Action needed: ${staleList.length} professionals waiting 48h+ for review`, html);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SUPPORT MESSAGE ALERT — sent to admin when a user sends a support message
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * @param {string} adminEmail
+ * @param {{ userName: string, userEmail: string, userRole: string, text: string, threadId: string }} msg
+ */
+export async function sendSupportMessageAlert(adminEmail, { userName, userEmail, userRole, text, threadId }) {
+  const roleLabel = userRole?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) || 'User';
+  const preview   = text.length > 200 ? text.slice(0, 200) + '...' : text;
+  const dashboardUrl = 'https://vet-market-place-jsj5.onrender.com/admin';
+
+  const html = `
+    <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#111827">
+      <h2 style="font-size:20px;font-weight:800;color:#1A56DB;margin-bottom:4px">💬 New Support Message</h2>
+      <p style="color:#6B7280;font-size:14px;margin-top:0">A user needs help — please respond promptly from the admin panel.</p>
+
+      <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:16px;margin:20px 0">
+        <p style="margin:0 0 6px 0"><strong>From:</strong> ${userName} (${roleLabel})</p>
+        <p style="margin:0 0 6px 0"><strong>Email:</strong> ${userEmail || 'not provided'}</p>
+        <p style="margin:0"><strong>Thread ID:</strong> <code style="font-size:12px">${threadId}</code></p>
+      </div>
+
+      <div style="background:#EFF6FF;border-left:4px solid #2563EB;border-radius:0 8px 8px 0;padding:16px;margin-bottom:24px">
+        <p style="margin:0;font-style:italic;color:#1E40AF">"${preview}"</p>
+      </div>
+
+      <a href="${dashboardUrl}" style="display:inline-block;background:#1A56DB;color:#fff;text-decoration:none;
+         padding:14px 28px;border-radius:10px;font-weight:700;font-size:15px">
+        Open Support Panel &rarr;
+      </a>
+
+      <p style="margin-top:24px;font-size:12px;color:#9CA3AF">
+        This alert was triggered automatically. Reply from the admin dashboard so the user sees your response in the app.
+      </p>
+    </div>`;
+
+  await sendEmail(adminEmail, `💬 Support message from ${userName} — action needed`, html);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UNANSWERED SUPPORT ALERT — cron reminder for threads with no admin reply
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * @param {string} adminEmail
+ * @param {{ userName: string, userEmail: string, userRole: string, waitMinutes: number }[]} threads
+ */
+export async function sendUnansweredSupportAlert(adminEmail, threads) {
+  const rows = threads.map(t => `
+    <tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #F3F4F6">${t.userName}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #F3F4F6">${t.userEmail || '—'}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #F3F4F6">${t.userRole?.replace(/_/g, ' ') || '—'}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #F3F4F6;color:#DC2626;font-weight:600">${t.waitMinutes} min</td>
+    </tr>`).join('');
+
+  const html = `
+    <div style="font-family:Inter,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#111827">
+      <h2 style="font-size:20px;font-weight:800;color:#DC2626">⚠️ Unanswered Support Messages</h2>
+      <p>The following users have been waiting more than 30 minutes for a reply:</p>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
+        <thead>
+          <tr style="background:#F9FAFB">
+            <th style="padding:10px 12px;text-align:left;font-size:13px;color:#6B7280">Name</th>
+            <th style="padding:10px 12px;text-align:left;font-size:13px;color:#6B7280">Email</th>
+            <th style="padding:10px 12px;text-align:left;font-size:13px;color:#6B7280">Role</th>
+            <th style="padding:10px 12px;text-align:left;font-size:13px;color:#6B7280">Waiting</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <a href="https://vet-market-place-jsj5.onrender.com/admin" style="display:inline-block;background:#DC2626;color:#fff;
+         text-decoration:none;padding:14px 28px;border-radius:10px;font-weight:700;font-size:15px">
+        Reply Now &rarr;
+      </a>
+    </div>`;
+
+  await sendEmail(adminEmail, `⚠️ ${threads.length} unanswered support message(s) — please reply`, html);
+}

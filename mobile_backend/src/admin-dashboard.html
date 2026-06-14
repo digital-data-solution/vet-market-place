@@ -148,6 +148,15 @@
     }
     .modal textarea:focus, .modal select:focus, .modal input:focus { border-color: #E8610A; }
     .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+    .doc-card { background:#F8FAFC; border:1.5px solid #E2E8F0; border-radius:10px; padding:12px; margin-bottom:12px; }
+    .doc-row  { display:flex; align-items:flex-start; gap:10px; padding:5px 0; border-bottom:1px solid #F1F5F9; font-size:13px; }
+    .doc-row:last-child { border-bottom:none; }
+    .doc-key  { font-weight:700; color:#374151; min-width:110px; flex-shrink:0; }
+    .doc-val  { color:#111827; word-break:break-all; }
+    .doc-link { color:#2563EB; text-decoration:underline; }
+    .doc-warn { color:#92400E; background:#FFFBEB; border-radius:6px; padding:6px 10px; font-size:12px; border:1px solid #FCD34D; }
+    .verify-link { display:inline-block; margin-right:8px; margin-top:4px; font-size:12px; color:#2563EB; font-weight:600; text-decoration:none; }
+    .verify-link:hover { text-decoration:underline; }
 
     @media (max-width: 720px) {
       .sidebar { display: none; }
@@ -199,6 +208,9 @@
       </div>
       <div class="nav-item" onclick="showSection('subscriptions')" id="nav-subscriptions">
         <span class="nav-icon">💳</span> Subscriptions
+      </div>
+      <div class="nav-item" onclick="showSection('support')" id="nav-support">
+        <span class="nav-icon">🆘</span> Support Inbox <span id="support-badge" style="display:none;background:#DC2626;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700;margin-left:4px">!</span>
       </div>
       <div style="padding:8px 20px;font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.6px;margin-top:8px;">Analytics</div>
       <div class="nav-item" onclick="showSection('revenue')" id="nav-revenue">
@@ -263,7 +275,7 @@
         <div class="tbl-wrap">
           <table>
             <thead><tr>
-              <th>Name</th><th>Role</th><th>VCN Number</th><th>Location</th><th>Submitted</th><th>Actions</th>
+              <th>Name</th><th>Role</th><th>ID / VCN</th><th>Business Docs</th><th>Location</th><th>Submitted</th><th>Actions</th>
             </tr></thead>
             <tbody id="pending-tbody"></tbody>
           </table>
@@ -283,6 +295,13 @@
             <option value="">All roles</option>
             <option value="vet">Vets</option>
             <option value="kennel">Kennels</option>
+            <option value="groomer">Groomers</option>
+            <option value="trainer">Trainers</option>
+            <option value="pet_sitter">Pet Sitters</option>
+            <option value="pet_transport">Pet Transport</option>
+            <option value="cremation_service">Cremation Services</option>
+            <option value="agro_vet_supplier">Agro-Vet Suppliers</option>
+            <option value="insurance_provider">Insurance Providers</option>
           </select>
           <select id="pro-status-filter" onchange="loadProfessionals()">
             <option value="">All statuses</option>
@@ -322,6 +341,13 @@
             <option value="vet">Vets</option>
             <option value="kennel_owner">Kennel Owners</option>
             <option value="shop_owner">Shop Owners</option>
+            <option value="groomer">Groomers</option>
+            <option value="trainer">Trainers</option>
+            <option value="pet_sitter">Pet Sitters</option>
+            <option value="pet_transport">Pet Transport</option>
+            <option value="cremation_service">Cremation Service</option>
+            <option value="agro_vet_supplier">Agro-Vet Suppliers</option>
+            <option value="insurance_provider">Insurance Providers</option>
             <option value="admin">Admin</option>
           </select>
         </div>
@@ -454,7 +480,7 @@
       <div class="card">
         <div class="card-head"><h3>Professionals &amp; Shops by Region</h3></div>
         <div class="tbl-wrap">
-          <table><thead><tr><th>Region</th><th>Vets</th><th>Kennels</th><th>Shops</th><th>Total</th></tr></thead>
+          <table><thead><tr><th>Region</th><th>Vets</th><th>Kennels</th><th>Services</th><th>Shops</th><th>Total</th></tr></thead>
           <tbody id="geo-tbody"></tbody></table>
         </div>
       </div>
@@ -533,6 +559,43 @@
       <div id="msg-stats-grid" class="stats-grid"><div class="spinner"></div></div>
     </div>
 
+    <!-- ── Support Inbox ─────────────────────────────────── -->
+    <div id="section-support" class="section">
+      <div class="topbar">
+        <h2>Support Inbox</h2>
+        <div style="display:flex;gap:8px">
+          <select id="support-status-filter" onchange="loadSupport()" style="padding:6px 10px;border-radius:8px;border:1px solid #E2E8F0;font-size:13px">
+            <option value="">All Threads</option>
+            <option value="open">Open</option>
+            <option value="resolved">Resolved</option>
+          </select>
+          <button class="btn btn-ghost btn-sm" onclick="loadSupport()">↻ Refresh</button>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:320px 1fr;gap:16px;height:calc(100vh - 160px)">
+        <!-- Thread list -->
+        <div style="overflow-y:auto;border-right:1px solid #E2E8F0;padding-right:12px">
+          <div id="support-thread-list"><div class="spinner"></div></div>
+        </div>
+
+        <!-- Thread viewer + reply -->
+        <div style="display:flex;flex-direction:column;overflow:hidden">
+          <div id="support-thread-view" style="flex:1;overflow-y:auto;padding:4px 4px 16px">
+            <p style="color:#9CA3AF;text-align:center;margin-top:60px">Select a conversation to view it.</p>
+          </div>
+          <div id="support-reply-area" style="display:none;border-top:1px solid #E2E8F0;padding-top:12px">
+            <textarea id="support-reply-text" rows="3" placeholder="Type your reply…"
+              style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;font-size:14px;resize:vertical;box-sizing:border-box"></textarea>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <button class="btn btn-primary btn-sm" onclick="sendSupportReply()">Send Reply</button>
+              <button class="btn btn-ghost btn-sm" onclick="resolveThread()">Mark Resolved</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Exports ──────────────────────────────────────── -->
     <div id="section-exports" class="section">
       <div class="topbar"><h2>Data Exports</h2></div>
@@ -601,6 +664,13 @@
       <option value="vet">Veterinarian</option>
       <option value="kennel_owner">Kennel Owner</option>
       <option value="shop_owner">Shop Owner</option>
+      <option value="groomer">Groomer</option>
+      <option value="trainer">Pet Trainer</option>
+      <option value="pet_sitter">Pet Sitter</option>
+      <option value="pet_transport">Pet Transport</option>
+      <option value="cremation_service">Cremation Service</option>
+      <option value="agro_vet_supplier">Agro-Vet Supplier</option>
+      <option value="insurance_provider">Insurance Provider</option>
       <option value="admin">Admin</option>
     </select>
     <div class="modal-actions">
@@ -729,6 +799,7 @@ function showSection(name) {
   const loaders = {
     overview: loadOverview, pending: loadPending, professionals: loadProfessionals,
     users: loadUsers, shops: loadShops, subscriptions: loadSubscriptions,
+    support: loadSupport,
     revenue: loadRevenue, growth: loadGrowth, geographic: loadGeographic,
     verifstats: loadVerifStats, referrals: loadReferrals, content: loadContent,
     messaging: loadMessaging, system: loadSystem,
@@ -739,6 +810,13 @@ function showSection(name) {
 
 // ── Overview ──────────────────────────────────────────────────────────────────
 async function loadOverview() {
+  // Refresh support badge in background whenever overview loads
+  api('GET', '/api/admin/support?status=open').then(r => {
+    const count = r?.body?.data?.length || 0;
+    const badge = document.getElementById('support-badge');
+    if (badge) { badge.style.display = count ? '' : 'none'; badge.textContent = count; }
+  }).catch(() => {});
+
   const [proStats, subStats] = await Promise.all([
     api('GET', '/api/admin/stats/professionals'),
     api('GET', '/api/admin/stats/subscriptions'),
@@ -747,62 +825,139 @@ async function loadOverview() {
   const p = proStats?.body?.data || {};
   const s = subStats?.body?.data || {};
 
+  const roleMap = {};
+  (p.roleBreakdown || []).forEach(r => { roleMap[r._id] = r; });
+  const serviceRoles = ['groomer','trainer','pet_sitter','pet_transport','cremation_service','agro_vet_supplier','insurance_provider'];
+  const serviceTotal = serviceRoles.reduce((sum, r) => sum + (roleMap[r]?.total || 0), 0);
+  const pendingTotal = (p.vets?.pending || 0) + (p.insurance_providers?.pending || 0);
+
   document.getElementById('stats-grid').innerHTML = `
     <div class="stat-card"><div class="stat-label">Total Users</div><div class="stat-value">${s.totalUsers || 0}</div></div>
     <div class="stat-card"><div class="stat-label">Active Subs</div><div class="stat-value">${s.activeSubscriptions || 0}</div><div class="stat-sub">₦${((s.monthlyRevenue||0)).toLocaleString()}/mo</div></div>
-    <div class="stat-card"><div class="stat-label">Vets</div><div class="stat-value">${p.vets?.total || 0}</div><div class="stat-sub">${p.vets?.pending || 0} pending</div></div>
-    <div class="stat-card"><div class="stat-label">Kennels</div><div class="stat-value">${p.kennels?.total || 0}</div><div class="stat-sub">${p.kennels?.pending || 0} pending</div></div>
+    <div class="stat-card"><div class="stat-label">Vets</div><div class="stat-value">${roleMap.vet?.total || p.vets?.total || 0}</div><div class="stat-sub">${p.vets?.pending || 0} pending</div></div>
+    <div class="stat-card"><div class="stat-label">Kennels</div><div class="stat-value">${roleMap.kennel?.total || p.kennels?.total || 0}</div></div>
+    <div class="stat-card"><div class="stat-label">Services</div><div class="stat-value">${serviceTotal}</div><div class="stat-sub">Groomers, Trainers, Sitters…</div></div>
     <div class="stat-card"><div class="stat-label">Shops</div><div class="stat-value">${s.totalShops || p.shops?.total || 0}</div></div>
-    <div class="stat-card"><div class="stat-label">Pending Reviews</div><div class="stat-value" style="color:#E8610A">${(p.vets?.pending||0)+(p.kennels?.pending||0)}</div></div>
+    <div class="stat-card"><div class="stat-label">Insurance Providers</div><div class="stat-value">${roleMap.insurance_provider?.total || 0}</div><div class="stat-sub">${p.insurance_providers?.pending || 0} pending</div></div>
+    <div class="stat-card"><div class="stat-label">Pending Reviews</div><div class="stat-value" style="color:#E8610A">${pendingTotal}</div></div>
   `;
 
   // Pending preview
   const pend = await api('GET', '/api/admin/vets/pending?limit=5');
-  const rows = (pend?.body?.data || []).map(v => `
+  _pendingData = pend?.body?.data || [];
+  const rows = _pendingData.map((v, idx) => `
     <tr>
       <td>${v.name || '—'}</td>
       <td>${roleBadge(v.role)}</td>
-      <td>${v.vetDetails?.vcnNumber ? `<a href="https://vcn.gov.ng" target="_blank" rel="noopener noreferrer">${v.vetDetails.vcnNumber}</a>` : '—'}</td>
-      <td>${fmt(v.vetVerification?.submittedAt || v.createdAt)}</td>
-      <td><button class="btn btn-success btn-sm" onclick="quickReview('${v._id}','approve','${v.name||''}')">Approve</button>
-          <button class="btn btn-danger  btn-sm" onclick="quickReview('${v._id}','reject','${v.name||''}')">Reject</button></td>
+      <td style="font-size:12px">${renderIdDoc(v)}</td>
+      <td>${fmt(v.createdAt)}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="showSection('pending');openReview(${idx})">🔍 Review</button></td>
     </tr>`).join('');
 
   document.getElementById('pending-preview').innerHTML = rows ? `
     <div class="card">
       <div class="card-head"><h3>Pending Verifications</h3><a href="#" onclick="showSection('pending')" style="font-size:13px;color:#E8610A;font-weight:600">View all →</a></div>
-      <div class="tbl-wrap"><table><thead><tr><th>Name</th><th>Role</th><th>VCN Number</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="tbl-wrap"><table><thead><tr><th>Name</th><th>Role</th><th>ID / VCN</th><th>Submitted</th><th>Action</th></tr></thead><tbody>${rows}</tbody></table></div>
     </div>` : '';
 }
 
 // ── Pending Reviews ───────────────────────────────────────────────────────────
+// Store pending data so openReview can access full record without another fetch
+let _pendingData = [];
+
+function renderIdDoc(v) {
+  const d = v.verificationDocuments;
+  if (v.role === 'vet') {
+    return v.vcnNumber
+      ? `<a href="https://vcn.gov.ng" target="_blank" rel="noopener noreferrer" style="color:#2563EB">VCN: ${v.vcnNumber}</a>`
+      : '—';
+  }
+  if (!d) return '<span style="color:#F59E0B">None submitted</span>';
+  const idStr = d.governmentIdNumber ? `${d.governmentIdType || 'ID'}: ${d.governmentIdNumber}` : null;
+  return idStr || '<span style="color:#F59E0B">None submitted</span>';
+}
+
+function renderBizDoc(v) {
+  const d = v.verificationDocuments;
+  if (!d) return '—';
+  const parts = [];
+  if (d.cacNumber) parts.push(`CAC: ${d.cacNumber}`);
+  if (d.professionalCertNumber) parts.push(`Cert: ${d.professionalCertNumber}`);
+  return parts.length ? parts.join('<br>') : '—';
+}
+
 async function loadPending() {
-  document.getElementById('pending-tbody').innerHTML = '<tr><td colspan="6"><div class="spinner"></div></td></tr>';
+  document.getElementById('pending-tbody').innerHTML = '<tr><td colspan="7"><div class="spinner"></div></td></tr>';
   const r = await api('GET', '/api/admin/vets/pending?limit=100');
   const data = r?.body?.data || [];
+  _pendingData = data;
   if (!data.length) {
-    document.getElementById('pending-tbody').innerHTML = '<tr><td colspan="6" class="no-data">No pending verifications 🎉</td></tr>';
+    document.getElementById('pending-tbody').innerHTML = '<tr><td colspan="7" class="no-data">No pending verifications 🎉</td></tr>';
     return;
   }
-  document.getElementById('pending-tbody').innerHTML = data.map(v => `
+  document.getElementById('pending-tbody').innerHTML = data.map((v, idx) => `
     <tr>
-      <td><strong>${v.name || '—'}</strong><br><small style="color:#64748B">${v.email || ''}</small></td>
+      <td>
+        <strong>${v.name || '—'}</strong>
+        ${v.businessName ? `<br><small style="color:#374151;font-weight:600">${v.businessName}</small>` : ''}
+        <br><small style="color:#64748B">${v.userId?.email || v.email || ''}</small>
+        ${v.userId?.phone || v.phone ? `<br><small style="color:#64748B">${v.userId?.phone || v.phone}</small>` : ''}
+      </td>
       <td>${roleBadge(v.role)}</td>
-      <td>${v.vetDetails?.vcnNumber ? `<a href="https://vcn.gov.ng" target="_blank" rel="noopener noreferrer">${v.vetDetails.vcnNumber}</a>` : '—'}</td>
-      <td>${v.professional?.address || '—'}</td>
-      <td>${fmt(v.vetVerification?.submittedAt || v.createdAt)}</td>
+      <td style="font-size:12px">${renderIdDoc(v)}</td>
+      <td style="font-size:12px">${renderBizDoc(v)}</td>
+      <td style="font-size:12px">${v.address || '—'}</td>
+      <td>${fmt(v.createdAt)}</td>
       <td style="white-space:nowrap">
-        <button class="btn btn-success btn-sm" onclick="openReview('${v._id}','${v.name||''}','approve')">Approve</button>
-        <button class="btn btn-danger  btn-sm" onclick="openReview('${v._id}','${v.name||''}','reject')">Reject</button>
+        <button class="btn btn-ghost btn-sm" onclick="openReview(${idx})">🔍 Review</button>
       </td>
     </tr>`).join('');
 }
 
-let _reviewId, _reviewAction;
-function openReview(id, name, defaultAction) {
-  _reviewId = id;
-  document.getElementById('review-modal-title').textContent = `Review: ${name}`;
-  document.getElementById('review-modal-sub').textContent   = `ID: ${id}`;
+let _reviewId;
+function openReview(idx) {
+  const v = _pendingData[idx];
+  if (!v) return;
+  _reviewId = v._id;
+  const d = v.verificationDocuments || {};
+
+  document.getElementById('review-modal-title').textContent = `Review: ${v.name || ''}`;
+
+  // Build the document details HTML shown in the modal
+  let docsHtml = '';
+  if (v.role === 'vet') {
+    docsHtml = v.vcnNumber
+      ? `<div class="doc-row"><span class="doc-key">VCN Number</span><a href="https://vcn.gov.ng" target="_blank" rel="noopener noreferrer" class="doc-val doc-link">${v.vcnNumber}</a></div>`
+      : `<div class="doc-row doc-warn">⚠️ No VCN number submitted</div>`;
+  } else {
+    if (d.governmentIdNumber) {
+      docsHtml += `<div class="doc-row"><span class="doc-key">${d.governmentIdType || 'Gov ID'}</span><span class="doc-val">${d.governmentIdNumber}</span></div>`;
+    } else {
+      docsHtml += `<div class="doc-row doc-warn">⚠️ No government ID submitted</div>`;
+    }
+    if (d.cacNumber) docsHtml += `<div class="doc-row"><span class="doc-key">CAC Number</span><a href="https://pre.cac.gov.ng" target="_blank" rel="noopener noreferrer" class="doc-val doc-link">${d.cacNumber}</a></div>`;
+    if (d.professionalCertNumber) docsHtml += `<div class="doc-row"><span class="doc-key">Prof. Cert</span><span class="doc-val">${d.professionalCertNumber}</span></div>`;
+  }
+
+  const verifyLinks = `
+    <div style="margin-top:10px;padding-top:10px;border-top:1px solid #E5E7EB">
+      <div style="font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Verify Online</div>
+      ${v.role === 'vet' ? `<a href="https://vcn.gov.ng" target="_blank" rel="noopener noreferrer" class="verify-link">🔗 VCN Portal</a>` : ''}
+      ${d.governmentIdNumber && (d.governmentIdType === 'NIN' || !d.governmentIdType) ? `<a href="https://nimc.gov.ng" target="_blank" rel="noopener noreferrer" class="verify-link">🔗 NIMC (NIN)</a>` : ''}
+      ${d.governmentIdNumber && d.governmentIdType === 'BVN' ? `<a href="https://nibss-plc.com.ng" target="_blank" rel="noopener noreferrer" class="verify-link">🔗 NIBSS (BVN)</a>` : ''}
+      ${d.cacNumber ? `<a href="https://pre.cac.gov.ng" target="_blank" rel="noopener noreferrer" class="verify-link">🔗 CAC Portal</a>` : ''}
+    </div>`;
+
+  document.getElementById('review-modal-sub').innerHTML = `
+    <div style="font-size:12px;color:#64748B;margin-bottom:12px">
+      ${roleBadge(v.role)} &nbsp; ${v.address || ''} &nbsp; Registered ${fmt(v.createdAt)}
+    </div>
+    <div class="doc-card">
+      <div style="font-size:12px;font-weight:700;color:#374151;margin-bottom:8px">📄 Submitted Documents</div>
+      ${docsHtml || '<div style="color:#9CA3AF;font-size:12px">No documents submitted</div>'}
+      ${verifyLinks}
+    </div>`;
+
   document.getElementById('review-notes').value = '';
   document.getElementById('review-approve-btn').onclick = () => submitReview('approve');
   document.getElementById('review-reject-btn').onclick  = () => submitReview('reject');
@@ -980,6 +1135,114 @@ async function cancelSub(id, name) {
   if (r?.ok) { toast('Subscription cancelled'); loadSubscriptions(); } else toast(r?.body?.message || 'Failed', 'error');
 }
 
+// ── Support Inbox ─────────────────────────────────────────────────────────────
+let _activeThreadId = null;
+
+async function loadSupport() {
+  const status = document.getElementById('support-status-filter')?.value || '';
+  const url = '/api/admin/support' + (status ? `?status=${status}` : '');
+  const r = await api('GET', url);
+  const threads = r?.body?.data || [];
+
+  // Show red badge in sidebar if open threads exist
+  const openCount = threads.filter(t => t.status === 'open').length;
+  const badge = document.getElementById('support-badge');
+  if (badge) { badge.style.display = openCount ? '' : 'none'; badge.textContent = openCount; }
+
+  const list = document.getElementById('support-thread-list');
+  if (!threads.length) {
+    list.innerHTML = '<p style="color:#9CA3AF;text-align:center;padding:20px">No conversations yet.</p>';
+    return;
+  }
+
+  list.innerHTML = threads.map(t => {
+    const last = t.messages?.[t.messages.length - 1];
+    const preview = last ? last.text.slice(0, 60) + (last.text.length > 60 ? '…' : '') : '—';
+    const badge = t.status === 'open' ? '<span style="background:#FEE2E2;color:#DC2626;padding:1px 7px;border-radius:8px;font-size:11px;font-weight:700">OPEN</span>'
+                                       : '<span style="background:#D1FAE5;color:#065F46;padding:1px 7px;border-radius:8px;font-size:11px;font-weight:700">DONE</span>';
+    const isActive = t._id === _activeThreadId;
+    return `<div onclick="openThread('${t._id}')" style="padding:12px;border-radius:10px;margin-bottom:8px;cursor:pointer;
+              background:${isActive ? '#EFF6FF' : '#fff'};border:1px solid ${isActive ? '#BFDBFE' : '#E2E8F0'};transition:all .15s">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <strong style="font-size:14px">${t.userName || 'Unknown'}</strong>${badge}
+      </div>
+      <div style="font-size:12px;color:#6B7280;margin-bottom:2px">${t.userRole?.replace(/_/g,' ') || ''} &bull; ${t.userEmail || ''}</div>
+      <div style="font-size:13px;color:#374151;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${preview}</div>
+    </div>`;
+  }).join('');
+}
+
+async function openThread(threadId) {
+  _activeThreadId = threadId;
+  loadSupport(); // re-render list with active highlight
+
+  const r = await api('GET', '/api/admin/support');
+  const thread = (r?.body?.data || []).find(t => t._id === threadId);
+  if (!thread) return;
+
+  const view = document.getElementById('support-thread-view');
+  const msgs = (thread.messages || []).map(m => {
+    const isAdmin = m.senderRole === 'admin';
+    const time = new Date(m.createdAt).toLocaleString('en-NG', { dateStyle:'short', timeStyle:'short' });
+    return `<div style="margin-bottom:12px;display:flex;flex-direction:column;align-items:${isAdmin ? 'flex-end' : 'flex-start'}">
+      <div style="max-width:75%;background:${isAdmin ? '#1A56DB' : '#F1F5F9'};color:${isAdmin ? '#fff' : '#111827'};
+           padding:10px 14px;border-radius:${isAdmin ? '14px 14px 4px 14px' : '14px 14px 14px 4px'};font-size:14px;line-height:1.5">
+        ${escHtml(m.text)}
+      </div>
+      <span style="font-size:11px;color:#9CA3AF;margin-top:3px">${isAdmin ? 'Support Team' : thread.userName} &bull; ${time}</span>
+    </div>`;
+  }).join('');
+
+  view.innerHTML = `
+    <div style="margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #E2E8F0">
+      <strong>${thread.userName}</strong>
+      <span style="color:#6B7280;margin-left:8px;font-size:13px">${thread.userEmail || ''}</span>
+      <span style="margin-left:8px;font-size:12px;background:${thread.status==='open'?'#FEE2E2':'#D1FAE5'};
+           color:${thread.status==='open'?'#DC2626':'#065F46'};padding:2px 8px;border-radius:8px">${thread.status.toUpperCase()}</span>
+    </div>
+    ${msgs || '<p style="color:#9CA3AF">No messages yet.</p>'}`;
+
+  // scroll to bottom
+  view.scrollTop = view.scrollHeight;
+
+  const replyArea = document.getElementById('support-reply-area');
+  if (replyArea) replyArea.style.display = '';
+  document.getElementById('support-reply-text').value = '';
+}
+
+async function sendSupportReply() {
+  if (!_activeThreadId) return;
+  const text = document.getElementById('support-reply-text').value.trim();
+  if (!text) { toast('Please type a reply first', 'error'); return; }
+
+  const r = await api('POST', `/api/admin/support/${_activeThreadId}/reply`, { text });
+  if (r?.ok) {
+    toast('Reply sent');
+    document.getElementById('support-reply-text').value = '';
+    openThread(_activeThreadId);
+    loadSupport();
+  } else {
+    toast(r?.body?.message || 'Failed to send reply', 'error');
+  }
+}
+
+async function resolveThread() {
+  if (!_activeThreadId) return;
+  if (!confirm('Mark this conversation as resolved?')) return;
+  const r = await api('PATCH', `/api/admin/support/${_activeThreadId}/resolve`);
+  if (r?.ok) {
+    toast('Conversation marked as resolved');
+    loadSupport();
+    openThread(_activeThreadId);
+  } else {
+    toast(r?.body?.message || 'Failed', 'error');
+  }
+}
+
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 // ── Revenue ───────────────────────────────────────────────────────────────────
 async function loadRevenue() {
   document.getElementById('revenue-stats-grid').innerHTML = '<div class="spinner"></div>';
@@ -1051,12 +1314,17 @@ async function loadGrowth() {
 
 // ── Geographic ────────────────────────────────────────────────────────────────
 async function loadGeographic() {
-  document.getElementById('geo-tbody').innerHTML = '<tr><td colspan="5"><div class="spinner"></div></td></tr>';
+  document.getElementById('geo-tbody').innerHTML = '<tr><td colspan="6"><div class="spinner"></div></td></tr>';
   const r = await api('GET', '/api/admin/stats/geographic');
   const rows = r?.body?.data?.byRegion || [];
+  const SERVICE_ROLES = ['groomer','trainer','pet_sitter','pet_transport','cremation_service','agro_vet_supplier','insurance_provider'];
   document.getElementById('geo-tbody').innerHTML = rows.length
-    ? rows.map(g => `<tr><td><strong>${g.region}</strong></td><td>${g.vets}</td><td>${g.kennels}</td><td>${g.shops}</td><td>${g.total}</td></tr>`).join('')
-    : '<tr><td colspan="5" class="no-data">No location data</td></tr>';
+    ? rows.map(g => {
+        const br = g.byRole || {};
+        const services = SERVICE_ROLES.reduce((sum, role) => sum + (br[role] || 0), 0);
+        return `<tr><td><strong>${g.region}</strong></td><td>${br.vet||0}</td><td>${br.kennel||0}</td><td>${services}</td><td>${g.shops}</td><td>${g.total}</td></tr>`;
+      }).join('')
+    : '<tr><td colspan="6" class="no-data">No location data</td></tr>';
 }
 
 // ── Verification Analytics ────────────────────────────────────────────────────

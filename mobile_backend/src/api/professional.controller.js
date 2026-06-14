@@ -4,6 +4,10 @@ import cache from '../lib/cache.js';
 import axios from 'axios';
 import logger from '../lib/logger.js';
 import Subscription from '../models/Subscription.js';
+import {
+  sendDocumentSubmissionReceived,
+  sendAdminDocumentReviewAlert,
+} from '../services/email.service.js';
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -112,7 +116,7 @@ async function applyFreemiumGate(req, data) {
 export const onboardProfessional = async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
-    const { name, vcnNumber, role, businessName, address, specialization, phone, email } = req.body;
+    const { name, vcnNumber, role, businessName, address, specialization, phone, email, verificationDocuments } = req.body;
 
     // ── Basic validation ────────────────────────────────────────────────────
     if (!name || !role) {
@@ -214,6 +218,7 @@ export const onboardProfessional = async (req, res) => {
       phone: phone?.trim(),
       email: email?.trim(),
       location, // null if geocoding failed — that's fine
+      ...(verificationDocuments && typeof verificationDocuments === 'object' && { verificationDocuments }),
     });
 
     await professional.save();
@@ -243,10 +248,27 @@ export const onboardProfessional = async (req, res) => {
       geocoded: !!location,
     });
 
-    const PENDING_REVIEW_ROLES = new Set(['vet', 'insurance_provider']);
+    const REQUIRES_ADMIN_REVIEW = new Set(['vet', 'insurance_provider', 'pet_transport', 'cremation_service', 'agro_vet_supplier', 'pet_pharmacy', 'rescue_center']);
+    const needsReview = REQUIRES_ADMIN_REVIEW.has(role);
+
+    // ── Fire-and-forget emails — never block the response ───────────────────
+    const profEmail  = email?.trim() || req.user?.email;
+    const adminEmail = process.env.ADMIN_EMAIL || 'contact@xpressdigitalanddatasolutions.online';
+
+    if (profEmail && needsReview) {
+      sendDocumentSubmissionReceived(name, profEmail, role).catch(() => {});
+    }
+    if (adminEmail && needsReview) {
+      sendAdminDocumentReviewAlert(adminEmail, {
+        name, email: profEmail, role, businessName,
+        vcnNumber: role === 'vet' ? vcnNumber : undefined,
+        verificationDocuments,
+      }).catch(() => {});
+    }
+
     res.status(201).json({
       success: true,
-      message: PENDING_REVIEW_ROLES.has(role)
+      message: needsReview
         ? 'Profile created. Pending admin review — you will be notified once approved.'
         : 'Profile created and listed successfully.',
       data: professional,

@@ -249,8 +249,12 @@ export const getVerificationStats = async (req, res) => {
   try {
     const ago90 = daysAgo(90);
 
-    const [pendingCount, recentReviewed] = await Promise.all([
+    const [pendingVets, pendingInsurance, recentReviewed] = await Promise.all([
+      // Vets awaiting VCN check (via User.vetVerification)
       User.countDocuments({ role: 'vet', 'vetVerification.status': 'pending' }),
+
+      // Insurance providers awaiting admin approval (via Professional.verificationStatus)
+      Professional.countDocuments({ role: 'insurance_provider', verificationStatus: 'pending' }),
 
       User.find({
         role: 'vet',
@@ -262,6 +266,8 @@ export const getVerificationStats = async (req, res) => {
         .limit(50)
         .lean(),
     ]);
+
+    const pendingCount = pendingVets + pendingInsurance;
 
     const approvedCount = recentReviewed.filter(u => u.vetVerification?.status === 'approved').length;
     const rejectedCount = recentReviewed.filter(u => u.vetVerification?.status === 'rejected').length;
@@ -281,6 +287,8 @@ export const getVerificationStats = async (req, res) => {
       success: true,
       data: {
         pendingCount,
+        pendingVets,
+        pendingInsurance,
         approvedCount,
         rejectedCount,
         avgReviewHours: avgReviewHours != null ? Math.round(avgReviewHours) : null,
@@ -380,6 +388,7 @@ export const getContentStats = async (req, res) => {
       topUploaders,
       incompleteProfiles,
       profileViewsTop,
+      roleBreakdown,
     ] = await Promise.all([
       // Total gallery images across all users
       User.aggregate([
@@ -415,6 +424,12 @@ export const getContentStats = async (req, res) => {
         .sort({ profileViews: -1 })
         .limit(10)
         .lean(),
+
+      // Count of professionals per role
+      Professional.aggregate([
+        { $group: { _id: '$role', total: { $sum: 1 }, verified: { $sum: { $cond: ['$isVerified', 1, 0] } } } },
+        { $sort: { total: -1 } },
+      ]),
     ]);
 
     const totalImages    = galleryAgg[0]?.total           || 0;
@@ -428,6 +443,7 @@ export const getContentStats = async (req, res) => {
         topUploaders,
         incompleteProfiles,
         profileViewsTop,
+        roleBreakdown,
       },
     });
   } catch (err) {
@@ -454,15 +470,14 @@ export const getGeographicStats = async (req, res) => {
 
     for (const p of professionals) {
       const region = extractRegion(p.address);
-      if (!regionMap[region]) regionMap[region] = { region, vets: 0, kennels: 0, shops: 0, total: 0 };
-      if (p.role === 'vet')    regionMap[region].vets++;
-      else                     regionMap[region].kennels++;
+      if (!regionMap[region]) regionMap[region] = { region, byRole: {}, shops: 0, total: 0 };
+      regionMap[region].byRole[p.role] = (regionMap[region].byRole[p.role] || 0) + 1;
       regionMap[region].total++;
     }
 
     for (const s of shops) {
       const region = extractRegion(s.address);
-      if (!regionMap[region]) regionMap[region] = { region, vets: 0, kennels: 0, shops: 0, total: 0 };
+      if (!regionMap[region]) regionMap[region] = { region, byRole: {}, shops: 0, total: 0 };
       regionMap[region].shops++;
       regionMap[region].total++;
     }
