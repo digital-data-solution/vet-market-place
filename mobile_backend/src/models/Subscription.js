@@ -42,7 +42,8 @@ const subscriptionSchema = new mongoose.Schema(
     // both check this field first before falling back to createdAt/updatedAt.
     // Without this field declared here, Mongoose silently drops it when saving
     // a new Subscription document, breaking the 30-minute grace window anchor.
-    paymentInitiatedAt: { type: Date },
+    paymentInitiatedAt:      { type: Date },
+    abandonedReminderSentAt: { type: Date, default: null },
   },
   { timestamps: true },
 );

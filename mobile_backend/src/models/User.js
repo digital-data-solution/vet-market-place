@@ -68,6 +68,16 @@ const userSchema = new mongoose.Schema({
   referredBy:             { type: String, default: null },
   referralRewardsEarned:  { type: Number, default: 0 },
   referralRewardApplied:  { type: Boolean, default: false },
+
+  // UTM attribution — captured at first registration / first sync
+  utm: {
+    source:   { type: String, default: null },
+    campaign: { type: String, default: null },
+    medium:   { type: String, default: null },
+  },
+
+  // Re-engagement email gate — tracks when last re-engagement email was sent
+  reEngagementSentAt: { type: Date, default: null },
 }, { timestamps: true });
 
 userSchema.index({ supabaseId: 1 }, { unique: true, sparse: true });

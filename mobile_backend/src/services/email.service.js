@@ -482,6 +482,312 @@ export async function sendSupportMessageAlert(adminEmail, { userName, userEmail,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// RE-ENGAGEMENT — sent to users who haven't logged in for 7 days
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function sendReEngagementEmail(name, email) {
+  const firstName = name?.split(' ')[0] || 'there';
+  const html = layout('We miss you on Xpress Vet 🐾', `
+    <h1>Hey ${firstName}, we miss you! 🐾</h1>
+    <p>It's been a little while since you last visited Xpress Vet. Nigeria's pet care community is growing — here's what you might have missed:</p>
+    <ul style="font-size:15px;color:#475569;line-height:2;padding-left:20px;">
+      <li>New verified vets and kennels listed across Lagos, Abuja, and Port Harcourt</li>
+      <li>Faster GPS search to find care near you in seconds</li>
+      <li>Direct WhatsApp contact for premium members</li>
+    </ul>
+    <div class="highlight">
+      <p>🎯 <strong>Your pets deserve the best care.</strong><br/>
+      Log in now to find trusted professionals in your area.</p>
+    </div>
+    <p style="text-align:center;margin:24px 0">
+      <a href="https://xpressvetmarketplace.com" class="btn">Open Xpress Vet →</a>
+    </p>
+    <p style="color:#94A3B8;font-size:13px">
+      If you no longer want these occasional updates, you can manage your notification preferences in <strong>Profile → Settings</strong>.
+    </p>
+  `);
+  await sendEmail(email, `${firstName}, we miss you on Xpress Vet 🐾`, html);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ABANDONED SUBSCRIPTION — sent 30–90 min after checkout is started but not completed
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function sendAbandonedSubEmail(name, email, plan, amount) {
+  const firstName = name?.split(' ')[0] || 'there';
+  const planLabel = plan === 'pro' ? 'Professional Pro' : plan === 'starter' ? 'Professional Starter' : 'Premium';
+  const html = layout('You left something behind', `
+    <h1>Hey ${firstName} — you left something behind 🛒</h1>
+    <p>You started subscribing to <strong>${planLabel}</strong> on Xpress Vet but didn't quite finish. Your cart is still saved!</p>
+    <div class="highlight">
+      <p>📦 <strong>${planLabel}</strong> — ₦${Number(amount).toLocaleString()}/month<br/>
+      Tap below to complete your subscription in under a minute.</p>
+    </div>
+    <p>With ${planLabel} you get:</p>
+    <ul style="font-size:15px;color:#475569;line-height:2;padding-left:20px;">
+      ${plan === 'user_premium' || plan === 'user_monthly'
+        ? `<li>Full contact details for every vet, kennel &amp; shop</li>
+           <li>GPS search — find care providers near you</li>
+           <li>Exact addresses for every listing</li>`
+        : `<li>Your listing visible to all pet owners in your area</li>
+           <li>Direct calls and messages from premium users</li>
+           ${plan === 'pro' ? '<li>Featured badge + sorted first in search results</li>' : ''}`
+      }
+    </ul>
+    <p style="text-align:center;margin:24px 0">
+      <a href="https://xpressvetmarketplace.com" class="btn">Complete My Subscription →</a>
+    </p>
+    <p style="color:#94A3B8;font-size:13px">
+      If you changed your mind, no worries — your free account is still active and nothing was charged.
+    </p>
+  `);
+  await sendEmail(email, `${firstName}, complete your Xpress Vet subscription`, html);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WEEKLY DIGEST — internal "chief of staff" briefing sent every Monday 7am WAT
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * @param {string} adminEmail
+ * @param {{
+ *   weekLabel: string, narrative: string,
+ *   observations: string[], recommendations: string[],
+ *   newSignups: number, totalUsers: number,
+ *   mrr: number, totalActiveSubs: number,
+ *   newSubsThisWeek: number, cancelledThisWeek: number,
+ *   searchBreakdown: {_id:string,count:number}[],
+ *   contactBreakdown: {_id:string,count:number}[],
+ *   topReferrers: {name:string,referralCode:string,referralRewardsEarned:number}[],
+ *   pendingVerifications: number, conversionRate: number|null, dormantCount: number
+ * }} data
+ */
+export async function sendWeeklyDigestEmail(adminEmail, {
+  weekLabel,
+  narrative,
+  observations = [],
+  recommendations = [],
+  newSignups,
+  totalUsers,
+  mrr,
+  totalActiveSubs,
+  newSubsThisWeek,
+  cancelledThisWeek,
+  searchBreakdown = [],
+  contactBreakdown = [],
+  topReferrers = [],
+  pendingVerifications,
+  conversionRate,
+  dormantCount,
+}) {
+  const cancelled_color = cancelledThisWeek > 3 ? '#F87171' : '#94A3B8';
+
+  const kpiCell = (value, label, color) => `
+    <td width="33%" style="padding:4px">
+      <div style="background:#0F172A;border-radius:10px;padding:16px 10px;text-align:center">
+        <div style="font-size:22px;font-weight:800;color:${color};line-height:1">${value}</div>
+        <div style="font-size:10px;color:#64748B;margin-top:6px;text-transform:uppercase;letter-spacing:.5px">${label}</div>
+      </div>
+    </td>`;
+
+  const observationItems = observations.map(o =>
+    `<li style="margin-bottom:10px;line-height:1.65;color:#374151;font-size:14px">${o}</li>`
+  ).join('');
+
+  const recommendationItems = recommendations.map(r =>
+    `<li style="margin-bottom:10px;line-height:1.65;color:#1E40AF;font-size:14px">${r}</li>`
+  ).join('');
+
+  const searchRows = searchBreakdown.length
+    ? searchBreakdown.map(r => `
+        <tr>
+          <td style="padding:6px 8px;border-bottom:1px solid #F1F5F9;font-size:13px;text-transform:capitalize;color:#374151">
+            ${(r._id || '—').replace(/_/g, ' ')}
+          </td>
+          <td style="padding:6px 8px;border-bottom:1px solid #F1F5F9;text-align:right;font-size:13px;font-weight:700;color:#2563EB">
+            ${r.count}
+          </td>
+        </tr>`).join('')
+    : `<tr><td colspan="2" style="padding:10px;color:#94A3B8;font-size:12px;font-style:italic;text-align:center">No search data yet</td></tr>`;
+
+  const contactRows = contactBreakdown.length
+    ? contactBreakdown.map(r => `
+        <tr>
+          <td style="padding:6px 8px;border-bottom:1px solid #F1F5F9;font-size:13px;text-transform:capitalize;color:#374151">
+            ${r._id || '—'}
+          </td>
+          <td style="padding:6px 8px;border-bottom:1px solid #F1F5F9;text-align:right;font-size:13px;font-weight:700;color:#059669">
+            ${r.count}
+          </td>
+        </tr>`).join('')
+    : `<tr><td colspan="2" style="padding:10px;color:#94A3B8;font-size:12px;font-style:italic;text-align:center">No contact taps yet</td></tr>`;
+
+  const conversionBadge = conversionRate !== null
+    ? `<div style="margin-top:10px;display:inline-block;background:#F0FDF4;border:1px solid #86EFAC;border-radius:6px;padding:3px 10px;font-size:12px;color:#15803D;font-weight:700">
+        ${conversionRate}% conversion rate
+       </div>`
+    : '';
+
+  const referrerRows = topReferrers.length
+    ? topReferrers.map((r, i) => `
+        <tr>
+          <td style="padding:6px 8px;border-bottom:1px solid #F1F5F9;font-size:13px;color:#374151">#${i + 1} ${r.name || '—'}</td>
+          <td style="padding:6px 8px;border-bottom:1px solid #F1F5F9;text-align:right;font-size:13px;font-weight:700;color:#F59E0B">
+            ₦${Number(r.referralRewardsEarned).toLocaleString()}
+          </td>
+        </tr>`).join('')
+    : `<tr><td colspan="2" style="padding:10px;color:#94A3B8;font-size:12px;font-style:italic;text-align:center">No referral earnings yet</td></tr>`;
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Xpress Vet Weekly Briefing</title>
+</head>
+<body style="margin:0;padding:0;background:#0F172A;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr><td align="center" style="padding:24px 16px;">
+<table width="620" cellpadding="0" cellspacing="0" border="0" style="max-width:620px">
+
+  <!-- Header -->
+  <tr>
+    <td style="background:#1E293B;border-radius:12px 12px 0 0;padding:24px 28px;border-bottom:1px solid #334155">
+      <div style="font-size:12px;color:#64748B;font-weight:600;letter-spacing:.6px;text-transform:uppercase">Weekly Briefing</div>
+      <div style="font-size:24px;font-weight:800;color:#F1F5F9;margin:4px 0 2px">Xpress Vet 🐾</div>
+      <div style="font-size:13px;color:#64748B">${weekLabel}</div>
+    </td>
+  </tr>
+
+  <!-- KPI grid row 1 -->
+  <tr>
+    <td style="background:#1E293B;padding:16px 24px 6px">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          ${kpiCell(newSignups, 'New Users', '#38BDF8')}
+          ${kpiCell('₦' + mrr.toLocaleString(), 'Est. MRR', '#34D399')}
+          ${kpiCell(totalActiveSubs, 'Active Subs', '#A78BFA')}
+        </tr>
+      </table>
+    </td>
+  </tr>
+
+  <!-- KPI grid row 2 -->
+  <tr>
+    <td style="background:#1E293B;padding:6px 24px 20px">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          ${kpiCell(newSubsThisWeek, 'New Subs', '#F59E0B')}
+          ${kpiCell(cancelledThisWeek, 'Cancellations', cancelled_color)}
+          ${kpiCell(pendingVerifications, 'Pending Vrf.', '#CBD5E1')}
+        </tr>
+      </table>
+    </td>
+  </tr>
+
+  <!-- White card -->
+  <tr>
+    <td style="background:#FFFFFF;padding:28px;border-radius:0 0 12px 12px">
+
+      <!-- Narrative -->
+      <div style="background:#F8FAFC;border-radius:10px;padding:16px 18px;margin-bottom:24px">
+        <p style="font-size:14px;color:#374151;line-height:1.7;margin:0">${narrative}</p>
+      </div>
+
+      <!-- Observations -->
+      ${observations.length ? `
+      <div style="margin-bottom:24px">
+        <div style="font-size:13px;font-weight:700;color:#0F172A;text-transform:uppercase;letter-spacing:.5px;
+                    padding-bottom:8px;border-bottom:2px solid #F1F5F9;margin-bottom:12px">
+          What happened this week
+        </div>
+        <ul style="padding-left:18px;margin:0">
+          ${observationItems}
+        </ul>
+      </div>` : ''}
+
+      <!-- Recommendations -->
+      ${recommendations.length ? `
+      <div style="background:#EFF6FF;border-left:4px solid #2563EB;border-radius:0 10px 10px 0;
+                  padding:16px 20px;margin-bottom:24px">
+        <div style="font-size:12px;font-weight:700;color:#1E40AF;text-transform:uppercase;
+                    letter-spacing:.5px;margin-bottom:10px">
+          Recommended Actions
+        </div>
+        <ul style="padding-left:18px;margin:0">
+          ${recommendationItems}
+        </ul>
+      </div>` : ''}
+
+      <!-- Data tables -->
+      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:24px">
+        <tr valign="top">
+
+          <!-- Top Searches -->
+          <td width="32%" style="padding-right:8px">
+            <div style="font-size:12px;font-weight:700;color:#374151;text-transform:uppercase;
+                        letter-spacing:.4px;margin-bottom:8px">Top Searches</div>
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tbody>${searchRows}</tbody>
+            </table>
+          </td>
+
+          <td width="4%"></td>
+
+          <!-- Contact Methods -->
+          <td width="32%" style="padding-right:8px">
+            <div style="font-size:12px;font-weight:700;color:#374151;text-transform:uppercase;
+                        letter-spacing:.4px;margin-bottom:8px">Contact Taps</div>
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tbody>${contactRows}</tbody>
+            </table>
+            ${conversionBadge}
+          </td>
+
+          <td width="4%"></td>
+
+          <!-- Top Referrers -->
+          <td width="28%">
+            <div style="font-size:12px;font-weight:700;color:#374151;text-transform:uppercase;
+                        letter-spacing:.4px;margin-bottom:8px">Top Referrers</div>
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tbody>${referrerRows}</tbody>
+            </table>
+          </td>
+
+        </tr>
+      </table>
+
+      <!-- CTA -->
+      <div style="text-align:center;padding-top:16px;border-top:1px solid #F1F5F9">
+        <a href="https://vet-market-place-jsj5.onrender.com/admin"
+           style="display:inline-block;background:#2563EB;color:#ffffff;text-decoration:none;
+                  font-weight:700;font-size:14px;padding:12px 28px;border-radius:10px">
+          Open Admin Dashboard →
+        </a>
+        <p style="font-size:11px;color:#94A3B8;margin:12px 0 0;line-height:1.6">
+          This briefing is sent every Monday at 7:00 AM WAT.<br/>
+          Platform total: ${totalUsers.toLocaleString()} users · ${dormantCount} inactive 30+ days.
+        </p>
+      </div>
+
+    </td>
+  </tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>`;
+
+  await sendEmail(
+    adminEmail,
+    `Xpress Vet Weekly — ${newSignups} new users · ₦${mrr.toLocaleString()} MRR · ${cancelledThisWeek} cancellations`,
+    html,
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // UNANSWERED SUPPORT ALERT — cron reminder for threads with no admin reply
 // ─────────────────────────────────────────────────────────────────────────────
 

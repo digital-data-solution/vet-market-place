@@ -1,5 +1,6 @@
 import SupportThread from '../models/SupportThread.js';
 import { sendSupportMessageAlert } from '../services/email.service.js';
+import { getBotReply } from '../lib/supportBot.js';
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'contact@xpressdigitalanddatasolutions.online';
 
@@ -20,27 +21,40 @@ export const sendSupportMessage = async (req, res) => {
     const userRole  = req.user.role  || 'pet_owner';
 
     const now = new Date();
+    const botReply = getBotReply(text.trim());
+
+    // Build update: save user message + bot reply (if any) in a single write
+    const pushMessages = [{ text: text.trim(), senderRole: 'user' }];
+    if (botReply) pushMessages.push({ text: botReply, senderRole: 'bot' });
 
     const thread = await SupportThread.findOneAndUpdate(
       { userId },
       {
-        $set:   { userName, userEmail, userRole, lastMessageAt: now },
-        $push:  { messages: { text: text.trim(), senderRole: 'user' } },
+        $set: {
+          userName,
+          userEmail,
+          userRole,
+          lastMessageAt: now,
+          needsHuman: !botReply,
+        },
+        $push:        { messages: { $each: pushMessages } },
         $setOnInsert: { status: 'open' },
       },
       { upsert: true, new: true },
     );
 
-    // Email admin immediately — fire and forget
-    sendSupportMessageAlert(ADMIN_EMAIL, {
-      userName,
-      userEmail,
-      userRole,
-      text: text.trim(),
-      threadId: thread._id.toString(),
-    }).catch(() => {});
+    // Only alert admin when the bot couldn't handle it
+    if (!botReply) {
+      sendSupportMessageAlert(ADMIN_EMAIL, {
+        userName,
+        userEmail,
+        userRole,
+        text: text.trim(),
+        threadId: thread._id.toString(),
+      }).catch(() => {});
+    }
 
-    return res.status(201).json({ success: true, data: thread });
+    return res.status(201).json({ success: true, data: thread, botReplied: !!botReply });
   } catch (err) {
     console.error('sendSupportMessage error:', err);
     return res.status(500).json({ success: false, message: 'Failed to send message.' });

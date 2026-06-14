@@ -15,6 +15,9 @@ const { connectRedis }                       = await import('./lib/redis.js');
 const { default: startLicenseCheckJob }      = await import('./jobs/licenseCron.js');
 const { default: startSubscriptionJobs }     = await import('./jobs/subscriptionReminders.js');
 const { default: startProfessionalJobs }     = await import('./jobs/professionalJobs.js');
+const { default: startWeeklyDigestJob }      = await import('./jobs/weeklyDigest.js');
+const { default: startReEngagementJob }      = await import('./jobs/reEngagement.js');
+const { default: startAbandonedSubJob }      = await import('./jobs/abandonedSub.js');
 
 // Start services
 await connectDB();
@@ -22,6 +25,9 @@ connectRedis();
 startLicenseCheckJob();
 startSubscriptionJobs();
 startProfessionalJobs();
+startWeeklyDigestJob();
+startReEngagementJob();
+startAbandonedSubJob();
 
 const PORT = process.env.PORT || 5000;
 

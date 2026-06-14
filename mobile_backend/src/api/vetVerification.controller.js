@@ -4,6 +4,7 @@ import cache from '../lib/cache.js';
 import logger from '../lib/logger.js';
 import { applyReferralReward } from '../lib/referralHelper.js';
 import { sendVerificationApproved, sendVerificationRejected } from '../services/email.service.js';
+import { logActivity } from '../lib/activityLogger.js';
 
 // ============================================================================
 // VET VCN VERIFICATION WORKFLOW
@@ -85,6 +86,7 @@ export const submitVCN = async (req, res) => {
     );
 
     logger.info('VCN submitted for review', { userId, vcn: vcn.trim() });
+    logActivity(userId, 'vet', 'vet.verification.submitted', { vcn: vcn.trim() }, req);
 
     res.status(200).json({
       success: true,
@@ -239,6 +241,7 @@ export const reviewVet = async (req, res) => {
         vcnNumber: user.vetDetails?.vcnNumber,
         adminId,
       });
+      logActivity(user._id, 'vet', 'vet.verification.approved', { vcnNumber: user.vetDetails?.vcnNumber, adminId }, req);
 
       res.json({
         success: true,
@@ -279,6 +282,7 @@ export const reviewVet = async (req, res) => {
         adminId,
         reason: adminNotes,
       });
+      logActivity(user._id, 'vet', 'vet.verification.rejected', { vcnNumber: user.vetDetails?.vcnNumber, adminId }, req);
 
       res.json({
         success: true,

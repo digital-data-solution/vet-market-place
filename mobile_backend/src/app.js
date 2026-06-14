@@ -21,6 +21,8 @@ import messagesRoutes        from './routes/messages.routes.js';
 import adminProfessionalRoutes from './routes/admin.professional.js';
 import reviewRoutes           from './routes/review.routes.js';
 import supportRoutes          from './routes/support.routes.js';
+import trackRoutes            from './routes/track.routes.js';
+import upsellRoutes           from './routes/upsell.routes.js';
 
 // Webhook handler — imported directly so it can receive raw body
 import { handlePaystackWebhook } from './api/subscription.controller.js';
@@ -35,6 +37,8 @@ import {
   getGeographicStats,
   getMessagingStats,
   getSystemHealth,
+  getActivityStats,
+  getUtmStats,
   exportUsers,
   exportSubscriptions,
   exportProfessionals,
@@ -331,6 +335,8 @@ app.get('/api/admin/stats/content',      adminProtect, getContentStats);
 app.get('/api/admin/stats/geographic',   adminProtect, getGeographicStats);
 app.get('/api/admin/stats/messaging',    adminProtect, getMessagingStats);
 app.get('/api/admin/stats/system',       adminProtect, getSystemHealth);
+app.get('/api/admin/stats/activity',     adminProtect, getActivityStats);
+app.get('/api/admin/stats/utm',          adminProtect, getUtmStats);
 app.get('/api/admin/export/users',          adminProtect, exportUsers);
 app.get('/api/admin/export/subscriptions',  adminProtect, exportSubscriptions);
 app.get('/api/admin/export/professionals',  adminProtect, exportProfessionals);
@@ -347,6 +353,8 @@ app.use('/api/upload',              uploadRoutes);
 app.use('/api/messages',            messageLimiter, messagesRoutes);
 app.use('/api/v1/reviews',          reviewRoutes);
 app.use('/api/support',             supportRoutes);
+app.use('/api/v1/track',            trackRoutes);
+app.use('/api/v1/upsell',           upsellRoutes);
 
 // ─── Global Error Handler ─────────────────────────────────────────────────────
 app.use((err, req, res, next) => {

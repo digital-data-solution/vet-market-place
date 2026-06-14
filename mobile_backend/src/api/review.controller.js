@@ -16,6 +16,7 @@ import Shop                          from '../models/Shop.js';
 import User                          from '../models/User.js';
 import logger                        from '../lib/logger.js';
 import { hasContactedProfessional }  from '../lib/reviewEligibility.js';
+import { logActivity }               from '../lib/activityLogger.js';
 
 const { Types } = mongoose;
 
@@ -155,6 +156,12 @@ export const createOrUpdateReview = async (req, res) => {
       reviewerId: req.user._id,
       rating:     ratingNum,
     });
+
+    logActivity(req.user._id, req.user.role, 'review.submitted', {
+      targetType,
+      targetId,
+      rating: ratingNum,
+    }, req);
 
     return res.status(200).json({ success: true, data: review });
   } catch (err) {

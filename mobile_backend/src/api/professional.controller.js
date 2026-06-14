@@ -8,6 +8,7 @@ import {
   sendDocumentSubmissionReceived,
   sendAdminDocumentReviewAlert,
 } from '../services/email.service.js';
+import { logActivity } from '../lib/activityLogger.js';
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -247,6 +248,11 @@ export const onboardProfessional = async (req, res) => {
       role,
       geocoded: !!location,
     });
+    logActivity(userId, req.user.role, 'professional.onboarded', {
+      professionalId: professional._id,
+      role,
+      needsReview,
+    }, req);
 
     const REQUIRES_ADMIN_REVIEW = new Set(['vet', 'insurance_provider', 'pet_transport', 'cremation_service', 'agro_vet_supplier', 'pet_pharmacy', 'rescue_center']);
     const needsReview = REQUIRES_ADMIN_REVIEW.has(role);
@@ -447,9 +453,14 @@ export const getProfessional = async (req, res) => {
     const requestingUserId = req.user?._id?.toString() || req.user?.id?.toString();
     const profileUserId = professional.userId?._id?.toString();
 
-    // Count views for non-owner visitors (fire-and-forget)
+    // Count views and log activity for non-owner visitors (fire-and-forget)
     if (requestingUserId !== profileUserId) {
       Professional.findByIdAndUpdate(id, { $inc: { profileViews: 1 } }).catch(() => {});
+      logActivity(req.user?._id || req.user?.id, req.user?.role, 'profile.view', {
+        targetId:   id,
+        targetType: 'professional',
+        targetRole: professional.role,
+      }, req);
     }
 
     if (!professional.isVerified && requestingUserId !== profileUserId) {
@@ -602,6 +613,14 @@ export const listProfessionals = async (req, res) => {
 
     const { data, isPreview, usedFreeSearch } = await applyFreemiumGate(req, result.professionals);
 
+    logActivity(req.user?._id || req.user?.id, req.user?.role, 'search.list', {
+      role:      role || null,
+      search:    search || null,
+      page:      parseInt(page),
+      results:   data.length,
+      isPreview,
+    }, req);
+
     res.json({
       success: true,
       count: data.length,
@@ -707,6 +726,14 @@ export const getNearbyProfessionals = async (req, res) => {
       lng, lat, distance, role, search,
       count: data.length,
     });
+
+    logActivity(req.user?._id || req.user?.id, req.user?.role, 'search.nearby', {
+      role:        role || null,
+      search:      search || null,
+      distanceKm:  parseFloat(distance),
+      results:     data.length,
+      isPreview,
+    }, req);
 
     res.json({
       success: true,

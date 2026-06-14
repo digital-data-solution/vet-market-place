@@ -23,6 +23,7 @@ import User         from '../models/User.js';
 import Professional from '../models/Professional.js';
 import Subscription from '../models/Subscription.js';
 import Shop         from '../models/Shop.js';
+import ActivityLog  from '../models/ActivityLog.js';
 import cache        from '../lib/cache.js';
 import logger       from '../lib/logger.js';
 import { supabaseAdmin } from '../lib/supabase.js';
@@ -642,6 +643,146 @@ export const exportSubscriptions = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Failed to export subscriptions.' });
   }
 };
+
+// ─── Activity Feed & Search Analytics ────────────────────────────────────────
+
+export const getActivityStats = async (req, res) => {
+  try {
+    const now = new Date();
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
+    const ago7  = daysAgo(7);
+    const ago30 = daysAgo(30);
+
+    const [
+      recentFeed,
+      todayCounts,
+      searchBreakdown,
+      contactTapBreakdown,
+      subFunnel,
+    ] = await Promise.all([
+      // Last 50 events for the live feed, newest first
+      ActivityLog.find()
+        .sort({ timestamp: -1 })
+        .limit(50)
+        .populate('user', 'name email role')
+        .lean(),
+
+      // Today's event counts grouped by action
+      ActivityLog.aggregate([
+        { $match: { timestamp: { $gte: todayStart } } },
+        { $group: { _id: '$action', count: { $sum: 1 } } },
+      ]),
+
+      // Top searched roles in the last 7 days
+      ActivityLog.aggregate([
+        {
+          $match: {
+            action:           { $in: ['search.list', 'search.nearby'] },
+            timestamp:        { $gte: ago7 },
+            'metadata.role':  { $ne: null, $exists: true },
+          },
+        },
+        { $group: { _id: '$metadata.role', count: { $sum: 1 } } },
+        { $sort:  { count: -1 } },
+        { $limit: 8 },
+      ]),
+
+      // Contact tap breakdown by method (phone/whatsapp/email) in last 7 days
+      ActivityLog.aggregate([
+        { $match: { action: 'contact.tapped', timestamp: { $gte: ago7 } } },
+        { $group: { _id: '$metadata.method', count: { $sum: 1 } } },
+        { $sort:  { count: -1 } },
+      ]),
+
+      // Subscription funnel: initiated vs activated in last 30 days
+      ActivityLog.aggregate([
+        {
+          $match: {
+            action:    { $in: ['subscription.initiated', 'subscription.activated'] },
+            timestamp: { $gte: ago30 },
+          },
+        },
+        { $group: { _id: '$action', count: { $sum: 1 } } },
+      ]),
+    ]);
+
+    // Flatten today's counts into a lookup map
+    const todayMap = {};
+    for (const t of todayCounts) todayMap[t._id] = t.count;
+
+    // Subscription funnel totals
+    const funnel = { initiated: 0, activated: 0 };
+    for (const f of subFunnel) {
+      if (f._id === 'subscription.initiated') funnel.initiated = f.count;
+      if (f._id === 'subscription.activated') funnel.activated  = f.count;
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        recentFeed,
+        todaySignups:      todayMap['user.register']  || 0,
+        todayLogins:       todayMap['user.login']     || 0,
+        todaySearches:     (todayMap['search.list'] || 0) + (todayMap['search.nearby'] || 0),
+        todayMessages:     todayMap['message.sent']   || 0,
+        todayContactTaps:  todayMap['contact.tapped'] || 0,
+        searchBreakdown,
+        contactTapBreakdown,
+        subFunnel: funnel,
+      },
+    });
+  } catch (err) {
+    logger.error('getActivityStats error', { error: err.message });
+    return res.status(500).json({ success: false, message: 'Failed to fetch activity stats.' });
+  }
+};
+
+// ─── UTM Attribution ─────────────────────────────────────────────────────────
+
+export const getUtmStats = async (req, res) => {
+  try {
+    const [bySource, byCampaign, byMedium, utmCount, total] = await Promise.all([
+      User.aggregate([
+        { $match: { 'utm.source': { $ne: null } } },
+        { $group: { _id: '$utm.source', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 10 },
+      ]),
+      User.aggregate([
+        { $match: { 'utm.campaign': { $ne: null } } },
+        { $group: { _id: '$utm.campaign', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 10 },
+      ]),
+      User.aggregate([
+        { $match: { 'utm.medium': { $ne: null } } },
+        { $group: { _id: '$utm.medium', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 10 },
+      ]),
+      User.countDocuments({ 'utm.source': { $ne: null } }),
+      User.countDocuments({ role: { $ne: 'admin' } }),
+    ]);
+
+    return res.json({
+      success: true,
+      data: {
+        utmCount,
+        total,
+        attributedPct: total > 0 ? Math.round((utmCount / total) * 100) : 0,
+        bySource,
+        byCampaign,
+        byMedium,
+      },
+    });
+  } catch (err) {
+    logger.error('getUtmStats error', { error: err.message });
+    return res.status(500).json({ success: false, message: 'Failed to fetch UTM stats.' });
+  }
+};
+
+// ─── CSV Exports ──────────────────────────────────────────────────────────────
 
 export const exportProfessionals = async (req, res) => {
   try {

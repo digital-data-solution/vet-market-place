@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 const messageSchema = new mongoose.Schema(
   {
     text:       { type: String, required: true, trim: true, maxlength: 2000 },
-    senderRole: { type: String, enum: ['user', 'admin'], required: true },
+    senderRole: { type: String, enum: ['user', 'admin', 'bot'], required: true },
   },
   { timestamps: true },
 );
@@ -24,7 +24,8 @@ const supportThreadSchema = new mongoose.Schema(
     messages: [messageSchema],
 
     lastMessageAt:   { type: Date },
-    adminNotifiedAt: { type: Date }, // last time admin email was sent for this thread
+    adminNotifiedAt: { type: Date },
+    needsHuman:      { type: Boolean, default: false },
   },
   { timestamps: true },
 );

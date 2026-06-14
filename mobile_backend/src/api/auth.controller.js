@@ -2,9 +2,11 @@ import User from '../models/User.js';
 import logger from '../lib/logger.js';
 import { supabaseAdmin, verifySupabaseToken } from '../lib/supabase.js';
 import { sendWelcomeEmail } from '../services/email.service.js';
+import { logActivity } from '../lib/activityLogger.js';
 
 export const register = async (req, res) => {
-  const { name, email, password, role, location, vetDetails, kennelDetails, vcnNumber, cacNumber, referralCode } = req.body;
+  const { name, email, password, role, location, vetDetails, kennelDetails, vcnNumber, cacNumber, referralCode,
+          utmSource, utmCampaign, utmMedium } = req.body;
 
   try {
     if (!email || !password || !name) {
@@ -53,10 +55,23 @@ export const register = async (req, res) => {
       if (referrer) user.referredBy = referralCode.trim().toUpperCase();
     }
 
+    if (utmSource || utmCampaign || utmMedium) {
+      user.utm = {
+        source:   utmSource   || null,
+        campaign: utmCampaign || null,
+        medium:   utmMedium   || null,
+      };
+    }
+
     await user.save();
 
     // Fire-and-forget — never block the response on email delivery
     sendWelcomeEmail(name, email).catch(() => {});
+    logActivity(user._id, user.role, 'user.register', {
+      email,
+      role:       user.role,
+      referredBy: user.referredBy || null,
+    }, req);
 
     logger.info('User registered', { userId: user._id, email });
     return res.status(201).json({
@@ -92,7 +107,7 @@ export const syncUser = async (req, res) => {
     const isVerified = !!supabaseUser.email_confirmed_at;
 
     // Validate referral code if provided — only applied on first sync (new users)
-    const { referralCode } = req.body;
+    const { referralCode, utmSource, utmCampaign, utmMedium } = req.body;
     let referredBy = null;
     if (referralCode) {
       const referrer = await User.findOne({ referralCode: referralCode.trim().toUpperCase() }).select('_id').lean();
@@ -113,11 +128,19 @@ export const syncUser = async (req, res) => {
           password:     'supabase_managed',
           referralCode: newCode,
           ...(referredBy && { referredBy }),
+          ...((utmSource || utmCampaign || utmMedium) && {
+            utm: { source: utmSource || null, campaign: utmCampaign || null, medium: utmMedium || null },
+          }),
         },
         $set: { isVerified, lastLoginAt: new Date() },
       },
       { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true },
     );
+
+    logActivity(user._id, user.role, 'user.login', {
+      email,
+      isVerified,
+    }, req);
 
     return res.json({ message: 'User synced.', userId: user._id });
   } catch (error) {

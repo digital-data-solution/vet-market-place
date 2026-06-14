@@ -3,6 +3,7 @@ import { protect }               from '../middlewares/authMiddleware.js';
 import { enforceSubscription }   from '../middlewares/subscriptionMiddleware.js';
 import { supabaseAdmin }         from '../lib/supabase.js';
 import logger                    from '../lib/logger.js';
+import { logActivity }           from '../lib/activityLogger.js';
 
 const router = express.Router();
 
@@ -48,6 +49,10 @@ router.post('/send', protect, enforceSubscription, async (req, res) => {
       logger.error('Send message Supabase error', { error: error.message, fromUserId, toUserId });
       return res.status(500).json({ success: false, message: 'Failed to send message.' });
     }
+
+    logActivity(req.user._id || req.user.id, req.user.role, 'message.sent', {
+      toSupabaseId: toUserId,
+    }, req);
 
     return res.status(201).json({ success: true, data });
   } catch (error) {
