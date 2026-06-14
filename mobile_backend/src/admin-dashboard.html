@@ -232,6 +232,9 @@
       <div class="nav-item" onclick="showSection('referrals')" id="nav-referrals">
         <span class="nav-icon">🎁</span> Referrals
       </div>
+      <div class="nav-item" onclick="showSection('utm')" id="nav-utm">
+        <span class="nav-icon">🔗</span> UTM Attribution
+      </div>
       <div class="nav-item" onclick="showSection('content')" id="nav-content">
         <span class="nav-icon">🖼️</span> Content
       </div>
@@ -518,6 +521,38 @@
         <div class="tbl-wrap">
           <table><thead><tr><th>Name</th><th>Email</th><th>Code</th><th>Rewards Earned (months)</th></tr></thead>
           <tbody id="ref-top-tbody"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── UTM Attribution ──────────────────────────────── -->
+    <div id="section-utm" class="section">
+      <div class="topbar">
+        <h2>UTM Attribution</h2>
+        <button class="btn btn-ghost btn-sm" onclick="loadUtmStats()">↻ Refresh</button>
+      </div>
+      <div id="utm-stats-grid" class="stats-grid"><div class="spinner"></div></div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-bottom:24px">
+        <div class="card">
+          <div class="card-head"><h3>By Source</h3></div>
+          <div class="tbl-wrap">
+            <table><thead><tr><th>Source</th><th>Users</th></tr></thead>
+            <tbody id="utm-source-tbody"></tbody></table>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>By Campaign</h3></div>
+          <div class="tbl-wrap">
+            <table><thead><tr><th>Campaign</th><th>Users</th></tr></thead>
+            <tbody id="utm-campaign-tbody"></tbody></table>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h3>By Medium</h3></div>
+          <div class="tbl-wrap">
+            <table><thead><tr><th>Medium</th><th>Users</th></tr></thead>
+            <tbody id="utm-medium-tbody"></tbody></table>
+          </div>
         </div>
       </div>
     </div>
@@ -851,7 +886,7 @@ function showSection(name) {
     support: loadSupport,
     activity: loadActivity,
     revenue: loadRevenue, growth: loadGrowth, geographic: loadGeographic,
-    verifstats: loadVerifStats, referrals: loadReferrals, content: loadContent,
+    verifstats: loadVerifStats, referrals: loadReferrals, utm: loadUtmStats, content: loadContent,
     messaging: loadMessaging, system: loadSystem,
     exports: () => {},
   };
@@ -1443,6 +1478,42 @@ async function loadReferrals() {
   document.getElementById('ref-top-tbody').innerHTML = (d.topReferrers||[]).length
     ? (d.topReferrers||[]).map(u => `<tr><td><strong>${u.name||'—'}</strong></td><td><small>${u.email||'—'}</small></td><td><code style="background:#F1F5F9;padding:2px 6px;border-radius:4px;font-size:12px">${u.referralCode||'—'}</code></td><td>${u.referralRewardsEarned||0} month(s)</td></tr>`).join('')
     : '<tr><td colspan="4" class="no-data">No referral rewards yet</td></tr>';
+}
+
+// ── UTM Attribution ───────────────────────────────────────────────────────────
+async function loadUtmStats() {
+  document.getElementById('utm-stats-grid').innerHTML        = '<div class="spinner"></div>';
+  document.getElementById('utm-source-tbody').innerHTML      = '<tr><td colspan="2"><div class="spinner"></div></td></tr>';
+  document.getElementById('utm-campaign-tbody').innerHTML    = '<tr><td colspan="2"><div class="spinner"></div></td></tr>';
+  document.getElementById('utm-medium-tbody').innerHTML      = '<tr><td colspan="2"><div class="spinner"></div></td></tr>';
+
+  const r = await api('GET', '/api/admin/stats/utm');
+  const d = r?.body?.data || {};
+
+  document.getElementById('utm-stats-grid').innerHTML = `
+    <div class="stat-card">
+      <div class="stat-label">Users with UTM</div>
+      <div class="stat-value">${d.utmCount||0}</div>
+      <div class="stat-sub">of ${d.total||0} total users</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Attribution Rate</div>
+      <div class="stat-value" style="color:#10B981">${d.attributedPct||0}%</div>
+      <div class="stat-sub">signups with source tracking</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Unique Sources</div>
+      <div class="stat-value">${(d.bySource||[]).length}</div>
+    </div>
+  `;
+
+  const renderRows = (items, key) => items.length
+    ? items.map(i => `<tr><td><strong>${i[key]||'(none)'}</strong></td><td>${i.count}</td></tr>`).join('')
+    : '<tr><td colspan="2" class="no-data">No data yet</td></tr>';
+
+  document.getElementById('utm-source-tbody').innerHTML   = renderRows(d.bySource   || [], 'source');
+  document.getElementById('utm-campaign-tbody').innerHTML = renderRows(d.byCampaign || [], 'campaign');
+  document.getElementById('utm-medium-tbody').innerHTML   = renderRows(d.byMedium   || [], 'medium');
 }
 
 // ── Content ───────────────────────────────────────────────────────────────────
