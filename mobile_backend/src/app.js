@@ -19,17 +19,37 @@ import subscriptionRoutes    from './routes/subscription.routes.js';
 import uploadRoutes          from './routes/uploadRoutes.js';
 import messagesRoutes        from './routes/messages.routes.js';
 import adminProfessionalRoutes from './routes/admin.professional.js';
+import reviewRoutes           from './routes/review.routes.js';
+import supportRoutes          from './routes/support.routes.js';
+import trackRoutes            from './routes/track.routes.js';
+import upsellRoutes           from './routes/upsell.routes.js';
 
 // Webhook handler — imported directly so it can receive raw body
 import { handlePaystackWebhook } from './api/subscription.controller.js';
 import { listPendingVets, reviewVet }                  from './api/vetVerification.controller.js';
 import { adminProtect }                                from './middlewares/adminAuthMiddleware.js';
+import {
+  getRevenueStats,
+  getGrowthStats,
+  getVerificationStats,
+  getReferralStats,
+  getContentStats,
+  getGeographicStats,
+  getMessagingStats,
+  getSystemHealth,
+  getActivityStats,
+  getUtmStats,
+  exportUsers,
+  exportSubscriptions,
+  exportProfessionals,
+} from './api/admin.stats.controller.js';
 
 // Models used in admin routes
 import Professional  from './models/Professional.js';
 import User          from './models/User.js';
 import Shop          from './models/Shop.js';
 import Subscription  from './models/Subscription.js';
+import SupportThread from './models/SupportThread.js';
 
 const app = express();
 
@@ -119,17 +139,25 @@ app.get('/admin', (_req, res) => res.sendFile(path.join(__dirname, 'admin-dashbo
 // Stats
 app.get('/api/admin/stats/professionals', adminProtect, async (req, res) => {
   try {
-    const [totalVets, pendingVets, totalKennels, pendingKennels] = await Promise.all([
-      Professional.countDocuments({ role: 'vet' }),
-      Professional.countDocuments({ role: 'vet',    verificationStatus: 'pending' }),
-      Professional.countDocuments({ role: 'kennel' }),
-      Professional.countDocuments({ role: 'kennel', verificationStatus: 'pending' }),
+    const [roleBreakdown, pendingVets, pendingInsurance] = await Promise.all([
+      Professional.aggregate([
+        { $group: { _id: '$role', total: { $sum: 1 }, verified: { $sum: { $cond: ['$isVerified', 1, 0] } } } },
+        { $sort: { total: -1 } },
+      ]),
+      Professional.countDocuments({ role: 'vet',                verificationStatus: 'pending' }),
+      Professional.countDocuments({ role: 'insurance_provider', verificationStatus: 'pending' }),
     ]);
+
+    const byRole = {};
+    for (const r of roleBreakdown) byRole[r._id] = r;
+
     return res.json({
       success: true,
       data: {
-        vets:    { total: totalVets,    pending: pendingVets    },
-        kennels: { total: totalKennels, pending: pendingKennels },
+        roleBreakdown,
+        vets:               { total: byRole.vet?.total || 0,    pending: pendingVets    },
+        kennels:            { total: byRole.kennel?.total || 0  },
+        insurance_providers:{ total: byRole.insurance_provider?.total || 0, pending: pendingInsurance },
       },
     });
   } catch (error) {
@@ -242,6 +270,77 @@ app.delete('/api/admin/subscriptions/:id', adminProtect, async (req, res) => {
   }
 });
 
+// ─── Admin support routes ─────────────────────────────────────────────────────
+
+// List all support threads (sorted by latest message)
+app.get('/api/admin/support', adminProtect, async (req, res) => {
+  try {
+    const { status, limit = 50, page = 1 } = req.query;
+    const filter = {};
+    if (status && ['open', 'resolved'].includes(status)) filter.status = status;
+    const [data, total] = await Promise.all([
+      SupportThread.find(filter).sort({ lastMessageAt: -1 })
+        .skip((+page - 1) * +limit).limit(+limit).lean(),
+      SupportThread.countDocuments(filter),
+    ]);
+    return res.json({ success: true, data, total });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: 'Failed to fetch threads.' });
+  }
+});
+
+// Admin replies to a thread
+app.post('/api/admin/support/:threadId/reply', adminProtect, async (req, res) => {
+  try {
+    const { text } = req.body;
+    if (!text?.trim()) return res.status(400).json({ success: false, message: 'Reply text required.' });
+
+    const thread = await SupportThread.findByIdAndUpdate(
+      req.params.threadId,
+      {
+        $push: { messages: { text: text.trim(), senderRole: 'admin' } },
+        $set:  { lastMessageAt: new Date(), status: 'open' },
+      },
+      { new: true },
+    );
+    if (!thread) return res.status(404).json({ success: false, message: 'Thread not found.' });
+
+    return res.json({ success: true, data: thread });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: 'Failed to send reply.' });
+  }
+});
+
+// Admin marks thread as resolved
+app.patch('/api/admin/support/:threadId/resolve', adminProtect, async (req, res) => {
+  try {
+    const thread = await SupportThread.findByIdAndUpdate(
+      req.params.threadId,
+      { $set: { status: 'resolved' } },
+      { new: true },
+    );
+    if (!thread) return res.status(404).json({ success: false, message: 'Thread not found.' });
+    return res.json({ success: true, data: thread });
+  } catch (err) {
+    return res.status(500).json({ success: false, message: 'Failed to resolve thread.' });
+  }
+});
+
+// ─── Admin BI stats routes ────────────────────────────────────────────────────
+app.get('/api/admin/stats/revenue',      adminProtect, getRevenueStats);
+app.get('/api/admin/stats/growth',       adminProtect, getGrowthStats);
+app.get('/api/admin/stats/verification', adminProtect, getVerificationStats);
+app.get('/api/admin/stats/referrals',    adminProtect, getReferralStats);
+app.get('/api/admin/stats/content',      adminProtect, getContentStats);
+app.get('/api/admin/stats/geographic',   adminProtect, getGeographicStats);
+app.get('/api/admin/stats/messaging',    adminProtect, getMessagingStats);
+app.get('/api/admin/stats/system',       adminProtect, getSystemHealth);
+app.get('/api/admin/stats/activity',     adminProtect, getActivityStats);
+app.get('/api/admin/stats/utm',          adminProtect, getUtmStats);
+app.get('/api/admin/export/users',          adminProtect, exportUsers);
+app.get('/api/admin/export/subscriptions',  adminProtect, exportSubscriptions);
+app.get('/api/admin/export/professionals',  adminProtect, exportProfessionals);
+
 // ─── API routes ───────────────────────────────────────────────────────────────
 app.use('/api/admin/professionals', adminProfessionalRoutes);
 app.use('/api/auth',                authLimiter, authRoutes);
@@ -252,6 +351,10 @@ app.use('/api/v1/vet-verification', vetVerificationRoutes);
 app.use('/api/subscriptions',       subscriptionRoutes);
 app.use('/api/upload',              uploadRoutes);
 app.use('/api/messages',            messageLimiter, messagesRoutes);
+app.use('/api/v1/reviews',          reviewRoutes);
+app.use('/api/support',             supportRoutes);
+app.use('/api/v1/track',            trackRoutes);
+app.use('/api/v1/upsell',           upsellRoutes);
 
 // ─── Global Error Handler ─────────────────────────────────────────────────────
 app.use((err, req, res, next) => {

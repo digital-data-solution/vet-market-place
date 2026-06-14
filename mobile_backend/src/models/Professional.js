@@ -21,7 +21,20 @@ const professionalSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['vet', 'kennel'],
+      enum: [
+        'vet',
+        'kennel',
+        'groomer',
+        'trainer',
+        'pet_sitter',
+        'pet_transport',
+        'cremation_service',
+        'agro_vet_supplier',
+        'insurance_provider',
+        'pet_pharmacy',
+        'rescue_center',
+        'pet_hotel',
+      ],
       required: [true, 'Role is required'],
       index: true,
     },
@@ -126,10 +139,26 @@ const professionalSchema = new mongoose.Schema(
       trim: true,
     },
 
+    // Identity / compliance documents submitted at onboarding
+    verificationDocuments: {
+      governmentIdType:   { type: String, trim: true },  // NIN / BVN / Passport
+      governmentIdNumber: { type: String, trim: true },
+      cacNumber:          { type: String, trim: true },  // CAC reg for business roles
+      professionalCertNumber: { type: String, trim: true }, // groomer/trainer cert
+      additionalNotes:    { type: String, trim: true },
+    },
+
     // Profile visibility
     isActive: {
       type: Boolean,
       default: true,
+    },
+
+    // Analytics
+    profileViews: {
+      type:    Number,
+      default: 0,
+      min:     0,
     },
   },
   {
@@ -151,18 +180,29 @@ professionalSchema.index({ name: 'text', businessName: 'text', specialization: '
 // MIDDLEWARE
 // ============================================================================
 
-// Auto-approval logic: kennels are auto-approved, vets require admin verification
-// NOTE: isVerified must NOT be set in the controller — this hook is the single
-//       source of truth for verification status on new profiles.
+// Roles that require admin review before going live.
+// Higher-risk or credential-dependent roles sit in pending until an admin approves.
+const REQUIRES_ADMIN_REVIEW = new Set([
+  'vet',               // VCN verification required
+  'insurance_provider', // regulatory approval required
+  'pet_transport',     // animals in transit — liability risk
+  'cremation_service', // handling deceased animals — trust-sensitive
+  'agro_vet_supplier', // sells medications/supplements — regulatory risk
+  'pet_pharmacy',      // NAFDAC/PCN pharmacy license required
+  'rescue_center',     // animal welfare body registration required
+]);
+
+// Auto-approval logic — this hook is the single source of truth for
+// verification status on new profiles. Never set isVerified in controllers.
 professionalSchema.pre('save', async function () {
   if (this.isNew) {
-    if (this.role === 'kennel') {
-      this.isVerified = true;
-      this.verificationStatus = 'approved';
-      this.verifiedAt = new Date();
-    } else if (this.role === 'vet') {
-      this.isVerified = false;
+    if (REQUIRES_ADMIN_REVIEW.has(this.role)) {
+      this.isVerified        = false;
       this.verificationStatus = 'pending';
+    } else {
+      this.isVerified        = true;
+      this.verificationStatus = 'approved';
+      this.verifiedAt        = new Date();
     }
   }
 });

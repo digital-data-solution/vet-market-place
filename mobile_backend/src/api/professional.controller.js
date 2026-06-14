@@ -4,6 +4,11 @@ import cache from '../lib/cache.js';
 import axios from 'axios';
 import logger from '../lib/logger.js';
 import Subscription from '../models/Subscription.js';
+import {
+  sendDocumentSubmissionReceived,
+  sendAdminDocumentReviewAlert,
+} from '../services/email.service.js';
+import { logActivity } from '../lib/activityLogger.js';
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -112,7 +117,7 @@ async function applyFreemiumGate(req, data) {
 export const onboardProfessional = async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
-    const { name, vcnNumber, role, businessName, address, specialization, phone, email } = req.body;
+    const { name, vcnNumber, role, businessName, address, specialization, phone, email, verificationDocuments } = req.body;
 
     // ── Basic validation ────────────────────────────────────────────────────
     if (!name || !role) {
@@ -123,11 +128,20 @@ export const onboardProfessional = async (req, res) => {
       });
     }
 
-    if (!['vet', 'kennel'].includes(role)) {
+    const VALID_ROLES = [
+      'vet', 'kennel', 'groomer', 'trainer', 'pet_sitter',
+      'pet_transport', 'cremation_service', 'agro_vet_supplier', 'insurance_provider',
+    ];
+    // Roles where businessName is required (not optional)
+    const BUSINESS_NAME_REQUIRED = new Set([
+      'kennel', 'pet_transport', 'cremation_service', 'agro_vet_supplier', 'insurance_provider',
+    ]);
+
+    if (!VALID_ROLES.includes(role)) {
       logger.warn('Onboarding failed: invalid role', { userId, role });
       return res.status(400).json({
         success: false,
-        message: 'Role must be either "vet" or "kennel".',
+        message: `Invalid role. Must be one of: ${VALID_ROLES.join(', ')}.`,
       });
     }
 
@@ -146,11 +160,11 @@ export const onboardProfessional = async (req, res) => {
       });
     }
 
-    if (role === 'kennel' && !businessName) {
-      logger.warn('Onboarding failed: missing business name for kennel', { userId, name });
+    if (BUSINESS_NAME_REQUIRED.has(role) && !businessName) {
+      logger.warn('Onboarding failed: missing business name', { userId, role });
       return res.status(400).json({
         success: false,
-        message: 'Business name is required for kennels.',
+        message: 'Business name is required for this service type.',
       });
     }
 
@@ -205,27 +219,27 @@ export const onboardProfessional = async (req, res) => {
       phone: phone?.trim(),
       email: email?.trim(),
       location, // null if geocoding failed — that's fine
+      ...(verificationDocuments && typeof verificationDocuments === 'object' && { verificationDocuments }),
     });
 
     await professional.save();
 
     // ── Sync User model ─────────────────────────────────────────────────────
+    // Map Professional.role → User.role (kennel stays kennel_owner for legacy reasons)
+    const USER_ROLE_MAP = {
+      vet:               'vet',
+      kennel:            'kennel_owner',
+      groomer:           'groomer',
+      trainer:           'trainer',
+      pet_sitter:        'pet_sitter',
+      pet_transport:     'pet_transport',
+      cremation_service: 'cremation_service',
+      agro_vet_supplier: 'agro_vet_supplier',
+      insurance_provider: 'insurance_provider',
+    };
     await User.findByIdAndUpdate(userId, {
-      role: role === 'vet' ? 'vet' : 'kennel_owner',
-      ...(location && { location }), // Only sync location if geocoding succeeded
-      ...(role === 'vet' && {
-        vetDetails: {
-          vcnNumber: vcnNumber?.trim(),
-          specialization: specialization?.trim(),
-          businessName: businessName?.trim(),
-        },
-      }),
-      ...(role === 'kennel' && {
-        kennelDetails: {
-          businessName: businessName?.trim(),
-          services: specialization?.trim(),
-        },
-      }),
+      role: USER_ROLE_MAP[role] ?? role,
+      ...(location && { location }),
     });
 
     logger.info('Professional profile created successfully', {
@@ -234,13 +248,35 @@ export const onboardProfessional = async (req, res) => {
       role,
       geocoded: !!location,
     });
+    logActivity(userId, req.user.role, 'professional.onboarded', {
+      professionalId: professional._id,
+      role,
+      needsReview,
+    }, req);
+
+    const REQUIRES_ADMIN_REVIEW = new Set(['vet', 'insurance_provider', 'pet_transport', 'cremation_service', 'agro_vet_supplier', 'pet_pharmacy', 'rescue_center']);
+    const needsReview = REQUIRES_ADMIN_REVIEW.has(role);
+
+    // ── Fire-and-forget emails — never block the response ───────────────────
+    const profEmail  = email?.trim() || req.user?.email;
+    const adminEmail = process.env.ADMIN_EMAIL || 'contact@xpressdigitalanddatasolutions.online';
+
+    if (profEmail && needsReview) {
+      sendDocumentSubmissionReceived(name, profEmail, role).catch(() => {});
+    }
+    if (adminEmail && needsReview) {
+      sendAdminDocumentReviewAlert(adminEmail, {
+        name, email: profEmail, role, businessName,
+        vcnNumber: role === 'vet' ? vcnNumber : undefined,
+        verificationDocuments,
+      }).catch(() => {});
+    }
 
     res.status(201).json({
       success: true,
-      message:
-        role === 'vet'
-          ? 'Professional profile created. VCN verification pending admin approval.'
-          : 'Kennel profile created and activated successfully.',
+      message: needsReview
+        ? 'Profile created. Pending admin review — you will be notified once approved.'
+        : 'Profile created and listed successfully.',
       data: professional,
     });
   } catch (error) {
@@ -414,9 +450,18 @@ export const getProfessional = async (req, res) => {
       });
     }
 
-    // Only show unverified profiles to the owner
     const requestingUserId = req.user?._id?.toString() || req.user?.id?.toString();
     const profileUserId = professional.userId?._id?.toString();
+
+    // Count views and log activity for non-owner visitors (fire-and-forget)
+    if (requestingUserId !== profileUserId) {
+      Professional.findByIdAndUpdate(id, { $inc: { profileViews: 1 } }).catch(() => {});
+      logActivity(req.user?._id || req.user?.id, req.user?.role, 'profile.view', {
+        targetId:   id,
+        targetType: 'professional',
+        targetRole: professional.role,
+      }, req);
+    }
 
     if (!professional.isVerified && requestingUserId !== profileUserId) {
       return res.status(403).json({
@@ -425,9 +470,41 @@ export const getProfessional = async (req, res) => {
       });
     }
 
-    res.json({
+    // Profile owner always sees full data
+    if (requestingUserId === profileUserId) {
+      return res.json({ success: true, data: { ...professional, isPreview: false } });
+    }
+
+    // Freemium gate for everyone else
+    if (req.subscription?.isActive === true) {
+      return res.json({ success: true, data: { ...professional, isPreview: false } });
+    }
+
+    const userId = req.user._id || req.user.id;
+    const user = await User.findById(userId).select('freeSearchUsed').lean();
+
+    if (!user?.freeSearchUsed) {
+      await User.findByIdAndUpdate(userId, { freeSearchUsed: true });
+      return res.json({ success: true, data: { ...professional, isPreview: false }, usedFreeSearch: true });
+    }
+
+    const parts = (professional.address || '').split(',').map(s => s.trim()).filter(Boolean);
+    return res.json({
       success: true,
-      data: professional,
+      data: {
+        _id:            professional._id,
+        name:           professional.name,
+        businessName:   professional.businessName,
+        role:           professional.role,
+        vcnNumber:      professional.vcnNumber,
+        specialization: professional.specialization,
+        address:        parts.slice(-2).join(', '),
+        rating:         professional.rating,
+        reviewCount:    professional.reviewCount,
+        isVerified:     professional.isVerified,
+        images:         professional.images,
+        isPreview:      true,
+      },
     });
   } catch (error) {
     logger.error('Get professional error', { error: error.message, stack: error.stack });
@@ -450,12 +527,38 @@ export const getProfessional = async (req, res) => {
  */
 export const listProfessionals = async (req, res) => {
   try {
-    const { role, limit = 50, page = 1, vcnNumber } = req.query;
+    const { role, limit = 50, page = 1, vcnNumber, search } = req.query;
 
+    const VALID_LIST_ROLES = [
+      'vet', 'kennel', 'groomer', 'trainer', 'pet_sitter',
+      'pet_transport', 'cremation_service', 'agro_vet_supplier', 'insurance_provider',
+    ];
     const filters = { isVerified: true };
 
-    if (role && ['vet', 'kennel'].includes(role)) {
+    if (role && VALID_LIST_ROLES.includes(role)) {
       filters.role = role;
+      if (role === 'insurance_provider') filters.verificationStatus = 'approved';
+    } else {
+      // Hide unverified insurance_providers from the "all" listing
+      filters.$and = [
+        {
+          $or: [
+            { role: { $ne: 'insurance_provider' } },
+            { role: 'insurance_provider', verificationStatus: 'approved' },
+          ],
+        },
+      ];
+    }
+
+    if (search && search.trim()) {
+      const regex = new RegExp(search.trim(), 'i');
+      filters.$or = [
+        { name: regex },
+        { businessName: regex },
+        { specialization: regex },
+        { address: regex },
+        { vcnNumber: regex },
+      ];
     }
 
     // VCN lookup — returns immediately without pagination
@@ -476,8 +579,8 @@ export const listProfessionals = async (req, res) => {
       });
     }
 
-    const cacheKey = `professionals:list:${role || 'all'}:${page}:${limit}`;
-    const result = await cache.cacheWrap(cacheKey, 120, async () => {
+    const cacheKey = `professionals:list:${role || 'all'}:${page}:${limit}:${search || ''}`;
+    const result = await cache.cacheWrap(cacheKey, search ? 30 : 120, async () => {
       const [professionals, total] = await Promise.all([
         Professional.find(filters)
           .populate('userId', 'name email phone')
@@ -509,6 +612,14 @@ export const listProfessionals = async (req, res) => {
     });
 
     const { data, isPreview, usedFreeSearch } = await applyFreemiumGate(req, result.professionals);
+
+    logActivity(req.user?._id || req.user?.id, req.user?.role, 'search.list', {
+      role:      role || null,
+      search:    search || null,
+      page:      parseInt(page),
+      results:   data.length,
+      isPreview,
+    }, req);
 
     res.json({
       success: true,
@@ -561,8 +672,22 @@ export const getNearbyProfessionals = async (req, res) => {
       },
     };
 
-    if (role && ['vet', 'kennel'].includes(role)) {
+    const VALID_NEARBY_ROLES = [
+      'vet', 'kennel', 'groomer', 'trainer', 'pet_sitter',
+      'pet_transport', 'cremation_service', 'agro_vet_supplier', 'insurance_provider',
+    ];
+    if (role && VALID_NEARBY_ROLES.includes(role)) {
       query.role = role;
+      if (role === 'insurance_provider') query.verificationStatus = 'approved';
+    } else {
+      query.$and = [
+        {
+          $or: [
+            { role: { $ne: 'insurance_provider' } },
+            { role: 'insurance_provider', verificationStatus: 'approved' },
+          ],
+        },
+      ];
     }
 
     if (search && search.trim()) {
@@ -601,6 +726,14 @@ export const getNearbyProfessionals = async (req, res) => {
       lng, lat, distance, role, search,
       count: data.length,
     });
+
+    logActivity(req.user?._id || req.user?.id, req.user?.role, 'search.nearby', {
+      role:        role || null,
+      search:      search || null,
+      distanceKm:  parseFloat(distance),
+      results:     data.length,
+      isPreview,
+    }, req);
 
     res.json({
       success: true,

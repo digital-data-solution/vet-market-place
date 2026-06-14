@@ -1,19 +1,19 @@
 import Professional from '../models/Professional.js';
 import User from '../models/User.js';
 import cache from '../lib/cache.js';
+import {
+  sendVerificationApproved,
+  sendVerificationRejected,
+} from '../services/email.service.js';
 
 // Admin: List pending vet verifications
 export const listPendingProfessionals = async (req, res) => {
   try {
     const { role = 'vet', limit = 50, page = 1 } = req.query;
 
-    const filters = {
-      verificationStatus: 'pending',
-    };
-
-    if (role && ['vet', 'kennel'].includes(role)) {
-      filters.role = role;
-    }
+    const VALID_ROLES = ['vet','kennel','groomer','trainer','pet_sitter','pet_transport','cremation_service','agro_vet_supplier','insurance_provider','pet_pharmacy','rescue_center','pet_hotel'];
+    const filters = { verificationStatus: 'pending' };
+    if (role && VALID_ROLES.includes(role)) filters.role = role;
 
     const [professionals, total] = await Promise.all([
       Professional.find(filters)
@@ -107,6 +107,17 @@ export const reviewProfessional = async (req, res) => {
     // Clear relevant cache
     await cache.del(`professional:${professional.userId}`);
 
+    // Email the professional — fire-and-forget
+    const profEmail = professional.email || professional.userId?.email;
+    const profName  = professional.name;
+    if (profEmail) {
+      if (action === 'approve') {
+        sendVerificationApproved(profName, profEmail).catch(() => {});
+      } else {
+        sendVerificationRejected(profName, profEmail, adminNotes).catch(() => {});
+      }
+    }
+
     res.json({
       success: true,
       message: `Professional ${action}d successfully`,
@@ -129,9 +140,8 @@ export const getAllProfessionals = async (req, res) => {
 
     const filters = {};
 
-    if (role && ['vet', 'kennel'].includes(role)) {
-      filters.role = role;
-    }
+    const ALL_ROLES = ['vet','kennel','groomer','trainer','pet_sitter','pet_transport','cremation_service','agro_vet_supplier','insurance_provider','pet_pharmacy','rescue_center','pet_hotel'];
+    if (role && ALL_ROLES.includes(role)) filters.role = role;
 
     if (verificationStatus && ['pending', 'approved', 'rejected'].includes(verificationStatus)) {
       filters.verificationStatus = verificationStatus;

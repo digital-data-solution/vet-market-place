@@ -3,6 +3,8 @@ import Professional from '../models/Professional.js';
 import cache from '../lib/cache.js';
 import logger from '../lib/logger.js';
 import { applyReferralReward } from '../lib/referralHelper.js';
+import { sendVerificationApproved, sendVerificationRejected } from '../services/email.service.js';
+import { logActivity } from '../lib/activityLogger.js';
 
 // ============================================================================
 // VET VCN VERIFICATION WORKFLOW
@@ -84,6 +86,7 @@ export const submitVCN = async (req, res) => {
     );
 
     logger.info('VCN submitted for review', { userId, vcn: vcn.trim() });
+    logActivity(userId, 'vet', 'vet.verification.submitted', { vcn: vcn.trim() }, req);
 
     res.status(200).json({
       success: true,
@@ -230,11 +233,15 @@ export const reviewVet = async (req, res) => {
         applyReferralReward(user, 60).catch(() => {});
       }
 
+      // Send approval email (fire-and-forget — email failure must not block the response)
+      sendVerificationApproved(user.name, user.email).catch(() => {});
+
       logger.info('Vet verification approved', {
         userId: user._id,
         vcnNumber: user.vetDetails?.vcnNumber,
         adminId,
       });
+      logActivity(user._id, 'vet', 'vet.verification.approved', { vcnNumber: user.vetDetails?.vcnNumber, adminId }, req);
 
       res.json({
         success: true,
@@ -266,12 +273,16 @@ export const reviewVet = async (req, res) => {
       // FIX #4: Clear cache on reject too — avoids serving stale approved data
       await cache.del(`professional:${user._id}`);
 
+      // Send rejection email (fire-and-forget)
+      sendVerificationRejected(user.name, user.email, adminNotes).catch(() => {});
+
       logger.info('Vet verification rejected', {
         userId: user._id,
         vcnNumber: user.vetDetails?.vcnNumber,
         adminId,
         reason: adminNotes,
       });
+      logActivity(user._id, 'vet', 'vet.verification.rejected', { vcnNumber: user.vetDetails?.vcnNumber, adminId }, req);
 
       res.json({
         success: true,

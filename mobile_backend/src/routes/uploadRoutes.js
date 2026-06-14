@@ -48,15 +48,79 @@ const MEDIA_LIMITS = {
     starter:     20,
     pro:         75,
   },
+  // Service professionals — portfolio-light roles
+  groomer: {
+    free:        4,
+    basic:       8,
+    starter:     15,
+    pro:         40,
+  },
+  trainer: {
+    free:        4,
+    basic:       8,
+    starter:     15,
+    pro:         40,
+  },
+  pet_sitter: {
+    free:        4,
+    basic:       8,
+    starter:     15,
+    pro:         40,
+  },
+  // Transport / logistics
+  pet_transport: {
+    free:        5,
+    basic:       10,
+    starter:     20,
+    pro:         50,
+  },
+  // Business-heavy roles
+  cremation_service: {
+    free:        5,
+    basic:       10,
+    starter:     20,
+    pro:         50,
+  },
+  agro_vet_supplier: {
+    free:        5,
+    basic:       10,
+    starter:     25,
+    pro:         75,
+  },
+  insurance_provider: {
+    free:        3,
+    basic:       6,
+    starter:     12,
+    pro:         30,
+  },
   pet_owner: {
     free:         2,
     user_premium: 8,
   },
 };
 
+// Legacy pet_owner plan names can end up on professional accounts (subscription created
+// before plan renaming). Normalize them to the equivalent professional tier so limits
+// resolve correctly instead of falling back to 'free'.
+const PROFESSIONAL_ROLES = new Set([
+  'vet', 'kennel_owner', 'shop_owner',
+  'groomer', 'trainer', 'pet_sitter',
+  'pet_transport', 'cremation_service', 'agro_vet_supplier', 'insurance_provider',
+]);
+function normalizePlan(role, plan) {
+  if (PROFESSIONAL_ROLES.has(role) && (plan === 'user_monthly' || plan === 'user_premium')) {
+    return 'basic';
+  }
+  if (role === 'pet_owner' && plan === 'user_monthly') {
+    return 'user_premium';
+  }
+  return plan;
+}
+
 function getLimitsForUser(role, plan) {
-  const roleLimits = MEDIA_LIMITS[role] ?? MEDIA_LIMITS.pet_owner;
-  const maxImages  = roleLimits[plan]   ?? roleLimits.free;
+  const normalized  = normalizePlan(role, plan);
+  const roleLimits  = MEDIA_LIMITS[role] ?? MEDIA_LIMITS.pet_owner;
+  const maxImages   = roleLimits[normalized] ?? roleLimits.free;
   return { roleLimits, maxImages };
 }
 

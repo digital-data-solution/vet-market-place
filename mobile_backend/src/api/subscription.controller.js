@@ -11,6 +11,7 @@ import {
   sendProfessionalSubscriptionConfirmed,
 } from '../services/email.service.js';
 import { applyReferralReward } from '../lib/referralHelper.js';
+import { logActivity }         from '../lib/activityLogger.js';
 
 const PAYSTACK_BASE   = process.env.PAYSTACK_BASE        || 'https://api.paystack.co';
 const PAYSTACK_SECRET = process.env.PAYSTACK_SECRET_KEY  || '';
@@ -82,6 +83,7 @@ async function activateUserSubscription(userId, plan, reference) {
   await user.save();
   logger.info('User subscription activated', { userId, plan, reference });
   sendUserSubscriptionConfirmed(user.name, user.email, plan, PLAN_PRICING[plan], endDate).catch(() => {});
+  logActivity(userId, user.role, 'subscription.activated', { plan, amount: PLAN_PRICING[plan], reference, userType: 'user' });
   if (user.referredBy && !user.referralRewardApplied) {
     applyReferralReward(user, 30).catch(() => {});
   }
@@ -111,6 +113,7 @@ async function activateProfessionalSubscription(subscriptionId, reference) {
 
   await subscription.save();
   logger.info('Professional subscription activated', { subscriptionId, reference });
+  logActivity(subscription.user, null, 'subscription.activated', { plan: subscription.plan, amount: subscription.amount, reference, userType: 'professional' });
 
   User.findById(subscription.user).then(async (usr) => {
     if (usr?.email) {
@@ -343,6 +346,13 @@ export const createUserSubscription = async (req, res) => {
     await user.save({ session });
     await session.commitTransaction();
 
+    logActivity(userId, user.role, 'subscription.initiated', {
+      plan,
+      amount,
+      hasReferralDiscount: hasReferral,
+      userType: 'user',
+    }, req);
+
     return res.status(201).json({
       success: true,
       message: 'Payment initialized.',
@@ -496,6 +506,14 @@ export const createProfessionalSubscription = async (req, res) => {
     subscription.paymentReference = data.data.reference;
     await subscription.save({ session });
     await session.commitTransaction();
+
+    logActivity(userId, user.role, 'subscription.initiated', {
+      plan,
+      amount,
+      subscriptionId:      subscription._id,
+      hasReferralDiscount: hasReferral,
+      userType:            'professional',
+    }, req);
 
     return res.status(201).json({
       success: true,
@@ -713,6 +731,11 @@ export const cancelSubscription = async (req, res) => {
     if (professionalSub) {
       professionalSub.status = 'cancelled';
       await professionalSub.save();
+      logActivity(userId, user.role, 'subscription.cancelled', {
+        plan:       professionalSub.plan,
+        accessUntil: professionalSub.endDate,
+        userType:   'professional',
+      }, req);
       return res.json({
         success: true,
         message: 'Subscription cancelled. You will retain access until your billing period ends.',
@@ -723,6 +746,11 @@ export const cancelSubscription = async (req, res) => {
     if (user.subscription?.status === 'active') {
       user.subscription.status = 'cancelled';
       await user.save();
+      logActivity(userId, user.role, 'subscription.cancelled', {
+        plan:        user.subscription.plan,
+        accessUntil: user.subscription.endDate,
+        userType:    'user',
+      }, req);
       return res.json({
         success: true,
         message: 'Subscription cancelled. You will retain access until your billing period ends.',

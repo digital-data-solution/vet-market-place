@@ -4,6 +4,35 @@ import cache from '../lib/cache.js';
 import logger from '../lib/logger.js';
 import Subscription from '../models/Subscription.js';
 
+function redactKennel(kennel) {
+  const parts = (kennel.address || '').split(',').map(s => s.trim()).filter(Boolean);
+  return {
+    _id:            kennel._id,
+    name:           kennel.name,
+    businessName:   kennel.businessName,
+    role:           'kennel',
+    specialization: kennel.specialization,
+    address:        parts.slice(-2).join(', '),
+    rating:         kennel.rating,
+    reviewCount:    kennel.reviewCount,
+    isVerified:     kennel.isVerified,
+    distance:       kennel.distance,
+  };
+}
+
+async function applyFreemiumGate(req, data) {
+  if (req.subscription?.isActive === true) {
+    return { data, isPreview: false, usedFreeSearch: false };
+  }
+  const userId = req.user._id || req.user.id;
+  const user = await User.findById(userId).select('freeSearchUsed').lean();
+  if (!user?.freeSearchUsed) {
+    await User.findByIdAndUpdate(userId, { freeSearchUsed: true });
+    return { data, isPreview: false, usedFreeSearch: true };
+  }
+  return { data: data.map(redactKennel), isPreview: true, usedFreeSearch: false };
+}
+
 // ============================================================================
 // KENNEL ONBOARDING
 // POST /api/v1/kennels/onboard
@@ -149,13 +178,17 @@ export const listKennels = async (req, res) => {
       { $count: 'count' }
     ]);
 
+    const { data, isPreview, usedFreeSearch } = await applyFreemiumGate(req, kennelsWithSub);
+
     return res.json({
       success: true,
-      count: kennelsWithSub.length,
+      count: data.length,
       total: total[0]?.count || 0,
       page: parseInt(page),
       totalPages: Math.ceil((total[0]?.count || 0) / parseInt(limit)),
-      data: kennelsWithSub,
+      data,
+      isPreview,
+      ...(usedFreeSearch && { usedFreeSearch: true }),
     });
   } catch (error) {
     logger.error('List kennels error', { error: error.message });
@@ -236,24 +269,49 @@ export const getKennel = async (req, res) => {
   try {
     const { id } = req.params;
 
+    // Always fetch full data (cache stores unredacted record)
     const cacheKey = `kennel:${id}`;
-    const cached = await cache.cacheGet(cacheKey); // FIX: cacheGet not get
-    if (cached) {
-      return res.json({ success: true, data: cached, fromCache: true });
-    }
-
-    const kennel = await Professional.findOne({ _id: id, role: 'kennel', isVerified: true })
-      .populate('userId', 'name email phone supabaseId') // supabaseId for Message button
-      .select('-__v')
-      .lean();
-
+    let kennel = await cache.cacheGet(cacheKey);
     if (!kennel) {
-      return res.status(404).json({ success: false, message: 'Kennel not found' });
+      kennel = await Professional.findOne({ _id: id, role: 'kennel', isVerified: true })
+        .populate('userId', 'name email phone supabaseId')
+        .select('-__v')
+        .lean();
+      if (!kennel) {
+        return res.status(404).json({ success: false, message: 'Kennel not found' });
+      }
+      await cache.cacheSet(cacheKey, kennel, 300);
     }
 
-    await cache.cacheSet(cacheKey, kennel, 300); // FIX: cacheSet not set
+    // Freemium gate — apply per-request, not cached
+    if (req.subscription?.isActive === true) {
+      return res.json({ success: true, data: { ...kennel, isPreview: false } });
+    }
 
-    res.json({ success: true, data: kennel });
+    const userId = req.user._id || req.user.id;
+    const user = await User.findById(userId).select('freeSearchUsed').lean();
+    if (!user?.freeSearchUsed) {
+      await User.findByIdAndUpdate(userId, { freeSearchUsed: true });
+      return res.json({ success: true, data: { ...kennel, isPreview: false }, usedFreeSearch: true });
+    }
+
+    const parts = (kennel.address || '').split(',').map(s => s.trim()).filter(Boolean);
+    return res.json({
+      success: true,
+      data: {
+        _id:            kennel._id,
+        name:           kennel.name,
+        businessName:   kennel.businessName,
+        role:           'kennel',
+        specialization: kennel.specialization,
+        address:        parts.slice(-2).join(', '),
+        rating:         kennel.rating,
+        reviewCount:    kennel.reviewCount,
+        isVerified:     kennel.isVerified,
+        images:         kennel.images,
+        isPreview:      true,
+      },
+    });
   } catch (error) {
     logger.error('Get kennel error', { error: error.message });
     res.status(500).json({ success: false, message: 'Failed to fetch kennel', error: error.message });

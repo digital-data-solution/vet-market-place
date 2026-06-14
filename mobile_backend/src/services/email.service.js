@@ -130,6 +130,9 @@ function layout(title, body) {
   <div class="footer">
     <p>© ${new Date().getFullYear()} Xpress Vet &nbsp;•&nbsp; Lagos, Nigeria<br/>
     You're receiving this because you have an account on Xpress Vet.<br/>
+    <a href="https://xpressvetmarketplace.com/privacy-policy" style="color:#94A3B8;text-decoration:none;">Privacy Policy</a>
+    &nbsp;·&nbsp;
+    <a href="https://xpressvetmarketplace.com/terms-and-conditions" style="color:#94A3B8;text-decoration:none;">Terms of Service</a><br/>
     Questions? Reply to this email — we're happy to help.</p>
   </div>
 </div>
@@ -291,4 +294,536 @@ export async function sendNewVerificationRequest(adminEmail, professionalName, p
     <p>Log in to the admin dashboard to review and approve or reject this request.</p>
   `);
   await sendEmail(adminEmail, `New verification request from ${professionalName}`, html);
+}
+
+/**
+ * Sent to a service provider immediately after they register and submit documents.
+ * Confirms receipt and tells them what happens next.
+ */
+export async function sendDocumentSubmissionReceived(name, email, role) {
+  const firstName = name?.split(' ')[0] || 'there';
+  const roleLabel = role?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) || 'Professional';
+  const html = layout('Documents Received — We\'re Reviewing Your Profile', `
+    <h1>We've received your submission, ${firstName}! 📄</h1>
+    <p>Thank you for registering as a <strong>${roleLabel}</strong> on Xpress Vet. Your profile and identity documents have been received and are now in our review queue.</p>
+    <div class="highlight">
+      <p>⏱️ <strong>What happens next?</strong><br/>
+      Our admin team will review your submitted details — including your government ID and any business registration documents. This typically takes <strong>24–48 hours</strong> on business days.</p>
+    </div>
+    <p>You will receive another email as soon as a decision is made. If your profile is approved, you will immediately appear in Xpress Vet listings. If we need more information, we will explain exactly what is required.</p>
+    <p><strong>Why do we ask for these documents?</strong><br/>
+    Xpress Vet is committed to protecting pet owners. Verifying the identity of every service provider builds the trust that makes our platform valuable — for you and for the clients you will reach.</p>
+    <p>If you have any questions in the meantime, simply reply to this email.</p>
+    <p style="margin-top:24px;">Thank you for joining Xpress Vet,<br/><strong>The Xpress Vet Team</strong> 🐾</p>
+  `);
+  await sendEmail(email, 'Xpress Vet: Your profile is under review', html);
+}
+
+/**
+ * Sent to admin when a new professional with documents needs review.
+ * Includes a summary of submitted documents so admin can act quickly.
+ */
+export async function sendAdminDocumentReviewAlert(adminEmail, professional) {
+  const { name, email, role, verificationDocuments: d, businessName } = professional;
+  const roleLabel = role?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) || role;
+
+  let docsHtml = '';
+  if (role === 'vet') {
+    docsHtml = `<p>VCN Number: <strong>${professional.vcnNumber || 'Not provided'}</strong></p>`;
+  } else if (d) {
+    if (d.governmentIdNumber) docsHtml += `<p>${d.governmentIdType || 'Gov ID'}: <strong>${d.governmentIdNumber}</strong></p>`;
+    if (d.cacNumber)           docsHtml += `<p>CAC Number: <strong>${d.cacNumber}</strong></p>`;
+    if (d.professionalCertNumber) docsHtml += `<p>Prof. Cert: <strong>${d.professionalCertNumber}</strong></p>`;
+  }
+  if (!docsHtml) docsHtml = '<p style="color:#92400E">⚠️ No identity documents submitted</p>';
+
+  const html = layout('New Professional Awaiting Review', `
+    <h1>New ${roleLabel} Needs Review 🔍</h1>
+    <div class="highlight">
+      <p>Name: <strong>${name}</strong>${businessName ? ` (${businessName})` : ''}<br/>
+      Email: ${email}<br/>
+      Role: ${roleLabel}</p>
+    </div>
+    <p><strong>Submitted Documents:</strong></p>
+    ${docsHtml}
+    <p>Please log in to the <a href="https://vet-market-place-jsj5.onrender.com/admin">admin dashboard</a> to review and approve or reject this request.</p>
+    <p style="color:#64748B;font-size:13px">This professional is currently hidden from all listings until you approve them.</p>
+  `);
+  await sendEmail(adminEmail, `Action needed: ${name} (${roleLabel}) awaiting review`, html);
+}
+
+/**
+ * Sent to admin as a morning digest: pending count, new signups, revenue snapshot.
+ */
+export async function sendAdminMorningDigest(adminEmail, { pendingCount, newSignups24h, activeSubscriptions, pendingList }) {
+  const pendingRows = (pendingList || []).slice(0, 10).map(p => {
+    const role = p.role?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) || p.role;
+    const age  = p.createdAt ? Math.round((Date.now() - new Date(p.createdAt)) / 3600000) : '?';
+    return `<tr>
+      <td style="padding:6px 10px;border-bottom:1px solid #F1F5F9">${p.name || '—'}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #F1F5F9">${role}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #F1F5F9">${age}h ago</td>
+    </tr>`;
+  }).join('');
+
+  const html = layout('Xpress Vet — Daily Admin Digest', `
+    <h1>Good morning! Here's your daily snapshot ☀️</h1>
+    <div class="highlight">
+      <p>🕐 <strong>Pending Reviews:</strong> ${pendingCount}<br/>
+      👥 <strong>New Sign-ups (24h):</strong> ${newSignups24h}<br/>
+      ✅ <strong>Active Subscriptions:</strong> ${activeSubscriptions}</p>
+    </div>
+    ${pendingCount > 0 ? `
+    <p><strong>Professionals awaiting your review:</strong></p>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="background:#F8FAFC">
+        <th style="padding:8px 10px;text-align:left;border-bottom:2px solid #E2E8F0">Name</th>
+        <th style="padding:8px 10px;text-align:left;border-bottom:2px solid #E2E8F0">Role</th>
+        <th style="padding:8px 10px;text-align:left;border-bottom:2px solid #E2E8F0">Waiting</th>
+      </tr></thead>
+      <tbody>${pendingRows}</tbody>
+    </table>
+    <p style="margin-top:12px"><a href="https://vet-market-place-jsj5.onrender.com/admin">→ Open Admin Dashboard</a></p>
+    ` : '<p style="color:#059669">✅ No professionals awaiting review — you\'re all caught up!</p>'}
+    <p style="color:#64748B;font-size:13px">This digest is sent every morning at 8:00 AM WAT.</p>
+  `);
+  await sendEmail(adminEmail, `Xpress Vet Daily Digest — ${pendingCount} pending, ${newSignups24h} new sign-ups`, html);
+}
+
+/**
+ * Sent to a professional when they receive a new review.
+ */
+export async function sendNewReviewNotification(name, email, reviewerName, rating, comment, role) {
+  const firstName = name?.split(' ')[0] || 'there';
+  const stars = '⭐'.repeat(Math.min(Math.round(rating), 5));
+  const roleLabel = role?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) || 'Professional';
+  const html = layout('You have a new review!', `
+    <h1>New review on your ${roleLabel} profile, ${firstName}! ${stars}</h1>
+    <p><strong>${reviewerName || 'A pet owner'}</strong> just left you a review:</p>
+    <div class="highlight">
+      <p style="font-size:18px;font-weight:700;color:#F59E0B">${stars} ${rating}/5</p>
+      ${comment ? `<p style="font-style:italic;color:#374151">"${comment}"</p>` : ''}
+    </div>
+    <p>Reviews help you build trust and attract more clients. Keep up the great service!</p>
+    <p style="margin-top:24px;">The Xpress Vet Team 🐾</p>
+  `);
+  await sendEmail(email, `You have a new ${rating}-star review on Xpress Vet!`, html);
+}
+
+/**
+ * Sent to admin when professionals have been stuck in pending > 48h.
+ */
+export async function sendAdminStaleReviewAlert(adminEmail, staleList) {
+  const rows = staleList.slice(0, 20).map(p => {
+    const role = p.role?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) || p.role;
+    const hours = Math.round((Date.now() - new Date(p.createdAt)) / 3600000);
+    return `<tr>
+      <td style="padding:6px 10px;border-bottom:1px solid #F1F5F9">${p.name || '—'}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #F1F5F9">${role}</td>
+      <td style="padding:6px 10px;border-bottom:1px solid #F1F5F9;color:#E8610A"><strong>${hours}h</strong></td>
+    </tr>`;
+  }).join('');
+
+  const html = layout('Stale Review Queue Alert', `
+    <h1>⚠️ ${staleList.length} Professional${staleList.length !== 1 ? 's' : ''} Waiting Over 48 Hours</h1>
+    <p>The following professionals have been pending review for more than 48 hours. They cannot appear in listings until approved:</p>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="background:#FEF2F2">
+        <th style="padding:8px 10px;text-align:left;border-bottom:2px solid #FECACA">Name</th>
+        <th style="padding:8px 10px;text-align:left;border-bottom:2px solid #FECACA">Role</th>
+        <th style="padding:8px 10px;text-align:left;border-bottom:2px solid #FECACA">Waiting</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p style="margin-top:14px"><a href="https://vet-market-place-jsj5.onrender.com/admin">→ Review now in Admin Dashboard</a></p>
+  `);
+  await sendEmail(adminEmail, `⚠️ Action needed: ${staleList.length} professionals waiting 48h+ for review`, html);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SUPPORT MESSAGE ALERT — sent to admin when a user sends a support message
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * @param {string} adminEmail
+ * @param {{ userName: string, userEmail: string, userRole: string, text: string, threadId: string }} msg
+ */
+export async function sendSupportMessageAlert(adminEmail, { userName, userEmail, userRole, text, threadId }) {
+  const roleLabel = userRole?.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) || 'User';
+  const preview   = text.length > 200 ? text.slice(0, 200) + '...' : text;
+  const dashboardUrl = 'https://vet-market-place-jsj5.onrender.com/admin';
+
+  const html = `
+    <div style="font-family:Inter,sans-serif;max-width:560px;margin:0 auto;padding:24px;color:#111827">
+      <h2 style="font-size:20px;font-weight:800;color:#1A56DB;margin-bottom:4px">💬 New Support Message</h2>
+      <p style="color:#6B7280;font-size:14px;margin-top:0">A user needs help — please respond promptly from the admin panel.</p>
+
+      <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:12px;padding:16px;margin:20px 0">
+        <p style="margin:0 0 6px 0"><strong>From:</strong> ${userName} (${roleLabel})</p>
+        <p style="margin:0 0 6px 0"><strong>Email:</strong> ${userEmail || 'not provided'}</p>
+        <p style="margin:0"><strong>Thread ID:</strong> <code style="font-size:12px">${threadId}</code></p>
+      </div>
+
+      <div style="background:#EFF6FF;border-left:4px solid #2563EB;border-radius:0 8px 8px 0;padding:16px;margin-bottom:24px">
+        <p style="margin:0;font-style:italic;color:#1E40AF">"${preview}"</p>
+      </div>
+
+      <a href="${dashboardUrl}" style="display:inline-block;background:#1A56DB;color:#fff;text-decoration:none;
+         padding:14px 28px;border-radius:10px;font-weight:700;font-size:15px">
+        Open Support Panel &rarr;
+      </a>
+
+      <p style="margin-top:24px;font-size:12px;color:#9CA3AF">
+        This alert was triggered automatically. Reply from the admin dashboard so the user sees your response in the app.
+      </p>
+    </div>`;
+
+  await sendEmail(adminEmail, `💬 Support message from ${userName} — action needed`, html);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RE-ENGAGEMENT — sent to users who haven't logged in for 7 days
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function sendReEngagementEmail(name, email) {
+  const firstName = name?.split(' ')[0] || 'there';
+  const html = layout('We miss you on Xpress Vet 🐾', `
+    <h1>Hey ${firstName}, we miss you! 🐾</h1>
+    <p>It's been a little while since you last visited Xpress Vet. Nigeria's pet care community is growing — here's what you might have missed:</p>
+    <ul style="font-size:15px;color:#475569;line-height:2;padding-left:20px;">
+      <li>New verified vets and kennels listed across Lagos, Abuja, and Port Harcourt</li>
+      <li>Faster GPS search to find care near you in seconds</li>
+      <li>Direct WhatsApp contact for premium members</li>
+    </ul>
+    <div class="highlight">
+      <p>🎯 <strong>Your pets deserve the best care.</strong><br/>
+      Log in now to find trusted professionals in your area.</p>
+    </div>
+    <p style="text-align:center;margin:24px 0">
+      <a href="https://xpressvetmarketplace.com" class="btn">Open Xpress Vet →</a>
+    </p>
+    <p style="color:#94A3B8;font-size:13px">
+      If you no longer want these occasional updates, you can manage your notification preferences in <strong>Profile → Settings</strong>.
+    </p>
+  `);
+  await sendEmail(email, `${firstName}, we miss you on Xpress Vet 🐾`, html);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ABANDONED SUBSCRIPTION — sent 30–90 min after checkout is started but not completed
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function sendAbandonedSubEmail(name, email, plan, amount) {
+  const firstName = name?.split(' ')[0] || 'there';
+  const planLabel = plan === 'pro' ? 'Professional Pro' : plan === 'starter' ? 'Professional Starter' : 'Premium';
+  const html = layout('You left something behind', `
+    <h1>Hey ${firstName} — you left something behind 🛒</h1>
+    <p>You started subscribing to <strong>${planLabel}</strong> on Xpress Vet but didn't quite finish. Your cart is still saved!</p>
+    <div class="highlight">
+      <p>📦 <strong>${planLabel}</strong> — ₦${Number(amount).toLocaleString()}/month<br/>
+      Tap below to complete your subscription in under a minute.</p>
+    </div>
+    <p>With ${planLabel} you get:</p>
+    <ul style="font-size:15px;color:#475569;line-height:2;padding-left:20px;">
+      ${plan === 'user_premium' || plan === 'user_monthly'
+        ? `<li>Full contact details for every vet, kennel &amp; shop</li>
+           <li>GPS search — find care providers near you</li>
+           <li>Exact addresses for every listing</li>`
+        : `<li>Your listing visible to all pet owners in your area</li>
+           <li>Direct calls and messages from premium users</li>
+           ${plan === 'pro' ? '<li>Featured badge + sorted first in search results</li>' : ''}`
+      }
+    </ul>
+    <p style="text-align:center;margin:24px 0">
+      <a href="https://xpressvetmarketplace.com" class="btn">Complete My Subscription →</a>
+    </p>
+    <p style="color:#94A3B8;font-size:13px">
+      If you changed your mind, no worries — your free account is still active and nothing was charged.
+    </p>
+  `);
+  await sendEmail(email, `${firstName}, complete your Xpress Vet subscription`, html);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WEEKLY DIGEST — internal "chief of staff" briefing sent every Monday 7am WAT
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * @param {string} adminEmail
+ * @param {{
+ *   weekLabel: string, narrative: string,
+ *   observations: string[], recommendations: string[],
+ *   newSignups: number, totalUsers: number,
+ *   mrr: number, totalActiveSubs: number,
+ *   newSubsThisWeek: number, cancelledThisWeek: number,
+ *   searchBreakdown: {_id:string,count:number}[],
+ *   contactBreakdown: {_id:string,count:number}[],
+ *   topReferrers: {name:string,referralCode:string,referralRewardsEarned:number}[],
+ *   pendingVerifications: number, conversionRate: number|null, dormantCount: number
+ * }} data
+ */
+export async function sendWeeklyDigestEmail(adminEmail, {
+  weekLabel,
+  narrative,
+  observations = [],
+  recommendations = [],
+  newSignups,
+  totalUsers,
+  mrr,
+  totalActiveSubs,
+  newSubsThisWeek,
+  cancelledThisWeek,
+  searchBreakdown = [],
+  contactBreakdown = [],
+  topReferrers = [],
+  pendingVerifications,
+  conversionRate,
+  dormantCount,
+}) {
+  const cancelled_color = cancelledThisWeek > 3 ? '#F87171' : '#94A3B8';
+
+  const kpiCell = (value, label, color) => `
+    <td width="33%" style="padding:4px">
+      <div style="background:#0F172A;border-radius:10px;padding:16px 10px;text-align:center">
+        <div style="font-size:22px;font-weight:800;color:${color};line-height:1">${value}</div>
+        <div style="font-size:10px;color:#64748B;margin-top:6px;text-transform:uppercase;letter-spacing:.5px">${label}</div>
+      </div>
+    </td>`;
+
+  const observationItems = observations.map(o =>
+    `<li style="margin-bottom:10px;line-height:1.65;color:#374151;font-size:14px">${o}</li>`
+  ).join('');
+
+  const recommendationItems = recommendations.map(r =>
+    `<li style="margin-bottom:10px;line-height:1.65;color:#1E40AF;font-size:14px">${r}</li>`
+  ).join('');
+
+  const searchRows = searchBreakdown.length
+    ? searchBreakdown.map(r => `
+        <tr>
+          <td style="padding:6px 8px;border-bottom:1px solid #F1F5F9;font-size:13px;text-transform:capitalize;color:#374151">
+            ${(r._id || '—').replace(/_/g, ' ')}
+          </td>
+          <td style="padding:6px 8px;border-bottom:1px solid #F1F5F9;text-align:right;font-size:13px;font-weight:700;color:#2563EB">
+            ${r.count}
+          </td>
+        </tr>`).join('')
+    : `<tr><td colspan="2" style="padding:10px;color:#94A3B8;font-size:12px;font-style:italic;text-align:center">No search data yet</td></tr>`;
+
+  const contactRows = contactBreakdown.length
+    ? contactBreakdown.map(r => `
+        <tr>
+          <td style="padding:6px 8px;border-bottom:1px solid #F1F5F9;font-size:13px;text-transform:capitalize;color:#374151">
+            ${r._id || '—'}
+          </td>
+          <td style="padding:6px 8px;border-bottom:1px solid #F1F5F9;text-align:right;font-size:13px;font-weight:700;color:#059669">
+            ${r.count}
+          </td>
+        </tr>`).join('')
+    : `<tr><td colspan="2" style="padding:10px;color:#94A3B8;font-size:12px;font-style:italic;text-align:center">No contact taps yet</td></tr>`;
+
+  const conversionBadge = conversionRate !== null
+    ? `<div style="margin-top:10px;display:inline-block;background:#F0FDF4;border:1px solid #86EFAC;border-radius:6px;padding:3px 10px;font-size:12px;color:#15803D;font-weight:700">
+        ${conversionRate}% conversion rate
+       </div>`
+    : '';
+
+  const referrerRows = topReferrers.length
+    ? topReferrers.map((r, i) => `
+        <tr>
+          <td style="padding:6px 8px;border-bottom:1px solid #F1F5F9;font-size:13px;color:#374151">#${i + 1} ${r.name || '—'}</td>
+          <td style="padding:6px 8px;border-bottom:1px solid #F1F5F9;text-align:right;font-size:13px;font-weight:700;color:#F59E0B">
+            ₦${Number(r.referralRewardsEarned).toLocaleString()}
+          </td>
+        </tr>`).join('')
+    : `<tr><td colspan="2" style="padding:10px;color:#94A3B8;font-size:12px;font-style:italic;text-align:center">No referral earnings yet</td></tr>`;
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Xpress Vet Weekly Briefing</title>
+</head>
+<body style="margin:0;padding:0;background:#0F172A;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" border="0">
+<tr><td align="center" style="padding:24px 16px;">
+<table width="620" cellpadding="0" cellspacing="0" border="0" style="max-width:620px">
+
+  <!-- Header -->
+  <tr>
+    <td style="background:#1E293B;border-radius:12px 12px 0 0;padding:24px 28px;border-bottom:1px solid #334155">
+      <div style="font-size:12px;color:#64748B;font-weight:600;letter-spacing:.6px;text-transform:uppercase">Weekly Briefing</div>
+      <div style="font-size:24px;font-weight:800;color:#F1F5F9;margin:4px 0 2px">Xpress Vet 🐾</div>
+      <div style="font-size:13px;color:#64748B">${weekLabel}</div>
+    </td>
+  </tr>
+
+  <!-- KPI grid row 1 -->
+  <tr>
+    <td style="background:#1E293B;padding:16px 24px 6px">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          ${kpiCell(newSignups, 'New Users', '#38BDF8')}
+          ${kpiCell('₦' + mrr.toLocaleString(), 'Est. MRR', '#34D399')}
+          ${kpiCell(totalActiveSubs, 'Active Subs', '#A78BFA')}
+        </tr>
+      </table>
+    </td>
+  </tr>
+
+  <!-- KPI grid row 2 -->
+  <tr>
+    <td style="background:#1E293B;padding:6px 24px 20px">
+      <table width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          ${kpiCell(newSubsThisWeek, 'New Subs', '#F59E0B')}
+          ${kpiCell(cancelledThisWeek, 'Cancellations', cancelled_color)}
+          ${kpiCell(pendingVerifications, 'Pending Vrf.', '#CBD5E1')}
+        </tr>
+      </table>
+    </td>
+  </tr>
+
+  <!-- White card -->
+  <tr>
+    <td style="background:#FFFFFF;padding:28px;border-radius:0 0 12px 12px">
+
+      <!-- Narrative -->
+      <div style="background:#F8FAFC;border-radius:10px;padding:16px 18px;margin-bottom:24px">
+        <p style="font-size:14px;color:#374151;line-height:1.7;margin:0">${narrative}</p>
+      </div>
+
+      <!-- Observations -->
+      ${observations.length ? `
+      <div style="margin-bottom:24px">
+        <div style="font-size:13px;font-weight:700;color:#0F172A;text-transform:uppercase;letter-spacing:.5px;
+                    padding-bottom:8px;border-bottom:2px solid #F1F5F9;margin-bottom:12px">
+          What happened this week
+        </div>
+        <ul style="padding-left:18px;margin:0">
+          ${observationItems}
+        </ul>
+      </div>` : ''}
+
+      <!-- Recommendations -->
+      ${recommendations.length ? `
+      <div style="background:#EFF6FF;border-left:4px solid #2563EB;border-radius:0 10px 10px 0;
+                  padding:16px 20px;margin-bottom:24px">
+        <div style="font-size:12px;font-weight:700;color:#1E40AF;text-transform:uppercase;
+                    letter-spacing:.5px;margin-bottom:10px">
+          Recommended Actions
+        </div>
+        <ul style="padding-left:18px;margin:0">
+          ${recommendationItems}
+        </ul>
+      </div>` : ''}
+
+      <!-- Data tables -->
+      <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:24px">
+        <tr valign="top">
+
+          <!-- Top Searches -->
+          <td width="32%" style="padding-right:8px">
+            <div style="font-size:12px;font-weight:700;color:#374151;text-transform:uppercase;
+                        letter-spacing:.4px;margin-bottom:8px">Top Searches</div>
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tbody>${searchRows}</tbody>
+            </table>
+          </td>
+
+          <td width="4%"></td>
+
+          <!-- Contact Methods -->
+          <td width="32%" style="padding-right:8px">
+            <div style="font-size:12px;font-weight:700;color:#374151;text-transform:uppercase;
+                        letter-spacing:.4px;margin-bottom:8px">Contact Taps</div>
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tbody>${contactRows}</tbody>
+            </table>
+            ${conversionBadge}
+          </td>
+
+          <td width="4%"></td>
+
+          <!-- Top Referrers -->
+          <td width="28%">
+            <div style="font-size:12px;font-weight:700;color:#374151;text-transform:uppercase;
+                        letter-spacing:.4px;margin-bottom:8px">Top Referrers</div>
+            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tbody>${referrerRows}</tbody>
+            </table>
+          </td>
+
+        </tr>
+      </table>
+
+      <!-- CTA -->
+      <div style="text-align:center;padding-top:16px;border-top:1px solid #F1F5F9">
+        <a href="https://vet-market-place-jsj5.onrender.com/admin"
+           style="display:inline-block;background:#2563EB;color:#ffffff;text-decoration:none;
+                  font-weight:700;font-size:14px;padding:12px 28px;border-radius:10px">
+          Open Admin Dashboard →
+        </a>
+        <p style="font-size:11px;color:#94A3B8;margin:12px 0 0;line-height:1.6">
+          This briefing is sent every Monday at 7:00 AM WAT.<br/>
+          Platform total: ${totalUsers.toLocaleString()} users · ${dormantCount} inactive 30+ days.
+        </p>
+      </div>
+
+    </td>
+  </tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>`;
+
+  await sendEmail(
+    adminEmail,
+    `Xpress Vet Weekly — ${newSignups} new users · ₦${mrr.toLocaleString()} MRR · ${cancelledThisWeek} cancellations`,
+    html,
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UNANSWERED SUPPORT ALERT — cron reminder for threads with no admin reply
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * @param {string} adminEmail
+ * @param {{ userName: string, userEmail: string, userRole: string, waitMinutes: number }[]} threads
+ */
+export async function sendUnansweredSupportAlert(adminEmail, threads) {
+  const rows = threads.map(t => `
+    <tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #F3F4F6">${t.userName}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #F3F4F6">${t.userEmail || '—'}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #F3F4F6">${t.userRole?.replace(/_/g, ' ') || '—'}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #F3F4F6;color:#DC2626;font-weight:600">${t.waitMinutes} min</td>
+    </tr>`).join('');
+
+  const html = `
+    <div style="font-family:Inter,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#111827">
+      <h2 style="font-size:20px;font-weight:800;color:#DC2626">⚠️ Unanswered Support Messages</h2>
+      <p>The following users have been waiting more than 30 minutes for a reply:</p>
+      <table style="width:100%;border-collapse:collapse;margin-bottom:20px">
+        <thead>
+          <tr style="background:#F9FAFB">
+            <th style="padding:10px 12px;text-align:left;font-size:13px;color:#6B7280">Name</th>
+            <th style="padding:10px 12px;text-align:left;font-size:13px;color:#6B7280">Email</th>
+            <th style="padding:10px 12px;text-align:left;font-size:13px;color:#6B7280">Role</th>
+            <th style="padding:10px 12px;text-align:left;font-size:13px;color:#6B7280">Waiting</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <a href="https://vet-market-place-jsj5.onrender.com/admin" style="display:inline-block;background:#DC2626;color:#fff;
+         text-decoration:none;padding:14px 28px;border-radius:10px;font-weight:700;font-size:15px">
+        Reply Now &rarr;
+      </a>
+    </div>`;
+
+  await sendEmail(adminEmail, `⚠️ ${threads.length} unanswered support message(s) — please reply`, html);
 }
