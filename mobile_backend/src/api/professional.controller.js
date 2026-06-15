@@ -439,7 +439,7 @@ export const getProfessional = async (req, res) => {
     const { id } = req.params;
 
     const professional = await Professional.findById(id)
-      .populate('userId', 'name email phone supabaseId') // ← supabaseId added
+      .populate('userId', 'name email phone supabaseId profileImage mediaImages')
       .select('-__v')
       .lean();
 
@@ -470,14 +470,19 @@ export const getProfessional = async (req, res) => {
       });
     }
 
+    // Lift mediaImages and profileImage from the populated userId subdoc to top level
+    const mediaImages   = professional.userId?.mediaImages   ?? [];
+    const profileImage  = professional.userId?.profileImage  ?? null;
+    const enriched      = { ...professional, mediaImages, profileImage };
+
     // Profile owner always sees full data
     if (requestingUserId === profileUserId) {
-      return res.json({ success: true, data: { ...professional, isPreview: false } });
+      return res.json({ success: true, data: { ...enriched, isPreview: false } });
     }
 
     // Freemium gate for everyone else
     if (req.subscription?.isActive === true) {
-      return res.json({ success: true, data: { ...professional, isPreview: false } });
+      return res.json({ success: true, data: { ...enriched, isPreview: false } });
     }
 
     const userId = req.user._id || req.user.id;
@@ -485,7 +490,7 @@ export const getProfessional = async (req, res) => {
 
     if (!user?.freeSearchUsed) {
       await User.findByIdAndUpdate(userId, { freeSearchUsed: true });
-      return res.json({ success: true, data: { ...professional, isPreview: false }, usedFreeSearch: true });
+      return res.json({ success: true, data: { ...enriched, isPreview: false }, usedFreeSearch: true });
     }
 
     const parts = (professional.address || '').split(',').map(s => s.trim()).filter(Boolean);
@@ -502,7 +507,8 @@ export const getProfessional = async (req, res) => {
         rating:         professional.rating,
         reviewCount:    professional.reviewCount,
         isVerified:     professional.isVerified,
-        images:         professional.images,
+        profileImage,
+        mediaImages,
         isPreview:      true,
       },
     });

@@ -570,6 +570,29 @@ export async function sendPendingSubReminderEmail(name, email, isProfessional) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// REFERRAL REWARD — sent to referrer when their referred user subscribes
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function sendReferralRewardEmail(name, email, bonusDays) {
+  const firstName = name?.split(' ')[0] || 'there';
+  const html = layout('You earned a referral reward! 🎉', `
+    <h1>Hey ${firstName}, your referral paid off! 🎁</h1>
+    <p>Someone you referred just subscribed to Xpress Vet — and you've earned a reward!</p>
+    <div class="highlight">
+      <p>✅ <strong>${bonusDays} days</strong> have been added to your subscription as a thank-you.</p>
+      <p>Keep sharing your referral code — every subscription earns you more free time.</p>
+    </div>
+    <p style="text-align:center;margin:24px 0">
+      <a href="https://xpressvetmarketplace.com" class="btn">Open Xpress Vet →</a>
+    </p>
+    <p style="color:#94A3B8;font-size:13px">
+      You can find your referral code and rewards on your Profile screen. Thank you for growing the Xpress Vet community!
+    </p>
+  `);
+  await sendEmail(email, `${firstName}, you earned a referral reward on Xpress Vet!`, html);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // WEEKLY DIGEST — internal "chief of staff" briefing sent every Monday 7am WAT
 // ─────────────────────────────────────────────────────────────────────────────
 
