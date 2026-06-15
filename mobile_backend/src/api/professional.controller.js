@@ -402,7 +402,7 @@ export const getMyProfessionalProfile = async (req, res) => {
     const cacheKey = `professional:${userId}`;
     const professional = await cache.cacheWrap(cacheKey, 300, async () => {
       return await Professional.findOne({ userId })
-        .populate('userId', 'name email phone isVerified mediaImages')
+        .populate('userId', 'name email phone isVerified profileImage mediaImages')
         .lean();
     });
 

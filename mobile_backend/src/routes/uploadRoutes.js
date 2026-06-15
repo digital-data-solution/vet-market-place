@@ -20,8 +20,9 @@ import express from 'express';
 import multer  from 'multer';
 
 import { protect }                                  from '../middlewares/authMiddleware.js';
-import { uploadToCloudinary, deleteFromCloudinary } from '../utils/cloudinaryHelper.js';
+import { uploadToCloudinary, deleteFromCloudinary } from '../lib/cloudinaryUpload.js';
 import User                                         from '../models/User.js';
+import cache                                        from '../lib/cache.js';
 
 const router = express.Router();
 
@@ -183,7 +184,7 @@ router.get('/limits', protect, async (req, res) => {
 
     return res.status(200).json({
       success:     true,
-      currentPlan: plan,
+      currentPlan: normalizePlan(role, plan),
       maxImages,
       usedImages:  user.mediaImages?.length ?? 0,
       // Full limits table so the frontend can render the plan comparison footer
@@ -283,6 +284,9 @@ router.post('/media', protect, singleImage('image'), async (req, res) => {
       },
     });
 
+    // Invalidate professional profile cache so next fetch returns fresh mediaImages
+    await cache.del(`professional:${req.user._id}`);
+
     return res.status(200).json({
       success:  true,
       url:      uploadResult.url,
@@ -336,6 +340,9 @@ router.delete('/delete', protect, async (req, res) => {
     await User.findByIdAndUpdate(req.user._id, {
       $pull: { mediaImages: { url: imageUrl } },
     });
+
+    // Invalidate professional profile cache so next fetch returns updated mediaImages
+    await cache.del(`professional:${req.user._id}`);
 
     return res.status(200).json({ success: true, message: 'Image deleted successfully.' });
   } catch (error) {
