@@ -72,17 +72,20 @@ export const submitVCN = async (req, res) => {
     user.markModified('vetVerification');
     await user.save();
 
-    // FIX #5: upsert: true so this works even if Professional doc doesn't exist yet
+    // Sync VCN to Professional doc so it appears in admin pending reviews.
+    // Use $set for ALL fields — mixing bare fields with $set causes a Mongo error.
+    // Also set verificationStatus: 'pending' so the pending-reviews filter picks it up.
     await Professional.findOneAndUpdate(
       { userId },
       {
-        vcnNumber: vcn.trim(),
         $set: {
+          vcnNumber: vcn.trim().toUpperCase(),
+          verificationStatus: 'pending',
           verificationSubmitted: true,
           verificationSubmittedAt: new Date(),
         },
       },
-      { returnDocument: 'after', upsert: true }
+      { new: true, upsert: true }
     );
 
     logger.info('VCN submitted for review', { userId, vcn: vcn.trim() });

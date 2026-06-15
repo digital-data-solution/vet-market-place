@@ -174,11 +174,13 @@ export const getReferralInfo = async (req, res) => {
       user = { ...user, referralCode: code };
     }
 
+    const referralLink = `https://xpressvetmarketplace.com/auth/register?ref=${user.referralCode}`;
     return res.json({
       success: true,
       data: {
         referralCode:          user.referralCode,
-        shareMessage:          `Join Xpress Vet and get 20% off your first subscription! Use my code: ${user.referralCode}`,
+        referralLink,
+        shareMessage:          `Join me on Xpress Vet — Nigeria's #1 pet care marketplace! 🐾\n\nUse my referral code ${user.referralCode} when you sign up and we both get rewarded.\n\n👉 Sign up here: ${referralLink}`,
         referralRewardsEarned: user.referralRewardsEarned ?? 0,
       },
     });

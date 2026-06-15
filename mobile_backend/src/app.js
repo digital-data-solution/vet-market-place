@@ -90,9 +90,10 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // ─── Serve static files ───────────────────────────────────────────────────────
-// index.html must never be cached (content changes on each web build).
-// Hashed JS/CSS bundles (/_expo/static/...) are safe to cache forever.
-app.use(express.static('public', {
+// Use absolute path so this works regardless of CWD (Render may start from repo root).
+// index.html must never be cached; hashed JS/CSS bundles are safe to cache forever.
+const PUBLIC_DIR = path.join(__dirname, '../public');
+app.use(express.static(PUBLIC_DIR, {
   setHeaders(res, filePath) {
     if (filePath.endsWith('index.html')) {
       res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -102,13 +103,9 @@ app.use(express.static('public', {
   },
 }));
 
-// ─── Health / root ────────────────────────────────────────────────────────────
-app.get('/', (_req, res) => {
-  res.json({ message: 'Vet Marketplace API is running', version: '2', timestamp: new Date().toISOString() });
-});
-
+// ─── Health ───────────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => {
-  res.json({ status: 'OK', version: '6-spa-fixed', uptime: process.uptime(), timestamp: new Date().toISOString() });
+  res.json({ status: 'OK', version: '7-spa-fixed', uptime: process.uptime(), timestamp: new Date().toISOString() });
 });
 
 // ─── Rate limiters ────────────────────────────────────────────────────────────
@@ -355,6 +352,33 @@ app.use('/api/v1/reviews',          reviewRoutes);
 app.use('/api/support',             supportRoutes);
 app.use('/api/v1/track',            trackRoutes);
 app.use('/api/v1/upsell',           upsellRoutes);
+
+// ─── Client-side error reporting ─────────────────────────────────────────────
+// No auth required — errors may fire before the user is authenticated.
+// Rate-limited to 5 reports per IP per 15 min to prevent abuse.
+const errorReportLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 5 });
+app.post('/api/v1/report-error', errorReportLimiter, async (req, res) => {
+  try {
+    const { error, stack, platform, url, userId } = req.body ?? {};
+    if (!error) return res.status(400).json({ success: false });
+    const { sendEmail } = await import('./services/email.service.js');
+    const ADMIN_EMAIL   = process.env.ADMIN_EMAIL || 'contact@xpressdigitalanddatasolutions.online';
+    await sendEmail(
+      ADMIN_EMAIL,
+      `[Xpress Vet] App crash reported — ${platform || 'unknown platform'}`,
+      `<h2>Client-side error</h2>
+       <p><strong>Error:</strong> ${String(error).replace(/</g, '&lt;')}</p>
+       <p><strong>Platform:</strong> ${platform || 'unknown'}</p>
+       ${url ? `<p><strong>URL:</strong> ${String(url).replace(/</g, '&lt;')}</p>` : ''}
+       ${userId ? `<p><strong>User ID:</strong> ${String(userId).replace(/</g, '&lt;')}</p>` : ''}
+       ${stack ? `<pre style="background:#f3f4f6;padding:12px;border-radius:8px;font-size:12px;overflow:auto">${String(stack).replace(/</g, '&lt;')}</pre>` : ''}
+       <p style="color:#94A3B8;font-size:12px">Sent automatically from NavigationErrorBoundary</p>`,
+    ).catch(() => {});
+    res.json({ success: true });
+  } catch {
+    res.status(500).json({ success: false });
+  }
+});
 
 // ─── Global Error Handler ─────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
