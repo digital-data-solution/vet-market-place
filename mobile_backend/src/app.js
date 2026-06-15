@@ -460,13 +460,17 @@ app.use((err, req, res, next) => {
 // ─── SPA catch-all ────────────────────────────────────────────────────────────
 // app.use() avoids path-to-regexp v8 wildcard syntax (Express 5 broke app.get('*')).
 // Only serves index.html for GET requests not matched by any API or static route.
+// sendFile callback is required in Express 5 — without it the middleware returns
+// undefined synchronously and Express may fall through to the 404 handler.
 app.use((req, res, next) => {
   if (req.method !== 'GET') return next();
   if (req.path.startsWith('/api/') || req.path === '/admin' || req.path === '/health') {
     return next();
   }
   res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-  res.sendFile(path.join(__dirname, '../public/index.html'));
+  res.sendFile(path.join(PUBLIC_DIR, 'index.html'), (err) => {
+    if (err) next(err);
+  });
 });
 
 // ─── 404 fallback (API routes only) ──────────────────────────────────────────
