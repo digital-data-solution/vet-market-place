@@ -13,6 +13,7 @@ import Subscription from '../models/Subscription.js';
 import {
   sendSubscriptionExpiryReminder,
   sendSubscriptionExpired,
+  sendPendingSubReminderEmail,
 } from '../services/email.service.js';
 import logger from '../lib/logger.js';
 
@@ -144,38 +145,52 @@ async function runPendingCleanup() {
   logger.info('--- Running Pending Payment Cleanup ---');
   const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000); // 48 hours ago
 
-  // Professional subscriptions stuck in 'pending' > 48h → expire them
-  const proResult = await Subscription.updateMany(
-    {
-      status:    'pending',
-      createdAt: { $lte: cutoff },
-    },
-    { $set: { status: 'expired' } },
-  );
+  const proQuery = { status: 'pending', createdAt: { $lte: cutoff } };
+  const userQuery = {
+    'subscription.status': 'pending',
+    $or: [
+      { 'subscription.paymentInitiatedAt': { $lte: cutoff } },
+      { 'subscription.paymentInitiatedAt': { $exists: false }, updatedAt: { $lte: cutoff } },
+    ],
+  };
 
-  // Pet owner subscriptions stuck in 'pending' > 48h → reset to inactive
-  const userResult = await User.updateMany(
-    {
-      'subscription.status': 'pending',
-      $or: [
-        { 'subscription.paymentInitiatedAt': { $lte: cutoff } },
-        {
-          'subscription.paymentInitiatedAt': { $exists: false },
-          updatedAt: { $lte: cutoff },
-        },
-      ],
-    },
-    {
-      $set: {
-        'subscription.status': 'inactive',
-        'subscription.plan':   null,
-      },
-    },
-  );
+  // Fetch affected records before updating so we can email them
+  const [stuckPro, stuckUsers] = await Promise.all([
+    Subscription.find(proQuery).populate('user', 'name email').lean(),
+    User.find(userQuery).select('name email subscription').lean(),
+  ]);
+
+  // Bulk updates
+  const [proResult, userResult] = await Promise.all([
+    Subscription.updateMany(proQuery, { $set: { status: 'expired' } }),
+    User.updateMany(userQuery, { $set: { 'subscription.status': 'inactive', 'subscription.plan': null } }),
+  ]);
 
   logger.info(
     `Pending cleanup: ${proResult.modifiedCount} professional, ${userResult.modifiedCount} pet owner records cleaned.`,
   );
+
+  // Send reminder emails to all affected users
+  let emailsSent = 0;
+  for (const sub of stuckPro) {
+    if (!sub.user?.email) continue;
+    try {
+      await sendPendingSubReminderEmail(sub.user.name, sub.user.email, true);
+      emailsSent++;
+    } catch (err) {
+      logger.error('Pending reminder email failed (professional)', { userId: sub.user._id, error: err.message });
+    }
+  }
+  for (const user of stuckUsers) {
+    if (!user.email) continue;
+    try {
+      await sendPendingSubReminderEmail(user.name, user.email, false);
+      emailsSent++;
+    } catch (err) {
+      logger.error('Pending reminder email failed (pet owner)', { userId: user._id, error: err.message });
+    }
+  }
+  logger.info(`Pending cleanup reminder emails sent: ${emailsSent}`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

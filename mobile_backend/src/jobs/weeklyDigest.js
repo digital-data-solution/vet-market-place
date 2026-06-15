@@ -55,7 +55,7 @@ async function gatherWeeklyData() {
       { $group: { _id: null, mrr: { $sum: '$amount' }, count: { $sum: 1 } } },
     ]),
 
-    Subscription.countDocuments({ startDate: { $gte: weekStart } }),
+    Subscription.countDocuments({ startDate: { $gte: weekStart }, status: { $in: ['active', 'completed'] } }),
 
     Subscription.countDocuments({ status: 'cancelled', updatedAt: { $gte: weekStart } }),
 
