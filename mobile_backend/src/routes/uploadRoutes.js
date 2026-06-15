@@ -208,8 +208,10 @@ router.post('/', protect, singleImage('image'), async (req, res) => {
       return res.status(400).json({ success: false, message: 'No image file provided.' });
     }
 
-    // Frontend sends publicId = `profile-${userId}` for deterministic overwrite
-    const publicId = req.body.publicId || undefined;
+    // Build a user-unique publicId server-side — never trust the client value.
+    // Using the same publicId per user means re-uploads overwrite in-place (no orphaned assets)
+    // and each user's asset is isolated at profiles/profile-<userId>.
+    const publicId = `profile-${req.user._id}`;
 
     const uploadResult = await uploadToCloudinary(req.file.buffer, {
       folder: 'profiles',
