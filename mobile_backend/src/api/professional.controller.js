@@ -511,6 +511,8 @@ export const getProfessional = async (req, res) => {
         profileImage,
         mediaImages,
         isPreview:      true,
+        // Viewer's current plan (if any) so the frontend can show "Upgrade" vs "Subscribe"
+        viewerPlan:     req.subscription?.plan ?? null,
       },
     });
   } catch (error) {
