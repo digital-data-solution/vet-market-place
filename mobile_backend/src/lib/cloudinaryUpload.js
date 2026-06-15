@@ -34,11 +34,8 @@ export async function uploadToCloudinary(fileBuffer, { folder = 'profiles', publ
     const uploadOptions = {
       folder,
       resource_type: 'image',
-      // Auto-format & quality for best compression
-      format: 'auto',
-      quality: 'auto',
       transformation: [
-        { width: 1200, height: 1200, crop: 'limit' },
+        { width: 1200, height: 1200, crop: 'limit', fetch_format: 'auto', quality: 'auto:good' },
       ],
     };
 
