@@ -545,6 +545,31 @@ export async function sendAbandonedSubEmail(name, email, plan, amount) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// PENDING SUB REMINDER — sent when 48h cleanup resets a stuck pending subscription
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function sendPendingSubReminderEmail(name, email, isProfessional) {
+  const firstName = name?.split(' ')[0] || 'there';
+  const context = isProfessional
+    ? "Your listing wasn't activated — complete your subscription to appear in Xpress Vet search results and be found by pet owners."
+    : "Your Premium subscription wasn't completed — finish it to unlock full contact details and GPS search for professionals.";
+  const html = layout('Complete Your Subscription', `
+    <h1>Hey ${firstName} — your subscription wasn't completed 🛒</h1>
+    <p>${context}</p>
+    <div class="highlight">
+      <p>💡 It only takes a minute to finish. Tap below to try again — nothing was charged.</p>
+    </div>
+    <p style="text-align:center;margin:24px 0">
+      <a href="https://xpressvetmarketplace.com" class="btn">Complete My Subscription →</a>
+    </p>
+    <p style="color:#94A3B8;font-size:13px">
+      Your free account is still active. You can subscribe whenever you're ready — your profile and history are saved.
+    </p>
+  `);
+  await sendEmail(email, `${firstName}, complete your Xpress Vet subscription`, html);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // WEEKLY DIGEST — internal "chief of staff" briefing sent every Monday 7am WAT
 // ─────────────────────────────────────────────────────────────────────────────
 
