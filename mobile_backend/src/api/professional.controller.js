@@ -413,12 +413,13 @@ export const getMyProfessionalProfile = async (req, res) => {
       });
     }
 
-    // Expose mediaImages at the top level so the onboarding screen can read it directly
-    const mediaImages = professional.userId?.mediaImages ?? [];
+    // Lift mediaImages and profileImage to top level; filter null-URL entries from old broken uploads
+    const mediaImages  = (professional.userId?.mediaImages ?? []).filter(m => m.url);
+    const profileImage = professional.userId?.profileImage ?? null;
 
     res.json({
       success: true,
-      data: { ...professional, mediaImages },
+      data: { ...professional, mediaImages, profileImage },
     });
   } catch (error) {
     logger.error('Get my professional profile error', { error: error.message, stack: error.stack });
@@ -470,8 +471,8 @@ export const getProfessional = async (req, res) => {
       });
     }
 
-    // Lift mediaImages and profileImage from the populated userId subdoc to top level
-    const mediaImages   = professional.userId?.mediaImages   ?? [];
+    // Lift mediaImages and profileImage from the populated userId subdoc to top level; filter null-URL entries
+    const mediaImages   = (professional.userId?.mediaImages ?? []).filter(m => m.url);
     const profileImage  = professional.userId?.profileImage  ?? null;
     const enriched      = { ...professional, mediaImages, profileImage };
 

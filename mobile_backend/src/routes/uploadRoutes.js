@@ -186,7 +186,7 @@ router.get('/limits', protect, async (req, res) => {
       success:     true,
       currentPlan: normalizePlan(role, plan),
       maxImages,
-      usedImages:  user.mediaImages?.length ?? 0,
+      usedImages:  (user.mediaImages ?? []).filter(m => m.url).length,
       // Full limits table so the frontend can render the plan comparison footer
       limits:      roleLimits,
     });
@@ -221,6 +221,9 @@ router.post('/', protect, singleImage('image'), async (req, res) => {
       profileImage:     uploadResult.url,
       profileImagePath: uploadResult.publicId,
     });
+
+    // Invalidate professional profile cache so the next fetch returns the new profileImage
+    await cache.del(`professional:${req.user._id}`);
 
     return res.status(200).json({
       success:  true,
