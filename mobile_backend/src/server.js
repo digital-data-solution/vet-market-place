@@ -22,6 +22,22 @@ const { default: startAbandonedSubJob }      = await import('./jobs/abandonedSub
 // Start services
 await connectDB();
 connectRedis();
+
+// One-shot migration: remove null-URL mediaImages entries left by the old cloudinaryHelper bug
+(async () => {
+  try {
+    const { default: User } = await import('./models/User.js');
+    const result = await User.updateMany(
+      { 'mediaImages.url': { $in: [null, ''] } },
+      { $pull: { mediaImages: { url: { $in: [null, ''] } } } },
+    );
+    if (result.modifiedCount > 0) {
+      console.log(`🧹 Cleaned null-URL mediaImages from ${result.modifiedCount} user(s)`);
+    }
+  } catch (e) {
+    console.warn('Migration warning (non-fatal):', e.message);
+  }
+})();
 startLicenseCheckJob();
 startSubscriptionJobs();
 startProfessionalJobs();

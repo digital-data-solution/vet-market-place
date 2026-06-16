@@ -20,8 +20,9 @@ import express from 'express';
 import multer  from 'multer';
 
 import { protect }                                  from '../middlewares/authMiddleware.js';
-import { uploadToCloudinary, deleteFromCloudinary } from '../utils/cloudinaryHelper.js';
+import { uploadToCloudinary, deleteFromCloudinary } from '../lib/cloudinaryUpload.js';
 import User                                         from '../models/User.js';
+import cache                                        from '../lib/cache.js';
 
 const router = express.Router();
 
@@ -183,9 +184,9 @@ router.get('/limits', protect, async (req, res) => {
 
     return res.status(200).json({
       success:     true,
-      currentPlan: plan,
+      currentPlan: normalizePlan(role, plan),
       maxImages,
-      usedImages:  user.mediaImages?.length ?? 0,
+      usedImages:  (user.mediaImages ?? []).filter(m => m.url).length,
       // Full limits table so the frontend can render the plan comparison footer
       limits:      roleLimits,
     });
@@ -207,8 +208,10 @@ router.post('/', protect, singleImage('image'), async (req, res) => {
       return res.status(400).json({ success: false, message: 'No image file provided.' });
     }
 
-    // Frontend sends publicId = `profile-${userId}` for deterministic overwrite
-    const publicId = req.body.publicId || undefined;
+    // Build a user-unique publicId server-side — never trust the client value.
+    // Using the same publicId per user means re-uploads overwrite in-place (no orphaned assets)
+    // and each user's asset is isolated at profiles/profile-<userId>.
+    const publicId = `profile-${req.user._id}`;
 
     const uploadResult = await uploadToCloudinary(req.file.buffer, {
       folder: 'profiles',
@@ -220,6 +223,9 @@ router.post('/', protect, singleImage('image'), async (req, res) => {
       profileImage:     uploadResult.url,
       profileImagePath: uploadResult.publicId,
     });
+
+    // Invalidate professional profile cache so the next fetch returns the new profileImage
+    await cache.del(`professional:${req.user._id}`);
 
     return res.status(200).json({
       success:  true,
@@ -283,6 +289,9 @@ router.post('/media', protect, singleImage('image'), async (req, res) => {
       },
     });
 
+    // Invalidate professional profile cache so next fetch returns fresh mediaImages
+    await cache.del(`professional:${req.user._id}`);
+
     return res.status(200).json({
       success:  true,
       url:      uploadResult.url,
@@ -336,6 +345,9 @@ router.delete('/delete', protect, async (req, res) => {
     await User.findByIdAndUpdate(req.user._id, {
       $pull: { mediaImages: { url: imageUrl } },
     });
+
+    // Invalidate professional profile cache so next fetch returns updated mediaImages
+    await cache.del(`professional:${req.user._id}`);
 
     return res.status(200).json({ success: true, message: 'Image deleted successfully.' });
   } catch (error) {

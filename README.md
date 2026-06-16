@@ -2,16 +2,23 @@
 
 Nigeria's pet care marketplace — connecting pet owners with verified vets, kennels, and pet shops.
 
-Live: `https://vet-market-place-jsj5.onrender.com` · Website: `xpressvetmarketplace.com`
+Backend API: `https://vet-market-place-jsj5.onrender.com` · Website: `https://xpressvetmarketplace.com`
 
 ---
 
-## Repos
+## Repos & Deployments
 
-| Repo | Purpose |
-|---|---|
-| `vet-market-place` | Express backend + web build (`public/`) — deployed on Render |
-| `Vet-mobile-app` | Expo React Native source — submodule at `mobile_app/` |
+| Repo | Render service | Purpose |
+|---|---|---|
+| `vet-market-place` | Web Service (`vet-market-place-jsj5`) | Express backend API only |
+| `Vet-mobile-app` | Static Site (custom domain `xpressvetmarketplace.com`) | Built directly from this repo — see below |
+
+`mobile_app/` is also a git **submodule** inside the `vet-market-place` backend repo (kept in sync for reference), but the **live website is no longer served from `mobile_backend/public/`** — it's a standalone Render Static Site that builds straight from `Vet-mobile-app`.
+
+**Static Site settings (Render dashboard):**
+- Build command: `npm install && npm run export`
+- Publish directory: `dist`
+- Redirects/Rewrites: Source `/*` → Destination `/index.html` → Action **Rewrite** (required for SPA routing on refresh/deep links — Render static sites do **not** read a `_redirects` file, only this dashboard rule)
 
 ---
 
@@ -213,14 +220,12 @@ git checkout master && git merge main --no-edit && git push origin master && git
 ```
 
 ### Web build (updates xpressvetmarketplace.com)
+The Render Static Site builds and deploys automatically on every push to `Vet-mobile-app` main — no manual export/commit of build output needed. Just commit source changes in `mobile_app/` and push:
 ```bash
 cd mobile_app
-npx expo export --platform web --output-dir ../mobile_backend/public
-cd ..
-git add mobile_backend/public
-git commit -m "chore: web build YYYY-MM-DD"
-# then push to both main and master as above
+git add -A && git commit -m "..." && git push origin main
 ```
+Render runs `npm install && npm run export` (= `expo export --platform web --clear`) and publishes `dist/` automatically.
 
 ---
 
@@ -304,6 +309,18 @@ Dashboard → Authentication → URL Configuration:
 - List screens (`ProfessionalsScreen`, `KennelsScreen`, `ShopsScreen`): Alert-based gates replaced with full-screen `SubscriptionPrompt` + loading spinner while check resolves
 - Profile screens (`VetProfileScreen`, `KennelProfileScreen`, `ShopProfileScreen`): 402 from detail fetch now shows `SubscriptionPrompt` instead of generic "Profile Unavailable" error
 - Removed dead `goToSubscription` helpers from `KennelsScreen` and `ShopsScreen`
+
+### Session 8 (2026-06-16) — website refresh/blank-page + redirect loop
+
+Settled the website's serving architecture (after trying: backend-served `public/`, then a pre-built-files static site, then back to building from `mobile_app`) as a **Render Static Site building directly from `Vet-mobile-app`**, publish dir `dist`. Fixes along the way:
+- `navigation/index.tsx`: `class NavigationErrorBoundary extends Component` was missing its opening `<` for generic type params — broke the TSX parse, blocked every build
+- Added `export` npm script (`expo export --platform web --clear`) so Render's build command can be `npm install && npm run export`
+- Confirmed Render static sites **do not support a `_redirects` file** at all (despite docs/community posts implying otherwise) — removed the dead file; SPA fallback routing only works via the dashboard Redirects/Rewrites rule (`/* → /index.html`, Action **Rewrite**)
+- That dashboard rule had two successive typos that broke it: a stray ` 200` appended to the Destination (copied from Netlify `_redirects` syntax, which Render doesn't use) caused an actual redirect loop (`ERR_TOO_MANY_REDIRECTS`, browser URL literally became `/index.html%20200`); after fixing that, a leftover **trailing space** in the Destination still caused every non-root path to return `200 OK` with an empty body (Render forces 200 on a matched Rewrite rule even when the destination path fails to resolve — it doesn't 404)
+- `getInitialURL`'s async `supabase.auth.getSession()` call was blocking React Navigation from rendering anything on deep-link refresh (blank screen) — fixed with a module-level `_bootstrapSession` cache set synchronously by `bootstrap()` before `setLoading(false)`
+- Post-login redirect now uses `window.history.replaceState` instead of `window.location.href` (avoids a full page reload that re-triggered the redirect-saving logic in `getInitialURL`, which was causing `ERR_TOO_MANY_REDIRECTS`); `getInitialURL` now only persists non-root paths to `sessionStorage` as redirect targets
+
+All deep-link routes verified server-side post-fix (curl, cache-busted): `/`, `/home`, `/professionals`, `/kennels`, `/shops`, `/profile`, `/services`, `/messages`, `/subscription`, `/network`, `/verify`, `/VetProfile`, `/ShopProfile`, `/KennelProfile`, `/ServiceProfile`, `/ExploreOptions`, `/VerifyProfessional`, `/auth/callback`, `/auth/login`, `/auth/register`, `/privacy-policy`, `/terms-and-conditions`, `/support` — all return `200` with the correct 1319-byte `index.html`. Backend `/health` and the JS bundle itself also verified serving correctly.
 
 ---
 

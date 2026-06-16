@@ -5,6 +5,7 @@ import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { readFileSync } from 'fs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
@@ -93,6 +94,16 @@ app.use(express.urlencoded({ extended: true }));
 // Use absolute path so this works regardless of CWD (Render may start from repo root).
 // index.html must never be cached; hashed JS/CSS bundles are safe to cache forever.
 const PUBLIC_DIR = path.join(__dirname, '../public');
+
+// Read index.html once at startup — avoids async sendFile edge cases and is faster.
+let INDEX_HTML;
+try {
+  INDEX_HTML = readFileSync(path.join(PUBLIC_DIR, 'index.html'), 'utf8');
+} catch {
+  INDEX_HTML = null;
+  console.error('[SPA] WARNING: public/index.html not found — page refreshes will 404');
+}
+
 app.use(express.static(PUBLIC_DIR, {
   setHeaders(res, filePath) {
     if (filePath.endsWith('index.html')) {
@@ -103,9 +114,26 @@ app.use(express.static(PUBLIC_DIR, {
   },
 }));
 
+// ─── SPA catch-all ────────────────────────────────────────────────────────────
+// Must come RIGHT AFTER express.static and BEFORE any route or error handler so
+// that every non-asset GET request (page refresh, deep link) receives index.html.
+// Using res.send(INDEX_HTML) avoids the sendFile async-callback issues in Express 5.
+app.use((req, res, next) => {
+  if (req.method !== 'GET') return next();
+  if (
+    req.path.startsWith('/api/') ||
+    req.path === '/admin' ||
+    req.path === '/health'
+  ) return next();
+  if (!INDEX_HTML) return next(new Error('index.html not found'));
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.set('Content-Type', 'text/html; charset=utf-8');
+  return res.send(INDEX_HTML);
+});
+
 // ─── Health ───────────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => {
-  res.json({ status: 'OK', version: '7-spa-fixed', uptime: process.uptime(), timestamp: new Date().toISOString() });
+  res.json({ status: 'OK', version: '8-spa-presend', uptime: process.uptime(), timestamp: new Date().toISOString() });
 });
 
 // ─── Rate limiters ────────────────────────────────────────────────────────────
@@ -457,19 +485,9 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ─── SPA catch-all ────────────────────────────────────────────────────────────
-// app.use() avoids path-to-regexp v8 wildcard syntax (Express 5 broke app.get('*')).
-// Only serves index.html for GET requests not matched by any API or static route.
-app.use((req, res, next) => {
-  if (req.method !== 'GET') return next();
-  if (req.path.startsWith('/api/') || req.path === '/admin' || req.path === '/health') {
-    return next();
-  }
-  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-  res.sendFile(path.join(__dirname, '../public/index.html'));
-});
-
-// ─── 404 fallback (API routes only) ──────────────────────────────────────────
+// ─── 404 fallback ────────────────────────────────────────────────────────────
+// Only reached for non-GET requests or /api/ paths not handled by any route.
+// GET requests are already handled by the SPA catch-all above.
 app.use((req, res) => {
   res.status(404).json({ error: 'Not Found', message: `Cannot ${req.method} ${req.url}` });
 });

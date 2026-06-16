@@ -17,7 +17,7 @@ export const listPendingProfessionals = async (req, res) => {
 
     const [professionals, total] = await Promise.all([
       Professional.find(filters)
-        .populate('userId', 'name email phone isVerified createdAt')
+        .populate('userId', 'name email phone isVerified createdAt vetDetails')
         .select('-__v')
         .limit(parseInt(limit))
         .skip((parseInt(page) - 1) * parseInt(limit))
@@ -26,13 +26,20 @@ export const listPendingProfessionals = async (req, res) => {
       Professional.countDocuments(filters)
     ]);
 
+    // Normalize VCN: fall back to User.vetDetails.vcnNumber for vets who submitted
+    // via VetVerificationScreen before the Professional-level sync was fixed.
+    const data = professionals.map(p => ({
+      ...p,
+      vcnNumber: p.vcnNumber || p.userId?.vetDetails?.vcnNumber || null,
+    }));
+
     res.json({
       success: true,
-      count: professionals.length,
+      count: data.length,
       total,
       page: parseInt(page),
       totalPages: Math.ceil(total / parseInt(limit)),
-      data: professionals,
+      data,
     });
   } catch (error) {
     console.error('List pending professionals error:', error);
