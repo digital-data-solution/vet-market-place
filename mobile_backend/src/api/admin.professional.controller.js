@@ -1,17 +1,18 @@
 import Professional from '../models/Professional.js';
 import User from '../models/User.js';
 import cache from '../lib/cache.js';
+import { applyReferralReward } from '../lib/referralHelper.js';
 import {
   sendVerificationApproved,
   sendVerificationRejected,
 } from '../services/email.service.js';
 
-// Admin: List pending vet verifications
+// Admin: List pending professional verifications (all roles — vet, kennel, groomer, shop, etc.)
 export const listPendingProfessionals = async (req, res) => {
   try {
-    const { role = 'vet', limit = 50, page = 1 } = req.query;
+    const { role, limit = 50, page = 1 } = req.query;
 
-    const VALID_ROLES = ['vet','kennel','groomer','trainer','pet_sitter','pet_transport','cremation_service','agro_vet_supplier','insurance_provider','pet_pharmacy','rescue_center','pet_hotel'];
+    const VALID_ROLES = ['vet','kennel','groomer','trainer','pet_sitter','pet_transport','cremation_service','agro_vet_supplier','insurance_provider','pet_pharmacy','rescue_center','pet_hotel','farm'];
     const filters = { verificationStatus: 'pending' };
     if (role && VALID_ROLES.includes(role)) filters.role = role;
 
@@ -80,20 +81,33 @@ export const reviewProfessional = async (req, res) => {
       });
     }
 
+    const adminId = req.user._id || req.user.id;
+
     // Update professional verification status
     if (action === 'approve') {
       professional.isVerified = true;
       professional.verificationStatus = 'approved';
       professional.verifiedAt = new Date();
+      professional.verifiedBy = adminId;
       professional.adminNotes = adminNotes || 'Approved by admin';
 
       // Also update User model verification if it's a vet
       if (professional.role === 'vet') {
-        await User.findByIdAndUpdate(professional.userId, {
-          'vetVerification.status': 'approved',
-          'vetVerification.verifiedAt': new Date(),
-          'vetVerification.adminNotes': adminNotes || 'Approved by admin',
-        });
+        const user = await User.findById(professional.userId);
+        if (user) {
+          if (!user.vetVerification) user.vetVerification = {};
+          user.vetVerification.status = 'approved';
+          user.vetVerification.reviewedAt = new Date();
+          user.vetVerification.reviewedBy = adminId;
+          if (adminNotes) user.vetVerification.adminNotes = adminNotes;
+          user.markModified('vetVerification');
+          await user.save({ validateBeforeSave: false });
+
+          // Deferred referral reward — vet referrals only rewarded once verified (60 days)
+          if (user.referredBy && !user.referralRewardApplied) {
+            applyReferralReward(user, 60).catch(() => {});
+          }
+        }
       }
     } else {
       professional.isVerified = false;
@@ -104,7 +118,9 @@ export const reviewProfessional = async (req, res) => {
       if (professional.role === 'vet') {
         await User.findByIdAndUpdate(professional.userId, {
           'vetVerification.status': 'rejected',
-          'vetVerification.adminNotes': adminNotes || 'Rejected by admin',
+          'vetVerification.reviewedAt': new Date(),
+          'vetVerification.reviewedBy': adminId,
+          ...(adminNotes && { 'vetVerification.adminNotes': adminNotes }),
         });
       }
     }
@@ -147,7 +163,7 @@ export const getAllProfessionals = async (req, res) => {
 
     const filters = {};
 
-    const ALL_ROLES = ['vet','kennel','groomer','trainer','pet_sitter','pet_transport','cremation_service','agro_vet_supplier','insurance_provider','pet_pharmacy','rescue_center','pet_hotel'];
+    const ALL_ROLES = ['vet','kennel','groomer','trainer','pet_sitter','pet_transport','cremation_service','agro_vet_supplier','insurance_provider','pet_pharmacy','rescue_center','pet_hotel','farm'];
     if (role && ALL_ROLES.includes(role)) filters.role = role;
 
     if (verificationStatus && ['pending', 'approved', 'rejected'].includes(verificationStatus)) {

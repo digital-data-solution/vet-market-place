@@ -6,6 +6,15 @@ import Subscription from '../models/Subscription.js';
 import axios from 'axios';
 import mongoose from 'mongoose';
 
+/**
+ * Lift the owner's personal profileImage to top level so list/nearby cards
+ * can show a real photo when the shop has no gallery image of its own yet.
+ */
+function liftShopMedia(shop) {
+  const profileImage = shop.owner?.profileImage ?? shop.profileImage ?? null;
+  return { ...shop, profileImage };
+}
+
 function redactShop(shop) {
   const addr = typeof shop.address === 'string' ? shop.address : (shop.address?.full || '');
   const parts = addr.split(',').map(s => s.trim()).filter(Boolean);
@@ -328,6 +337,16 @@ export const listShops = async (req, res) => {
           }
         },
         { $match: { 'activeSubscription.0': { $exists: true } } },
+        {
+          $lookup: {
+            from: 'users',
+            localField: 'owner',
+            foreignField: '_id',
+            as: '_owner'
+          }
+        },
+        { $addFields: { profileImage: { $arrayElemAt: ['$_owner.profileImage', 0] } } },
+        { $project: { _owner: 0 } },
         { $sort: { createdAt: -1 } },
         { $skip: (parseInt(page) - 1) * parseInt(limit) },
         { $limit: parseInt(limit) }
@@ -427,13 +446,14 @@ export const getNearbyShops = async (req, res) => {
     }
 
     const cacheKey = `shops:nearby:${lng}:${lat}:${distance}:${search || ''}`;
-    const shops = await cache.cacheWrap(cacheKey, 60, async () => {
+    const shopsRaw = await cache.cacheWrap(cacheKey, 60, async () => {
       return await Shop.find(query)
-        .populate('owner', 'name phone email')
+        .populate('owner', 'name phone email profileImage')
         .select('-__v')
         .limit(50)
         .lean();
     });
+    const shops = shopsRaw.map(liftShopMedia);
 
     // Calculate distances
     const shopsWithDistance = shops.map(shop => {

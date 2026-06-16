@@ -34,6 +34,7 @@ const professionalSchema = new mongoose.Schema(
         'pet_pharmacy',
         'rescue_center',
         'pet_hotel',
+        'farm',
       ],
       required: [true, 'Role is required'],
       index: true,
@@ -190,6 +191,7 @@ const REQUIRES_ADMIN_REVIEW = new Set([
   'agro_vet_supplier', // sells medications/supplements — regulatory risk
   'pet_pharmacy',      // NAFDAC/PCN pharmacy license required
   'rescue_center',     // animal welfare body registration required
+  'farm',              // livestock/animal sale — trust-sensitive, business registration required
 ]);
 
 // Auto-approval logic — this hook is the single source of truth for

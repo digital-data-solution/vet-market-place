@@ -4,6 +4,18 @@ import cache from '../lib/cache.js';
 import logger from '../lib/logger.js';
 import Subscription from '../models/Subscription.js';
 
+/**
+ * Lift the owner's personal profileImage + uploaded mediaImages to top level so
+ * list/nearby cards and the public profile gallery can show real photos instead
+ * of always falling back to the role emoji. Kennels have no gallery of their own
+ * yet — photos come from the owner's User.mediaImages (same upload flow as vets).
+ */
+function liftKennelMedia(kennel) {
+  const profileImage = kennel.userId?.profileImage ?? kennel.profileImage ?? null;
+  const mediaImages   = kennel.userId?.mediaImages ?? kennel.mediaImages ?? [];
+  return { ...kennel, profileImage, mediaImages };
+}
+
 function redactKennel(kennel) {
   const parts = (kennel.address || '').split(',').map(s => s.trim()).filter(Boolean);
   return {
@@ -143,6 +155,16 @@ export const listKennels = async (req, res) => {
         }
       },
       { $match: { 'activeSubscription.0': { $exists: true } } },
+      {
+        $lookup: {
+          from: 'users',
+          localField: 'userId',
+          foreignField: '_id',
+          as: '_owner'
+        }
+      },
+      { $addFields: { profileImage: { $arrayElemAt: ['$_owner.profileImage', 0] } } },
+      { $project: { _owner: 0 } },
       { $sort: { createdAt: -1 } },
       { $skip: (parseInt(page) - 1) * parseInt(limit) },
       { $limit: parseInt(limit) }
@@ -230,10 +252,12 @@ export const getNearbyKennels = async (req, res) => {
       ];
     }
 
-    const kennels = await Professional.find(geoQuery)
-      .select('name businessName address specialization phone email location isVerified')
+    const kennelsRaw = await Professional.find(geoQuery)
+      .select('name businessName address specialization phone email location isVerified userId')
+      .populate('userId', 'profileImage')
       .limit(50)
       .lean();
+    const kennels = kennelsRaw.map(liftKennelMedia);
 
     // Attach distance in km
     const userPoint = [parseFloat(lng), parseFloat(lat)];
@@ -274,12 +298,13 @@ export const getKennel = async (req, res) => {
     let kennel = await cache.cacheGet(cacheKey);
     if (!kennel) {
       kennel = await Professional.findOne({ _id: id, role: 'kennel', isVerified: true })
-        .populate('userId', 'name email phone supabaseId')
+        .populate('userId', 'name email phone supabaseId profileImage mediaImages')
         .select('-__v')
         .lean();
       if (!kennel) {
         return res.status(404).json({ success: false, message: 'Kennel not found' });
       }
+      kennel = liftKennelMedia(kennel);
       await cache.cacheSet(cacheKey, kennel, 300);
     }
 
@@ -309,6 +334,8 @@ export const getKennel = async (req, res) => {
         reviewCount:    kennel.reviewCount,
         isVerified:     kennel.isVerified,
         images:         kennel.images,
+        profileImage:   kennel.profileImage,
+        mediaImages:    kennel.mediaImages,
         isPreview:      true,
       },
     });
@@ -327,6 +354,7 @@ export const getMyKennelProfile = async (req, res) => {
     const userId = req.user._id || req.user.id;
 
     const kennel = await Professional.findOne({ userId, role: 'kennel' })
+      .populate('userId', 'profileImage mediaImages')
       .select('-__v')
       .lean();
 
@@ -334,7 +362,7 @@ export const getMyKennelProfile = async (req, res) => {
       return res.status(404).json({ success: false, message: 'No kennel profile found' });
     }
 
-    res.json({ success: true, data: kennel });
+    res.json({ success: true, data: liftKennelMedia(kennel) });
   } catch (error) {
     logger.error('Get my kennel error', { error: error.message });
     res.status(500).json({ success: false, message: 'Failed to fetch profile', error: error.message });

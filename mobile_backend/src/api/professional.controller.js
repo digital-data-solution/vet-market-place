@@ -64,6 +64,17 @@ function toRad(degrees) {
 }
 
 /**
+ * Lift profileImage/mediaImages from the populated userId subdoc to top level,
+ * mirroring the single-profile fetch enrichment so list/nearby cards can render
+ * a real photo instead of always falling back to the role emoji.
+ */
+function liftUserMedia(prof) {
+  const mediaImages  = (prof.userId?.mediaImages ?? []).filter(m => m.url);
+  const profileImage = prof.userId?.profileImage ?? null;
+  return { ...prof, mediaImages, profileImage };
+}
+
+/**
  * Strip contact details and truncate address to city/state for non-subscribed users
  * who have already consumed their one free full-detail search.
  */
@@ -131,10 +142,12 @@ export const onboardProfessional = async (req, res) => {
     const VALID_ROLES = [
       'vet', 'kennel', 'groomer', 'trainer', 'pet_sitter',
       'pet_transport', 'cremation_service', 'agro_vet_supplier', 'insurance_provider',
+      'pet_pharmacy', 'rescue_center', 'pet_hotel', 'farm',
     ];
     // Roles where businessName is required (not optional)
     const BUSINESS_NAME_REQUIRED = new Set([
       'kennel', 'pet_transport', 'cremation_service', 'agro_vet_supplier', 'insurance_provider',
+      'pet_pharmacy', 'rescue_center', 'pet_hotel', 'farm',
     ]);
 
     if (!VALID_ROLES.includes(role)) {
@@ -254,7 +267,7 @@ export const onboardProfessional = async (req, res) => {
       needsReview,
     }, req);
 
-    const REQUIRES_ADMIN_REVIEW = new Set(['vet', 'insurance_provider', 'pet_transport', 'cremation_service', 'agro_vet_supplier', 'pet_pharmacy', 'rescue_center']);
+    const REQUIRES_ADMIN_REVIEW = new Set(['vet', 'insurance_provider', 'pet_transport', 'cremation_service', 'agro_vet_supplier', 'pet_pharmacy', 'rescue_center', 'farm']);
     const needsReview = REQUIRES_ADMIN_REVIEW.has(role);
 
     // ── Fire-and-forget emails — never block the response ───────────────────
@@ -574,7 +587,7 @@ export const listProfessionals = async (req, res) => {
     if (vcnNumber) {
       filters.vcnNumber = vcnNumber.trim();
       const professional = await Professional.findOne(filters)
-        .populate('userId', 'name email phone')
+        .populate('userId', 'name email phone profileImage mediaImages')
         .select('-__v')
         .lean();
 
@@ -584,15 +597,15 @@ export const listProfessionals = async (req, res) => {
         total: professional ? 1 : 0,
         page: 1,
         totalPages: 1,
-        data: professional ? [professional] : [],
+        data: professional ? [liftUserMedia(professional)] : [],
       });
     }
 
     const cacheKey = `professionals:list:${role || 'all'}:${page}:${limit}:${search || ''}`;
     const result = await cache.cacheWrap(cacheKey, search ? 30 : 120, async () => {
-      const [professionals, total] = await Promise.all([
+      const [professionalsRaw, total] = await Promise.all([
         Professional.find(filters)
-          .populate('userId', 'name email phone')
+          .populate('userId', 'name email phone profileImage mediaImages')
           .select('-__v')
           .limit(parseInt(limit))
           .skip((parseInt(page) - 1) * parseInt(limit))
@@ -600,6 +613,7 @@ export const listProfessionals = async (req, res) => {
           .lean(),
         Professional.countDocuments(filters),
       ]);
+      const professionals = professionalsRaw.map(liftUserMedia);
 
       // Fetch user IDs with active 'pro' subscriptions so we can sort them first
       const proUserIds = await Subscription.distinct('user', {
@@ -711,13 +725,14 @@ export const getNearbyProfessionals = async (req, res) => {
     }
 
     const cacheKey = `professionals:nearby:${lng}:${lat}:${distance}:${role || 'all'}:${search || ''}`;
-    const professionals = await cache.cacheWrap(cacheKey, 60, async () => {
+    const professionalsRaw = await cache.cacheWrap(cacheKey, 60, async () => {
       return await Professional.find(query)
-        .populate('userId', 'name phone email')
+        .populate('userId', 'name phone email profileImage mediaImages')
         .select('-__v')
         .limit(50)
         .lean();
     });
+    const professionals = professionalsRaw.map(liftUserMedia);
 
     // Attach computed distance to each result
     const professionalsWithDistance = professionals.map(prof => {
