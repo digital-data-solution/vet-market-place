@@ -104,7 +104,20 @@ export const syncUser = async (req, res) => {
       return res.status(400).json({ message: 'Token missing required fields.' });
     }
 
-    const isVerified = !!supabaseUser.email_confirmed_at;
+    // FIX: supabaseUser.email_confirmed_at (from auth.getUser(token)) can be stale —
+    // when email confirmation and the resulting auto sign-in happen in the same instant,
+    // the token used for this sync call doesn't reliably carry the just-committed
+    // confirmation. auth.admin.getUserById() always reflects live DB state, so use that
+    // as the source of truth instead of trusting the token-decoded user object.
+    let isVerified = !!supabaseUser.email_confirmed_at;
+    if (!isVerified) {
+      try {
+        const { data: freshData } = await supabaseAdmin.auth.admin.getUserById(supabaseId);
+        if (freshData?.user?.email_confirmed_at) isVerified = true;
+      } catch (e) {
+        logger.warn('Fresh verification re-check failed during sync', { supabaseId, error: e.message });
+      }
+    }
 
     // Validate referral code if provided — only applied on first sync (new users)
     const { referralCode, utmSource, utmCampaign, utmMedium } = req.body;
