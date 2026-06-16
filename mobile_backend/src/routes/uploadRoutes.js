@@ -94,6 +94,30 @@ const MEDIA_LIMITS = {
     starter:     12,
     pro:         30,
   },
+  pet_pharmacy: {
+    free:        4,
+    basic:       8,
+    starter:     15,
+    pro:         40,
+  },
+  rescue_center: {
+    free:        5,
+    basic:       10,
+    starter:     20,
+    pro:         50,
+  },
+  pet_hotel: {
+    free:        5,
+    basic:       8,
+    starter:     15,
+    pro:         50,
+  },
+  farm: {
+    free:        5,
+    basic:       10,
+    starter:     25,
+    pro:         75,
+  },
   pet_owner: {
     free:         2,
     user_premium: 8,
@@ -107,6 +131,7 @@ const PROFESSIONAL_ROLES = new Set([
   'vet', 'kennel_owner', 'shop_owner',
   'groomer', 'trainer', 'pet_sitter',
   'pet_transport', 'cremation_service', 'agro_vet_supplier', 'insurance_provider',
+  'pet_pharmacy', 'rescue_center', 'pet_hotel', 'farm',
 ]);
 function normalizePlan(role, plan) {
   if (PROFESSIONAL_ROLES.has(role) && (plan === 'user_monthly' || plan === 'user_premium')) {

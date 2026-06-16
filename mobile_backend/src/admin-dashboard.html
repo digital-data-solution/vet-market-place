@@ -309,6 +309,10 @@
             <option value="cremation_service">Cremation Services</option>
             <option value="agro_vet_supplier">Agro-Vet Suppliers</option>
             <option value="insurance_provider">Insurance Providers</option>
+            <option value="pet_pharmacy">Pet Pharmacies</option>
+            <option value="rescue_center">Rescue Centers</option>
+            <option value="pet_hotel">Pet Hotels</option>
+            <option value="farm">Farms</option>
           </select>
           <select id="pro-status-filter" onchange="loadProfessionals()">
             <option value="">All statuses</option>
@@ -355,6 +359,10 @@
             <option value="cremation_service">Cremation Service</option>
             <option value="agro_vet_supplier">Agro-Vet Suppliers</option>
             <option value="insurance_provider">Insurance Providers</option>
+            <option value="pet_pharmacy">Pet Pharmacies</option>
+            <option value="rescue_center">Rescue Centers</option>
+            <option value="pet_hotel">Pet Hotels</option>
+            <option value="farm">Farms</option>
             <option value="admin">Admin</option>
           </select>
         </div>
@@ -755,6 +763,10 @@
       <option value="cremation_service">Cremation Service</option>
       <option value="agro_vet_supplier">Agro-Vet Supplier</option>
       <option value="insurance_provider">Insurance Provider</option>
+      <option value="pet_pharmacy">Pet Pharmacy</option>
+      <option value="rescue_center">Rescue Center</option>
+      <option value="pet_hotel">Pet Hotel</option>
+      <option value="farm">Farm</option>
       <option value="admin">Admin</option>
     </select>
     <div class="modal-actions">
@@ -912,7 +924,7 @@ async function loadOverview() {
 
   const roleMap = {};
   (p.roleBreakdown || []).forEach(r => { roleMap[r._id] = r; });
-  const serviceRoles = ['groomer','trainer','pet_sitter','pet_transport','cremation_service','agro_vet_supplier','insurance_provider'];
+  const serviceRoles = ['groomer','trainer','pet_sitter','pet_transport','cremation_service','agro_vet_supplier','insurance_provider','pet_pharmacy','rescue_center','pet_hotel','farm'];
   const serviceTotal = serviceRoles.reduce((sum, r) => sum + (roleMap[r]?.total || 0), 0);
   const pendingTotal = (p.vets?.pending || 0) + (p.insurance_providers?.pending || 0);
 
@@ -928,7 +940,7 @@ async function loadOverview() {
   `;
 
   // Pending preview
-  const pend = await api('GET', '/api/admin/vets/pending?limit=5');
+  const pend = await api('GET', '/api/admin/professionals/pending?limit=5');
   _pendingData = pend?.body?.data || [];
   const rows = _pendingData.map((v, idx) => `
     <tr>
@@ -973,7 +985,7 @@ function renderBizDoc(v) {
 
 async function loadPending() {
   document.getElementById('pending-tbody').innerHTML = '<tr><td colspan="7"><div class="spinner"></div></td></tr>';
-  const r = await api('GET', '/api/admin/vets/pending?limit=100');
+  const r = await api('GET', '/api/admin/professionals/pending?limit=100');
   const data = r?.body?.data || [];
   _pendingData = data;
   if (!data.length) {
@@ -1063,7 +1075,7 @@ async function quickReviewProfessional(id, action, name) {
 
 async function submitReview(action) {
   const notes = document.getElementById('review-notes').value.trim();
-  const r = await api('POST', `/api/admin/vets/review/${_reviewId}`, { action, adminNotes: notes });
+  const r = await api('POST', `/api/admin/professionals/review/${_reviewId}`, { action, adminNotes: notes });
   closeModal('review-modal');
   if (r?.ok) { toast(`Professional ${action}d!`); loadPending(); } else toast(r?.body?.message || 'Failed', 'error');
 }
@@ -1422,7 +1434,7 @@ async function loadGeographic() {
   document.getElementById('geo-tbody').innerHTML = '<tr><td colspan="6"><div class="spinner"></div></td></tr>';
   const r = await api('GET', '/api/admin/stats/geographic');
   const rows = r?.body?.data?.byRegion || [];
-  const SERVICE_ROLES = ['groomer','trainer','pet_sitter','pet_transport','cremation_service','agro_vet_supplier','insurance_provider'];
+  const SERVICE_ROLES = ['groomer','trainer','pet_sitter','pet_transport','cremation_service','agro_vet_supplier','insurance_provider','pet_pharmacy','rescue_center','pet_hotel','farm'];
   document.getElementById('geo-tbody').innerHTML = rows.length
     ? rows.map(g => {
         const br = g.byRole || {};
