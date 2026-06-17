@@ -23,9 +23,12 @@ export const sendSupportMessage = async (req, res) => {
     const now = new Date();
     const botReply = getBotReply(text.trim());
 
-    // Build update: save user message + bot reply (if any) in a single write
-    const pushMessages = [{ text: text.trim(), senderRole: 'user' }];
-    if (botReply) pushMessages.push({ text: botReply, senderRole: 'bot' });
+    // Detect explicit escalation request — user wants a human regardless of bot match
+    const ESCALATION_KEYWORDS = ['human', 'real person', 'agent', 'talk to someone', 'speak to', 'escalate', 'no bot'];
+    const wantsHuman = ESCALATION_KEYWORDS.some(k => text.trim().toLowerCase().includes(k));
+    const effectiveBotReply = wantsHuman ? null : botReply;
+    const finalMessages = [{ text: text.trim(), senderRole: 'user' }];
+    if (effectiveBotReply) finalMessages.push({ text: effectiveBotReply, senderRole: 'bot' });
 
     const thread = await SupportThread.findOneAndUpdate(
       { userId },
@@ -35,16 +38,17 @@ export const sendSupportMessage = async (req, res) => {
           userEmail,
           userRole,
           lastMessageAt: now,
-          needsHuman: !botReply,
+          needsHuman: !effectiveBotReply,
+          // Always reopen if resolved — new message means new issue
+          status: 'open',
         },
-        $push:        { messages: { $each: pushMessages } },
-        $setOnInsert: { status: 'open' },
+        $push: { messages: { $each: finalMessages } },
       },
       { upsert: true, new: true },
     );
 
-    // Only alert admin when the bot couldn't handle it
-    if (!botReply) {
+    // Only alert admin when the bot couldn't handle it (or user escalated)
+    if (!effectiveBotReply) {
       sendSupportMessageAlert(ADMIN_EMAIL, {
         userName,
         userEmail,
@@ -54,7 +58,7 @@ export const sendSupportMessage = async (req, res) => {
       }).catch(() => {});
     }
 
-    return res.status(201).json({ success: true, data: thread, botReplied: !!botReply });
+    return res.status(201).json({ success: true, data: thread, botReplied: !!effectiveBotReply });
   } catch (err) {
     console.error('sendSupportMessage error:', err);
     return res.status(500).json({ success: false, message: 'Failed to send message.' });
