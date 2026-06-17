@@ -22,18 +22,21 @@ const { Types } = mongoose;
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
+// Kennels are stored as Professional docs (role:'kennel') — no separate model
 const TARGET_MODEL = {
   professional: Professional,
   shop:         Shop,
+  kennel:       Professional,
 };
 
 // The field on the target document that holds the owner's User ObjectId
 const OWNER_FIELD = {
   professional: 'userId',
   shop:         'owner',
+  kennel:       'userId',
 };
 
-const VALID_TARGET_TYPES = new Set(['professional', 'shop']);
+const VALID_TARGET_TYPES = new Set(['professional', 'shop', 'kennel']);
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
 
