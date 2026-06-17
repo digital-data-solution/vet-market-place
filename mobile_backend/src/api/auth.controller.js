@@ -3,6 +3,7 @@ import logger from '../lib/logger.js';
 import { supabaseAdmin, verifySupabaseToken } from '../lib/supabase.js';
 import { sendWelcomeEmail } from '../services/email.service.js';
 import { logActivity } from '../lib/activityLogger.js';
+import { applyReferralReward } from '../lib/referralHelper.js';
 
 export const register = async (req, res) => {
   const { name, email, password, role, location, vetDetails, kennelDetails, vcnNumber, cacNumber, referralCode,
@@ -154,6 +155,19 @@ export const syncUser = async (req, res) => {
       email,
       isVerified,
     }, req);
+
+    // Apply referral reward for pet owners who just verified their email.
+    // Professional roles (vet, kennel_owner, etc.) receive their reward when
+    // the admin approves their professional listing, so we skip them here to
+    // avoid double-rewarding if they were referred before changing role.
+    if (
+      user.isVerified &&
+      user.referredBy &&
+      !user.referralRewardApplied &&
+      user.role === 'pet_owner'
+    ) {
+      applyReferralReward(user, 7).catch(() => {});
+    }
 
     return res.json({ message: 'User synced.', userId: user._id });
   } catch (error) {

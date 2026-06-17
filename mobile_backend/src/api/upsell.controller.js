@@ -1,5 +1,7 @@
-import ActivityLog  from '../models/ActivityLog.js';
-import Subscription from '../models/Subscription.js';
+import ActivityLog    from '../models/ActivityLog.js';
+import Subscription   from '../models/Subscription.js';
+import Professional   from '../models/Professional.js';
+import Shop           from '../models/Shop.js';
 import { cacheGet, cacheSet } from '../lib/cache.js';
 
 const FREE_SEARCH_LIMIT = 3;    // show upsell after 3rd search this week
@@ -104,5 +106,36 @@ export async function dismissUpsell(req, res) {
     return res.json({ success: true, cooldownHours: 24 });
   } catch (err) {
     return res.status(500).json({ success: false, message: 'Failed to record dismissal.' });
+  }
+}
+
+/**
+ * GET /api/v1/upsell/stats  (public — no auth required)
+ *
+ * Returns live listing counts so the home screen can build dynamic
+ * marketplace ticker messages like "14 vets listed and ready to help".
+ * Cached for 10 minutes to avoid hammering Mongo on every home-screen load.
+ */
+const STATS_CACHE_KEY = 'upsell:marketplace:stats';
+const STATS_TTL_S     = 600; // 10 minutes
+
+export async function getMarketplaceStats(req, res) {
+  try {
+    const cached = await cacheGet(STATS_CACHE_KEY);
+    if (cached) return res.json({ success: true, data: cached });
+
+    const [totalProfessionals, vetCount, kennelCount, shopCount] = await Promise.all([
+      Professional.countDocuments({}),
+      Professional.countDocuments({ role: 'vet' }),
+      Professional.countDocuments({ role: 'kennel' }),
+      Shop.countDocuments({}),
+    ]);
+
+    const data = { totalProfessionals, vetCount, kennelCount, shopCount };
+    await cacheSet(STATS_CACHE_KEY, data, STATS_TTL_S);
+    return res.json({ success: true, data });
+  } catch (err) {
+    // Never break the app for a stats fetch — return zeros silently
+    return res.json({ success: true, data: { totalProfessionals: 0, vetCount: 0, kennelCount: 0, shopCount: 0 } });
   }
 }
