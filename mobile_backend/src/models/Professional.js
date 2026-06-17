@@ -161,6 +161,29 @@ const professionalSchema = new mongoose.Schema(
       default: 0,
       min:     0,
     },
+
+    // Social media / web presence
+    socialMedia: {
+      instagram: { type: String, trim: true },
+      facebook:  { type: String, trim: true },
+      twitter:   { type: String, trim: true },
+      website:   { type: String, trim: true },
+    },
+
+    // Business hours (free-text, e.g. "Mon–Fri 8am–6pm, Sat 9am–2pm")
+    businessHours: { type: String, trim: true, maxlength: 200 },
+
+    // Price range indicator shown to users
+    priceRange: {
+      type: String,
+      enum: ['low', 'mid', 'high'],
+    },
+
+    // Whether the professional is currently taking new clients
+    acceptingClients: {
+      type:    Boolean,
+      default: true,
+    },
   },
   {
     timestamps: true,

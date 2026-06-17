@@ -234,15 +234,30 @@ export const getPublicProfile = async (req, res) => {
 
 export const updateProfile = async (req, res) => {
   try {
-    const { profileImage, profileImagePath } = req.body;
-
-    if (profileImage === undefined && profileImagePath === undefined) {
-      return res.status(400).json({ message: 'No profile data provided.' });
-    }
+    const { profileImage, profileImagePath, phone, name, bio } = req.body;
 
     const updatePayload = {};
-    if (profileImage !== undefined) updatePayload.profileImage = profileImage;
+    if (profileImage    !== undefined) updatePayload.profileImage    = profileImage;
     if (profileImagePath !== undefined) updatePayload.profileImagePath = profileImagePath;
+    if (phone !== undefined) {
+      const cleaned = String(phone).replace(/\s/g, '');
+      if (cleaned && !/^\+?[0-9]{7,15}$/.test(cleaned)) {
+        return res.status(400).json({ message: 'Please enter a valid phone number.' });
+      }
+      updatePayload.phone = cleaned;
+    }
+    if (name !== undefined) {
+      const trimmed = String(name).trim();
+      if (!trimmed || trimmed.length < 2) {
+        return res.status(400).json({ message: 'Name must be at least 2 characters.' });
+      }
+      updatePayload.name = trimmed;
+    }
+    if (bio !== undefined) updatePayload.bio = String(bio).trim().slice(0, 500);
+
+    if (Object.keys(updatePayload).length === 0) {
+      return res.status(400).json({ message: 'No profile data provided.' });
+    }
 
     const updatedUser = await User.findOneAndUpdate(
       { _id: req.user._id },
