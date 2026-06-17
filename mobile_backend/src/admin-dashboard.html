@@ -341,7 +341,10 @@
     <div id="section-users" class="section">
       <div class="topbar">
         <h2>All Users</h2>
-        <button class="btn btn-ghost btn-sm" onclick="loadUsers()">↻ Refresh</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm" onclick="exportUsersCSV()">⬇️ Export CSV</button>
+          <button class="btn btn-ghost btn-sm" onclick="loadUsers()">↻ Refresh</button>
+        </div>
       </div>
       <div class="card">
         <div class="search-bar">
@@ -776,6 +779,31 @@
   </div>
 </div>
 
+<!-- ── Grant Subscription Modal ── -->
+<div id="grant-sub-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeModal('grant-sub-modal')">
+  <div class="modal">
+    <h3>Grant Subscription</h3>
+    <p style="font-size:13px;color:#64748B;margin-bottom:14px" id="grant-sub-name"></p>
+    <div class="field">
+      <label>Plan</label>
+      <select id="grant-sub-plan">
+        <option value="user_premium">User Premium (Pet Owner)</option>
+        <option value="basic">Basic (Professional)</option>
+        <option value="starter">Starter (Professional)</option>
+        <option value="pro">Pro (Professional)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Days to grant</label>
+      <input type="number" id="grant-sub-days" value="30" min="1" max="365" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('grant-sub-modal')">Cancel</button>
+      <button class="btn btn-primary" id="grant-sub-save-btn">Grant Now</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Toast ── -->
 <div id="toast"></div>
 
@@ -1149,6 +1177,7 @@ async function loadUsers() {
       <td>${fmt(u.createdAt)}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-ghost btn-sm" onclick="openRoleModal('${u._id}','${u.name||u.email||''}','${u.role}')">Role</button>
+        <button class="btn btn-primary btn-sm" onclick="openGrantSubModal('${u._id}','${u.name||u.email||''}')">Grant Sub</button>
         <button class="btn btn-danger  btn-sm" onclick="deleteUser('${u._id}','${u.name||u.email||''}')">Delete</button>
       </td>
     </tr>`).join('');
@@ -1172,6 +1201,40 @@ async function deleteUser(id, name) {
   if (!confirm(`Delete user "${name}"? This is irreversible.`)) return;
   const r = await api('DELETE', `/api/admin/users/${id}`);
   if (r?.ok) { toast('User deleted'); loadUsers(); } else toast(r?.body?.message || 'Failed', 'error');
+}
+
+function openGrantSubModal(id, name) {
+  document.getElementById('grant-sub-name').textContent = name;
+  document.getElementById('grant-sub-days').value = 30;
+  document.getElementById('grant-sub-save-btn').onclick = () => grantSubscription(id);
+  document.getElementById('grant-sub-modal').style.display = 'flex';
+}
+
+async function grantSubscription(userId) {
+  const days = parseInt(document.getElementById('grant-sub-days').value, 10);
+  const plan = document.getElementById('grant-sub-plan').value;
+  if (!days || days < 1) { toast('Enter a valid number of days', 'error'); return; }
+  const r = await api('POST', `/api/admin/users/${userId}/grant-subscription`, { days, plan });
+  closeModal('grant-sub-modal');
+  if (r?.ok) { toast(r.body?.message || 'Subscription granted!'); loadUsers(); }
+  else toast(r?.body?.message || 'Failed to grant subscription', 'error');
+}
+
+function exportUsersCSV() {
+  const role = document.getElementById('user-role-filter').value;
+  const params = role ? `?role=${role}` : '';
+  const url = `${BASE}/api/admin/export/users${params}`;
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'xpressvet-users.csv';
+  fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+    .then(res => res.blob())
+    .then(blob => {
+      const blobUrl = URL.createObjectURL(blob);
+      a.href = blobUrl;
+      a.click();
+      URL.revokeObjectURL(blobUrl);
+    });
 }
 
 // ── Shops ──────────────────────────────────────────────────────────────────────

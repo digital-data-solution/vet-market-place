@@ -255,6 +255,58 @@ app.delete('/api/admin/users/:id', adminProtect, async (req, res) => {
   }
 });
 
+// Grant / extend subscription manually
+app.post('/api/admin/users/:id/grant-subscription', adminProtect, async (req, res) => {
+  try {
+    const { days = 30, plan = 'user_premium' } = req.body;
+    const d = Math.max(1, Math.min(365, parseInt(days, 10)));
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
+    const now = new Date();
+    const base = user.subscription?.endDate && user.subscription?.status === 'active' && user.subscription.endDate > now
+      ? new Date(user.subscription.endDate)
+      : now;
+    const newEnd = new Date(base.getTime() + d * 86400000);
+    await User.findByIdAndUpdate(req.params.id, {
+      $set: {
+        'subscription.plan': plan,
+        'subscription.status': 'active',
+        'subscription.startDate': now,
+        'subscription.endDate': newEnd,
+        'subscription.isActive': true,
+      },
+    });
+    return res.json({ success: true, message: `Subscription granted: ${d} days (expires ${newEnd.toLocaleDateString('en-NG')}).` });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Export users to CSV
+app.get('/api/admin/export/users', adminProtect, async (req, res) => {
+  try {
+    const { role } = req.query;
+    const filter = role ? { role } : {};
+    const users = await User.find(filter).select('name email phone role isVerified createdAt').sort({ createdAt: -1 }).lean();
+    const rows = [
+      'Name,Email,Phone,Role,Verified,Joined',
+      ...users.map(u => [
+        (u.name || '').replace(/,/g, ' '),
+        u.email || '',
+        u.phone || '',
+        u.role || '',
+        u.isVerified ? 'Yes' : 'No',
+        u.createdAt ? new Date(u.createdAt).toISOString().slice(0, 10) : '',
+      ].join(',')),
+    ];
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="xpressvet-users.csv"');
+    return res.send(rows.join('\n'));
+  } catch (error) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 // Shops
 app.get('/api/admin/shops', adminProtect, async (req, res) => {
   try {

@@ -12,7 +12,8 @@ import mongoose from 'mongoose';
  */
 function liftShopMedia(shop) {
   const profileImage = shop.owner?.profileImage ?? shop.profileImage ?? null;
-  return { ...shop, profileImage };
+  const mediaImages  = shop.owner?.mediaImages  ?? [];
+  return { ...shop, profileImage, mediaImages };
 }
 
 function redactShop(shop) {
@@ -250,7 +251,7 @@ export const getShopById = async (req, res) => {
     }
 
     const shop = await Shop.findById(id)
-      .populate('owner', 'name email phone supabaseId') // ← supabaseId added
+      .populate('owner', 'name email phone supabaseId profileImage mediaImages')
       .select('-__v')
       .lean();
 
@@ -261,16 +262,21 @@ export const getShopById = async (req, res) => {
       });
     }
 
+    // Lift owner media to top level
+    const profileImage = shop.owner?.profileImage ?? shop.profileImage ?? null;
+    const mediaImages  = shop.owner?.mediaImages  ?? [];
+    const liftedShop   = { ...shop, profileImage, mediaImages };
+
     // Freemium gate — applied per-request
     if (req.subscription?.isActive === true) {
-      return res.json({ success: true, data: { ...shop, isPreview: false } });
+      return res.json({ success: true, data: { ...liftedShop, isPreview: false } });
     }
 
     const userId = req.user._id || req.user.id;
     const user = await User.findById(userId).select('freeSearchUsed').lean();
     if (!user?.freeSearchUsed) {
       await User.findByIdAndUpdate(userId, { freeSearchUsed: true });
-      return res.json({ success: true, data: { ...shop, isPreview: false }, usedFreeSearch: true });
+      return res.json({ success: true, data: { ...liftedShop, isPreview: false }, usedFreeSearch: true });
     }
 
     const addr = typeof shop.address === 'string' ? shop.address : (shop.address?.full || '');
@@ -288,6 +294,8 @@ export const getShopById = async (req, res) => {
         reviewCount: shop.reviewCount,
         isVerified:  shop.isVerified,
         images:      shop.images,
+        mediaImages, // include lifted gallery even in preview
+        profileImage,
         isPreview:   true,
       },
     });
