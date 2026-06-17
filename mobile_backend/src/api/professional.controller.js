@@ -1,5 +1,6 @@
 import Professional from '../models/Professional.js';
 import User from '../models/User.js';
+import ActivityLog from '../models/ActivityLog.js';
 import cache from '../lib/cache.js';
 import axios from 'axios';
 import logger from '../lib/logger.js';
@@ -822,5 +823,49 @@ export const deleteProfessional = async (req, res) => {
       message: 'Failed to delete profile.',
       error: error.message,
     });
+  }
+};
+// ─── GET /me/stats ────────────────────────────────────────────────────────────
+
+/**
+ * Returns profile view count + contact-tap breakdown for the logged-in
+ * professional's own listing. Used by the ProfileScreen dashboard card.
+ * Returns zero counts if the user has no professional profile.
+ */
+export const getMyStats = async (req, res) => {
+  try {
+    const professional = await Professional.findOne({ userId: req.user._id })
+      .select('profileViews rating reviewCount')
+      .lean();
+
+    const empty = { profileViews: 0, contactTaps: { total: 0, phone: 0, whatsapp: 0, email: 0 }, rating: 0, reviewCount: 0 };
+    if (!professional) return res.json({ success: true, data: empty });
+
+    const taps = await ActivityLog.aggregate([
+      {
+        $match: {
+          action: 'contact.tapped',
+          'metadata.targetId': professional._id.toString(),
+        },
+      },
+      { $group: { _id: '$metadata.method', count: { $sum: 1 } } },
+    ]);
+
+    const tapMap = { phone: 0, whatsapp: 0, email: 0 };
+    taps.forEach(t => { if (t._id && t._id in tapMap) tapMap[t._id] = t.count; });
+    const total = tapMap.phone + tapMap.whatsapp + tapMap.email;
+
+    return res.json({
+      success: true,
+      data: {
+        profileViews: professional.profileViews ?? 0,
+        contactTaps:  { total, ...tapMap },
+        rating:       professional.rating      ?? 0,
+        reviewCount:  professional.reviewCount ?? 0,
+      },
+    });
+  } catch (err) {
+    logger.error('getMyStats error', { error: err.message });
+    return res.status(500).json({ success: false, message: 'Failed to fetch stats.' });
   }
 };
