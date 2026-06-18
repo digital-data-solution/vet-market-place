@@ -4,6 +4,7 @@ import { enforceSubscription }   from '../middlewares/subscriptionMiddleware.js'
 import { supabaseAdmin }         from '../lib/supabase.js';
 import logger                    from '../lib/logger.js';
 import { logActivity }           from '../lib/activityLogger.js';
+import User                      from '../models/User.js';
 
 const router = express.Router();
 
@@ -58,6 +59,69 @@ router.post('/send', protect, enforceSubscription, async (req, res) => {
   } catch (error) {
     logger.error('Send message error', { error: error.message, fromUserId, toUserId });
     return res.status(500).json({ success: false, message: 'Failed to send message.' });
+  }
+});
+
+// GET /api/messages/conversations
+// Returns grouped conversations for the logged-in user, with partner name + avatar.
+// Uses service-role Supabase client — no RLS dependency.
+router.get('/conversations', protect, enforceSubscription, async (req, res) => {
+  const userId = req.user.supabaseId;
+
+  if (!userId) {
+    return res.status(400).json({
+      success: false,
+      message: 'Supabase ID not found on account. Re-login may resolve this.',
+    });
+  }
+
+  try {
+    const { data: messages, error } = await supabaseAdmin
+      .from('messages')
+      .select('*')
+      .or(`from_user_id.eq.${userId},to_user_id.eq.${userId}`)
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      logger.error('Fetch conversations Supabase error', { error: error.message, userId });
+      return res.status(500).json({ success: false, message: 'Failed to fetch conversations.' });
+    }
+
+    // Group by conversation partner — keep only the most recent message per partner
+    const seen = new Map();
+    for (const msg of messages ?? []) {
+      const otherId = msg.from_user_id === userId ? msg.to_user_id : msg.from_user_id;
+      if (!seen.has(otherId)) seen.set(otherId, msg);
+    }
+
+    if (seen.size === 0) {
+      return res.json({ success: true, data: [] });
+    }
+
+    // Resolve partner names + avatars from MongoDB
+    const partnerSupabaseIds = Array.from(seen.keys());
+    const partners = await User.find({ supabaseId: { $in: partnerSupabaseIds } })
+      .select('supabaseId name profileImage')
+      .lean();
+
+    const partnerMap = Object.fromEntries(partners.map(p => [p.supabaseId, p]));
+
+    const conversations = Array.from(seen.entries()).map(([otherId, msg]) => {
+      const partner = partnerMap[otherId];
+      return {
+        otherUserId:     otherId,
+        otherUserName:   partner?.name    ?? 'Unknown User',
+        otherUserAvatar: partner?.profileImage ?? null,
+        lastMessage:     msg.message_text,
+        lastMessageAt:   msg.created_at,
+        hasUnread:       msg.to_user_id === userId && !msg.read_status,
+      };
+    });
+
+    return res.json({ success: true, data: conversations });
+  } catch (err) {
+    logger.error('Fetch conversations error', { error: err.message, userId });
+    return res.status(500).json({ success: false, message: 'Failed to fetch conversations.' });
   }
 });
 
