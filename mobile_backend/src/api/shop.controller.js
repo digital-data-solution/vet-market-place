@@ -46,29 +46,45 @@ async function applyFreemiumGate(req, data) {
   return { data: data.map(redactShop), isPreview: true, usedFreeSearch: false };
 }
 
-// Geocode address → GeoJSON Point. Results cached 30 days so same address
-// only hits Nominatim once, avoiding rate-limit 429s.
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Geocode address → GeoJSON Point via LocationIQ with progressive fallback.
+// Results cached 30 days. Sleeps 700ms between candidates to respect the
+// LocationIQ free-tier 2 req/s limit.
 const geocodeAddress = async (address) => {
   const key = `geocode:${address.trim().toLowerCase()}`;
 
   return cache.cacheWrap(key, 30 * 24 * 3600, async () => {
-    try {
-      const response = await axios.get('https://nominatim.openstreetmap.org/search', {
-        params: { q: address, format: 'json', limit: 1, countrycodes: 'ng' },
-        headers: { 'User-Agent': 'XpressVet/1.0 (xpressvetmarketplace.com)' },
-        timeout: 5000,
-      });
+    const liqKey = process.env.LOCATIONIQ_KEY;
+    if (!liqKey) return null;
 
-      if (response.data && response.data.length > 0) {
-        const { lat, lon } = response.data[0];
-        return { type: 'Point', coordinates: [parseFloat(lon), parseFloat(lat)] };
-      }
-
-      return null;
-    } catch (error) {
-      console.error('Geocoding error:', error.message);
-      return null;
+    const parts = address.trim().split(',').map(s => s.trim()).filter(Boolean);
+    const set = new Set();
+    for (let i = 0; i < Math.min(parts.length, 4); i++) set.add(parts.slice(i).join(', '));
+    const lastPart = parts[parts.length - 1] || address.trim();
+    const words = lastPart.split(/\s+/).filter(Boolean);
+    for (let w = 1; w <= Math.min(3, words.length); w++) {
+      const tail = words.slice(words.length - w).join(' ');
+      if (tail.length > 2) set.add(tail);
     }
+    const candidates = [...set];
+
+    for (let i = 0; i < candidates.length; i++) {
+      if (i > 0) await sleep(700);
+      try {
+        const response = await axios.get('https://us1.locationiq.com/v1/search', {
+          params: { key: liqKey, q: candidates[i], format: 'json', limit: 1, countrycodes: 'ng' },
+          timeout: 6000,
+        });
+        if (Array.isArray(response.data) && response.data.length > 0) {
+          const { lat, lon } = response.data[0];
+          return { type: 'Point', coordinates: [parseFloat(lon), parseFloat(lat)] };
+        }
+      } catch (err) {
+        logger.warn('Shop geocoding attempt failed', { candidate: candidates[i], error: err.message });
+      }
+    }
+    return null;
   });
 };
 
@@ -102,11 +118,16 @@ export const createShop = async (req, res) => {
       });
     }
 
-    // Geocode the address
+    // Geocode the address — required so the shop appears in nearby searches
     const location = await geocodeAddress(address);
     if (!location) {
-      console.warn(`Failed to geocode address: ${address}`);
-      // Continue anyway - location is optional
+      return res.status(400).json({
+        success: false,
+        message:
+          'We could not find that address on the map. Please include your area and state — ' +
+          'for example: "Ikeja, Lagos" or "Wuse, Abuja". ' +
+          'This is needed so pet owners can find your shop nearby.',
+      });
     }
 
     // Create shop
@@ -163,12 +184,18 @@ export const updateShop = async (req, res) => {
     // Don't allow changing owner
     delete updates.owner;
 
-    // If address is being updated, re-geocode
+    // If address is being updated, re-geocode (blocking)
     if (updates.address) {
       const location = await geocodeAddress(updates.address);
-      if (location) {
-        updates.location = location;
+      if (!location) {
+        return res.status(400).json({
+          success: false,
+          message:
+            'We could not find that address on the map. Please include your area and state — ' +
+            'for example: "Ikeja, Lagos" or "Wuse, Abuja".',
+        });
       }
+      updates.location = location;
     }
 
     const shop = await Shop.findOneAndUpdate(
