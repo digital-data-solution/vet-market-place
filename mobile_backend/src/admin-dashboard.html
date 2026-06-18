@@ -729,6 +729,20 @@
         <button class="btn btn-ghost btn-sm" onclick="loadSystem()">↻ Refresh</button>
       </div>
       <div id="system-stats-grid" class="stats-grid"><div class="spinner"></div></div>
+
+      <!-- Location Tools -->
+      <h3 style="margin:28px 0 12px;font-size:15px;font-weight:700;color:#374151">📍 Location Tools</h3>
+      <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:20px;max-width:520px">
+        <p style="font-size:13px;color:#6B7280;margin:0 0 14px">
+          Finds every professional whose address was never geocoded (coordinates are missing) and
+          re-geocodes them via LocationIQ. Run this once after deploying the LocationIQ fix so
+          that nearby search can find all existing listings.
+        </p>
+        <button class="btn btn-primary" onclick="runRegeocode()" id="regeocode-btn">
+          🗺️ Re-geocode Missing Coordinates
+        </button>
+        <div id="regeocode-result" style="margin-top:14px;font-size:13px;display:none"></div>
+      </div>
     </div>
 
   </main>
@@ -1658,6 +1672,37 @@ async function loadSystem() {
     <div class="stat-card"><div class="stat-label">Heap Used</div><div class="stat-value">${d.memoryMb?.heapUsed||0} MB</div><div class="stat-sub">of ${d.memoryMb?.heapTotal||0} MB</div></div>
     <div class="stat-card"><div class="stat-label">RSS Memory</div><div class="stat-value">${d.memoryMb?.rss||0} MB</div></div>
   `;
+}
+
+// ── Re-geocode backfill ───────────────────────────────────────────────────────
+async function runRegeocode() {
+  const btn = document.getElementById('regeocode-btn');
+  const out = document.getElementById('regeocode-result');
+  btn.disabled = true;
+  btn.textContent = '⏳ Running…';
+  out.style.display = 'none';
+  try {
+    const r = await api('POST', '/api/v1/professionals/admin/regeocode');
+    const d = r?.body;
+    if (d?.success) {
+      const errHtml = (d.errors || []).length
+        ? `<details style="margin-top:8px"><summary style="cursor:pointer;color:#6B7280">Show ${d.errors.length} failed address(es)</summary><pre style="font-size:11px;margin-top:6px;white-space:pre-wrap">${JSON.stringify(d.errors, null, 2)}</pre></details>`
+        : '';
+      out.innerHTML = `<div style="background:#DCFCE7;border-radius:8px;padding:12px;color:#166534">
+        ✅ <strong>${d.fixed} of ${d.total} professionals geocoded.</strong>
+        ${d.failed ? `<span style="color:#991B1B"> (${d.failed} failed — check addresses below)</span>` : ''}
+        ${errHtml}
+      </div>`;
+    } else {
+      out.innerHTML = `<div style="background:#FEE2E2;border-radius:8px;padding:12px;color:#991B1B">❌ ${d?.message || 'Request failed'}</div>`;
+    }
+  } catch (e) {
+    out.innerHTML = `<div style="background:#FEE2E2;border-radius:8px;padding:12px;color:#991B1B">❌ Network error: ${e.message}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🗺️ Re-geocode Missing Coordinates';
+    out.style.display = 'block';
+  }
 }
 
 // ── CSV Exports ───────────────────────────────────────────────────────────────
