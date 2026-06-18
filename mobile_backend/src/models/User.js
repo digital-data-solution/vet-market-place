@@ -34,7 +34,7 @@ const userSchema = new mongoose.Schema({
   subscription: {
     // 'user_premium' = current paid plan (₦1,500/mo)
     // 'user_monthly' = legacy alias kept for existing records
-    plan:             { type: String, enum: ['user_premium', 'user_monthly'], default: null },
+    plan:             { type: String, enum: ['user_premium', 'user_monthly', 'user_plus'], default: null },
     status:           { type: String, enum: ['active', 'pending', 'cancelled', 'expired', 'inactive'], default: 'inactive' },
     startDate:        Date,
     endDate:          Date,
