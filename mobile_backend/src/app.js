@@ -27,6 +27,7 @@ import upsellRoutes           from './routes/upsell.routes.js';
 
 // Webhook handler — imported directly so it can receive raw body
 import { handlePaystackWebhook } from './api/subscription.controller.js';
+import { regeocodeAll }          from './api/professional.controller.js';
 import { adminProtect }          from './middlewares/adminAuthMiddleware.js';
 import {
   getRevenueStats,
@@ -417,6 +418,7 @@ app.get('/api/admin/stats/messaging',    adminProtect, getMessagingStats);
 app.get('/api/admin/stats/system',       adminProtect, getSystemHealth);
 app.get('/api/admin/stats/activity',     adminProtect, getActivityStats);
 app.get('/api/admin/stats/utm',          adminProtect, getUtmStats);
+app.post('/api/admin/regeocode',         adminProtect, regeocodeAll);
 app.get('/api/admin/export/users',          adminProtect, exportUsers);
 app.get('/api/admin/export/subscriptions',  adminProtect, exportSubscriptions);
 app.get('/api/admin/export/professionals',  adminProtect, exportProfessionals);

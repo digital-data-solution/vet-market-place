@@ -1682,7 +1682,7 @@ async function runRegeocode() {
   btn.textContent = '⏳ Running…';
   out.style.display = 'none';
   try {
-    const r = await api('POST', '/api/v1/professionals/admin/regeocode');
+    const r = await api('POST', '/api/admin/regeocode');
     const d = r?.body;
     if (d?.success) {
       const errHtml = (d.errors || []).length
