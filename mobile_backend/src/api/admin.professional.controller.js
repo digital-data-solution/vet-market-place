@@ -129,6 +129,8 @@ export const reviewProfessional = async (req, res) => {
 
     // Clear relevant cache
     await cache.del(`professional:${professional.userId}`);
+    await cache.cacheDel(`professionals:list:${professional.role}:1:50:`);
+    await cache.cacheDel(`professionals:list:${professional.role}:1:20:`);
 
     // Email the professional — fire-and-forget
     const profEmail = professional.email || professional.userId?.email;
