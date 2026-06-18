@@ -16,22 +16,31 @@ import { logActivity } from '../lib/activityLogger.js';
 // ============================================================================
 
 /**
- * Geocode an address to GeoJSON coordinates using Nominatim (OpenStreetMap).
- * Results are cached in Redis for 30 days — same address hits Nominatim only once.
+ * Geocode an address to GeoJSON coordinates using LocationIQ.
+ * Results are cached in Redis for 30 days — same address hits LocationIQ only once.
  * Returns null on failure — callers must handle null gracefully.
+ *
+ * Uses LocationIQ (not Nominatim) — Nominatim rate-limits production traffic at
+ * ~1 req/s and returns 429 errors under any real load, which silently leaves
+ * professionals without coordinates and invisible to nearby search.
  */
 const geocodeAddress = async (address) => {
   const key = `geocode:${address.trim().toLowerCase()}`;
 
   return cache.cacheWrap(key, 30 * 24 * 3600, async () => {
     try {
-      const response = await axios.get('https://nominatim.openstreetmap.org/search', {
-        params: { q: address, format: 'json', limit: 1, countrycodes: 'ng' },
-        headers: { 'User-Agent': 'XpressVet/1.0 (xpressvetmarketplace.com)' },
+      const liqKey = process.env.LOCATIONIQ_KEY;
+      if (!liqKey) {
+        logger.warn('LOCATIONIQ_KEY not set — skipping geocode');
+        return null;
+      }
+
+      const response = await axios.get('https://us1.locationiq.com/v1/search', {
+        params: { key: liqKey, q: address, format: 'json', limit: 1, countrycodes: 'ng' },
         timeout: 5000,
       });
 
-      if (response.data && response.data.length > 0) {
+      if (Array.isArray(response.data) && response.data.length > 0) {
         const { lat, lon } = response.data[0];
         return { type: 'Point', coordinates: [parseFloat(lon), parseFloat(lat)] };
       }
@@ -555,6 +564,7 @@ export const listProfessionals = async (req, res) => {
     const VALID_LIST_ROLES = [
       'vet', 'kennel', 'groomer', 'trainer', 'pet_sitter',
       'pet_transport', 'cremation_service', 'agro_vet_supplier', 'insurance_provider',
+      'pet_pharmacy', 'rescue_center', 'pet_hotel', 'farm',
     ];
     const filters = { isVerified: true };
 
@@ -699,6 +709,7 @@ export const getNearbyProfessionals = async (req, res) => {
     const VALID_NEARBY_ROLES = [
       'vet', 'kennel', 'groomer', 'trainer', 'pet_sitter',
       'pet_transport', 'cremation_service', 'agro_vet_supplier', 'insurance_provider',
+      'pet_pharmacy', 'rescue_center', 'pet_hotel', 'farm',
     ];
     if (role && VALID_NEARBY_ROLES.includes(role)) {
       query.role = role;
@@ -825,6 +836,71 @@ export const deleteProfessional = async (req, res) => {
     });
   }
 };
+// ─── ADMIN: re-geocode professionals with missing coordinates ─────────────────
+
+/**
+ * POST /api/v1/professionals/admin/regeocode
+ * Admin-only. Finds all Professional docs that have no location coordinates
+ * and re-geocodes them using LocationIQ. Returns a summary of what was fixed.
+ *
+ * Run this once after deploying the LocationIQ geocoding fix to backfill the
+ * professionals who were registered when Nominatim was rate-limited.
+ */
+export const regeocodeAll = async (req, res) => {
+  try {
+    // Find professionals missing coordinates
+    const missing = await Professional.find({
+      $or: [
+        { location: null },
+        { 'location.coordinates': { $exists: false } },
+        { 'location.coordinates': { $size: 0 } },
+      ],
+      address: { $exists: true, $ne: '' },
+    }).select('_id name address role').lean();
+
+    if (missing.length === 0) {
+      return res.json({ success: true, message: 'All professionals already have coordinates.', fixed: 0 });
+    }
+
+    let fixed = 0;
+    let failed = 0;
+    const errors = [];
+
+    for (const prof of missing) {
+      try {
+        // Invalidate cached null result so LocationIQ is actually called
+        await cache.del(`geocode:${prof.address.trim().toLowerCase()}`);
+
+        const location = await geocodeAddress(prof.address);
+        if (location) {
+          await Professional.findByIdAndUpdate(prof._id, { $set: { location } });
+          await User.findByIdAndUpdate(prof.userId, { $set: { location } }).catch(() => {});
+          fixed++;
+          logger.info('Re-geocoded professional', { id: prof._id, name: prof.name, address: prof.address });
+        } else {
+          failed++;
+          errors.push({ id: prof._id, name: prof.name, address: prof.address, reason: 'geocode returned null' });
+        }
+      } catch (err) {
+        failed++;
+        errors.push({ id: prof._id, name: prof.name, address: prof.address, reason: err.message });
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: `Re-geocoded ${fixed} of ${missing.length} professionals.`,
+      total: missing.length,
+      fixed,
+      failed,
+      errors: errors.slice(0, 20), // cap output
+    });
+  } catch (err) {
+    logger.error('regeocodeAll error', { error: err.message });
+    return res.status(500).json({ success: false, message: 'Re-geocoding failed.', error: err.message });
+  }
+};
+
 // ─── GET /me/stats ────────────────────────────────────────────────────────────
 
 /**
