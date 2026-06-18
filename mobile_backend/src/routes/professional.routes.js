@@ -3,6 +3,7 @@ import {
   onboardProfessional,
   updateProfessional,
   getMyProfessionalProfile,
+  getMyStats,
   getProfessional,
   listProfessionals,
   getNearbyProfessionals,
@@ -26,6 +27,7 @@ const router = express.Router();
 // ─── Static routes first ──────────────────────────────────────────────────────
 router.post('/onboard', protect, onboardProfessional);                            // creates ownership
 router.get('/me',       protect, getMyProfessionalProfile);
+router.get('/me/stats', protect, getMyStats);
 router.put('/profile',  protect, requireProfessionalOwner, updateProfessional);   // must own profile
 router.delete('/profile', protect, requireProfessionalOwner, deleteProfessional); // must own profile
 
