@@ -15,15 +15,20 @@ import { logActivity } from '../lib/activityLogger.js';
 // HELPER FUNCTIONS
 // ============================================================================
 
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 /**
  * Geocode an address to GeoJSON coordinates using LocationIQ.
  * Results are cached in Redis for 30 days — same address hits LocationIQ only once.
  * Returns null on failure — callers must handle null gracefully.
  *
  * Uses progressive fallback: tries the full address, then strips leading
- * comma-parts one at a time (street number → street → neighbourhood → city).
- * Nigerian OSM data is sparse at street level — falling back to neighbourhood
- * or city still gives useful proximity for nearby search.
+ * comma-parts one at a time (street number → street → neighbourhood → city),
+ * then tries the last 1–3 words of the address (usually the city/state).
+ * Nigerian OSM data is sparse at street level — city-level coords are still
+ * good enough for nearby search.
+ *
+ * Waits 600ms between candidates to stay inside LocationIQ's 2 req/s free limit.
  */
 const geocodeAddress = async (address) => {
   const key = `geocode:${address.trim().toLowerCase()}`;
@@ -52,11 +57,13 @@ const geocodeAddress = async (address) => {
     }
     const candidates = [...set];
 
-    for (const candidate of candidates) {
+    for (let i = 0; i < candidates.length; i++) {
+      const candidate = candidates[i];
+      if (i > 0) await sleep(700); // stay under LocationIQ 2 req/s free-tier limit
       try {
         const response = await axios.get('https://us1.locationiq.com/v1/search', {
           params: { key: liqKey, q: candidate, format: 'json', limit: 1, countrycodes: 'ng' },
-          timeout: 5000,
+          timeout: 6000,
         });
 
         if (Array.isArray(response.data) && response.data.length > 0) {
@@ -237,15 +244,22 @@ export const onboardProfessional = async (req, res) => {
 
     logger.info(`Onboarding professional: ${name} (${role})`, { userId });
 
-    // ── Geocoding (non-blocking) ────────────────────────────────────────────
-    // A failed geocode does NOT block onboarding — location is optional.
-    // The pre-save hook on Professional.js owns isVerified / verificationStatus.
+    // ── Geocoding (blocking) ────────────────────────────────────────────────
+    // Address must resolve to coordinates so the professional can appear in
+    // nearby searches. "Mobile/Ambulatory" is the only allowed exception —
+    // those professionals only appear in text search, not GPS nearby.
+    const isMobile = /mobile|ambulatory/i.test(address.trim());
     let location = null;
-    if (address && address.trim()) {
+    if (!isMobile) {
       location = await geocodeAddress(address);
       if (!location) {
-        logger.warn(`Failed to geocode address: ${address}`, { userId });
-        // Intentionally continue — profile is saved without coordinates.
+        return res.status(400).json({
+          success: false,
+          message:
+            'We could not find that address on the map. Please include your area and state — ' +
+            'for example: "Alapere, Lagos" or "Bodija, Ibadan, Oyo State". ' +
+            'This is needed so pet owners can find you in nearby searches.',
+        });
       }
     }
 
@@ -391,14 +405,22 @@ export const updateProfessional = async (req, res) => {
     delete updates.verificationStatus;
     delete updates.verifiedAt;
 
-    // ── Re-geocode if address changed ────────────────────────────────────────
+    // ── Re-geocode if address changed (blocking) ────────────────────────────
     if (updates.address && updates.address.trim()) {
-      const location = await geocodeAddress(updates.address);
-      if (location) {
+      const isMobile = /mobile|ambulatory/i.test(updates.address.trim());
+      if (!isMobile) {
+        const location = await geocodeAddress(updates.address);
+        if (!location) {
+          return res.status(400).json({
+            success: false,
+            message:
+              'We could not find that address on the map. Please include your area and state — ' +
+              'for example: "Alapere, Lagos" or "Bodija, Ibadan, Oyo State".',
+          });
+        }
         updates.location = location;
         await User.findByIdAndUpdate(userId, { location });
       }
-      // If geocoding fails, keep existing location — don't wipe it
     }
 
     const professional = await Professional.findOneAndUpdate(
@@ -893,6 +915,11 @@ export const regeocodeAll = async (req, res) => {
       try {
         // Invalidate cached null result so LocationIQ is actually called
         await cache.del(`geocode:${prof.address.trim().toLowerCase()}`);
+
+        // Brief pause between professionals — geocodeAddress already sleeps
+        // 700ms between its own candidates, but we add extra breathing room here
+        // so the overall burst stays well inside LocationIQ's free-tier limit.
+        await sleep(1500);
 
         const location = await geocodeAddress(prof.address);
         if (location) {
