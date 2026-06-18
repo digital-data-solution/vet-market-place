@@ -20,36 +20,48 @@ import { logActivity } from '../lib/activityLogger.js';
  * Results are cached in Redis for 30 days — same address hits LocationIQ only once.
  * Returns null on failure — callers must handle null gracefully.
  *
- * Uses LocationIQ (not Nominatim) — Nominatim rate-limits production traffic at
- * ~1 req/s and returns 429 errors under any real load, which silently leaves
- * professionals without coordinates and invisible to nearby search.
+ * Uses progressive fallback: tries the full address, then strips leading
+ * comma-parts one at a time (street number → street → neighbourhood → city).
+ * Nigerian OSM data is sparse at street level — falling back to neighbourhood
+ * or city still gives useful proximity for nearby search.
  */
 const geocodeAddress = async (address) => {
   const key = `geocode:${address.trim().toLowerCase()}`;
 
   return cache.cacheWrap(key, 30 * 24 * 3600, async () => {
-    try {
-      const liqKey = process.env.LOCATIONIQ_KEY;
-      if (!liqKey) {
-        logger.warn('LOCATIONIQ_KEY not set — skipping geocode');
-        return null;
-      }
-
-      const response = await axios.get('https://us1.locationiq.com/v1/search', {
-        params: { key: liqKey, q: address, format: 'json', limit: 1, countrycodes: 'ng' },
-        timeout: 5000,
-      });
-
-      if (Array.isArray(response.data) && response.data.length > 0) {
-        const { lat, lon } = response.data[0];
-        return { type: 'Point', coordinates: [parseFloat(lon), parseFloat(lat)] };
-      }
-
-      return null;
-    } catch (error) {
-      logger.error('Geocoding error', { error: error.message });
+    const liqKey = process.env.LOCATIONIQ_KEY;
+    if (!liqKey) {
+      logger.warn('LOCATIONIQ_KEY not set — skipping geocode');
       return null;
     }
+
+    // Build candidate list: full address first, then drop leading parts
+    const parts = address.trim().split(',').map(s => s.trim()).filter(Boolean);
+    const candidates = [...new Set(
+      Array.from({ length: Math.min(parts.length, 4) }, (_, i) => parts.slice(i).join(', '))
+    )];
+
+    for (const candidate of candidates) {
+      try {
+        const response = await axios.get('https://us1.locationiq.com/v1/search', {
+          params: { key: liqKey, q: candidate, format: 'json', limit: 1, countrycodes: 'ng' },
+          timeout: 5000,
+        });
+
+        if (Array.isArray(response.data) && response.data.length > 0) {
+          const { lat, lon } = response.data[0];
+          if (candidate !== parts.join(', ')) {
+            logger.info(`Geocoded via fallback "${candidate}" for original: "${address}"`);
+          }
+          return { type: 'Point', coordinates: [parseFloat(lon), parseFloat(lat)] };
+        }
+      } catch (error) {
+        logger.warn('Geocoding attempt failed', { candidate, error: error.message });
+      }
+    }
+
+    logger.warn(`Could not geocode address after all fallbacks: "${address}"`);
+    return null;
   });
 };
 
