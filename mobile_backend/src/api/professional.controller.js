@@ -35,11 +35,22 @@ const geocodeAddress = async (address) => {
       return null;
     }
 
-    // Build candidate list: full address first, then drop leading parts
+    // Build candidate list: full address, then drop leading comma-parts,
+    // then try last 1-3 words of the final part (city/state names are usually
+    // at the end — handles "Veterinary Clinic Kwoi" → "Kwoi" and
+    // "Odo Ona Kekere Ibadan" → "Ibadan").
     const parts = address.trim().split(',').map(s => s.trim()).filter(Boolean);
-    const candidates = [...new Set(
-      Array.from({ length: Math.min(parts.length, 4) }, (_, i) => parts.slice(i).join(', '))
-    )];
+    const set = new Set();
+    for (let i = 0; i < Math.min(parts.length, 4); i++) {
+      set.add(parts.slice(i).join(', '));
+    }
+    const lastPart = parts[parts.length - 1] || address.trim();
+    const words = lastPart.split(/\s+/).filter(Boolean);
+    for (let w = 1; w <= Math.min(3, words.length); w++) {
+      const tail = words.slice(words.length - w).join(' ');
+      if (tail.length > 2) set.add(tail);
+    }
+    const candidates = [...set];
 
     for (const candidate of candidates) {
       try {
