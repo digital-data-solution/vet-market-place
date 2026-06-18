@@ -8,6 +8,7 @@ import {
   listProfessionals,
   getNearbyProfessionals,
   deleteProfessional,
+  regeocodeAll,
 } from '../api/professional.controller.js';
 
 import {
@@ -33,6 +34,9 @@ router.delete('/profile', protect, requireProfessionalOwner, deleteProfessional)
 
 router.get('/list',   protect, attachSubscription,   listProfessionals);
 router.get('/nearby', protect, enforceSubscription, getNearbyProfessionals);
+
+// ─── Admin utilities ──────────────────────────────────────────────────────────
+router.post('/admin/regeocode', protect, authorize('admin'), regeocodeAll);
 
 // ─── Vet verification ─────────────────────────────────────────────────────────
 router.post('/vet-verification/submit',    protect, authorize('vet'), submitVCN);
