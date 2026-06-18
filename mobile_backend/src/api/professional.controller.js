@@ -245,22 +245,17 @@ export const onboardProfessional = async (req, res) => {
     logger.info(`Onboarding professional: ${name} (${role})`, { userId });
 
     // ── Geocoding (blocking) ────────────────────────────────────────────────
-    // Address must resolve to coordinates so the professional can appear in
-    // nearby searches. "Mobile/Ambulatory" is the only allowed exception —
-    // those professionals only appear in text search, not GPS nearby.
-    const isMobile = /mobile|ambulatory/i.test(address.trim());
-    let location = null;
-    if (!isMobile) {
-      location = await geocodeAddress(address);
-      if (!location) {
-        return res.status(400).json({
-          success: false,
-          message:
-            'We could not find that address on the map. Please include your area and state — ' +
-            'for example: "Alapere, Lagos" or "Bodija, Ibadan, Oyo State". ' +
-            'This is needed so pet owners can find you in nearby searches.',
-        });
-      }
+    // Address must resolve to real coordinates — every professional needs a
+    // physical location so they appear in nearby searches.
+    const location = await geocodeAddress(address);
+    if (!location) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'We could not find that address on the map. Please include your area and state — ' +
+          'for example: "Alapere, Lagos" or "Bodija, Ibadan, Oyo State". ' +
+          'This is needed so pet owners can find you in nearby searches.',
+      });
     }
 
     // ── Create professional profile ─────────────────────────────────────────
@@ -407,20 +402,17 @@ export const updateProfessional = async (req, res) => {
 
     // ── Re-geocode if address changed (blocking) ────────────────────────────
     if (updates.address && updates.address.trim()) {
-      const isMobile = /mobile|ambulatory/i.test(updates.address.trim());
-      if (!isMobile) {
-        const location = await geocodeAddress(updates.address);
-        if (!location) {
-          return res.status(400).json({
-            success: false,
-            message:
-              'We could not find that address on the map. Please include your area and state — ' +
-              'for example: "Alapere, Lagos" or "Bodija, Ibadan, Oyo State".',
-          });
-        }
-        updates.location = location;
-        await User.findByIdAndUpdate(userId, { location });
+      const location = await geocodeAddress(updates.address);
+      if (!location) {
+        return res.status(400).json({
+          success: false,
+          message:
+            'We could not find that address on the map. Please include your area and state — ' +
+            'for example: "Alapere, Lagos" or "Bodija, Ibadan, Oyo State".',
+        });
       }
+      updates.location = location;
+      await User.findByIdAndUpdate(userId, { location });
     }
 
     const professional = await Professional.findOneAndUpdate(
@@ -893,15 +885,16 @@ export const deleteProfessional = async (req, res) => {
  */
 export const regeocodeAll = async (req, res) => {
   try {
-    // Find professionals missing coordinates
+    // Find professionals missing coordinates — exclude mobile/ambulatory
+    // (they intentionally have no fixed location, not a data gap)
     const missing = await Professional.find({
       $or: [
         { location: null },
         { 'location.coordinates': { $exists: false } },
         { 'location.coordinates': { $size: 0 } },
       ],
-      address: { $exists: true, $ne: '' },
-    }).select('_id name address role').lean();
+      address: { $exists: true, $ne: '', $not: /mobile|ambulatory/i },
+    }).select('_id name address role userId').lean();
 
     if (missing.length === 0) {
       return res.json({ success: true, message: 'All professionals already have coordinates.', fixed: 0 });
