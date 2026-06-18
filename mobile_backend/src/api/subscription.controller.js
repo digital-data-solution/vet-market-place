@@ -19,12 +19,15 @@ const PAYSTACK_SECRET = process.env.PAYSTACK_SECRET_KEY  || '';
 const PLAN_PRICING = {
   user_premium: 1500,
   user_monthly: 1500,
+  user_plus:    3500,
   basic:        1500,
   starter:      2500,
   pro:          5000,
 };
 
-const VALID_USER_PLANS         = new Set(['user_premium', 'user_monthly']);
+const USER_PLAN_TIER = { user_premium: 1, user_monthly: 1, user_plus: 2 };
+
+const VALID_USER_PLANS         = new Set(['user_premium', 'user_monthly', 'user_plus']);
 const VALID_PROFESSIONAL_PLANS = new Set(['starter', 'pro', 'basic']);
 
 const PENDING_GRACE_MS = 30 * 60 * 1000;
@@ -160,6 +163,15 @@ export const getPricing = async (req, res) => {
             'Exact address for every listing',
             'Unlimited search results',
             'GPS nearby search',
+          ],
+        },
+        premiumPlus: {
+          plan: 'user_plus', price: PLAN_PRICING.user_plus, label: 'Premium Plus',
+          features: [
+            'Everything in Premium',
+            'Verified Pet Parent badge on profile',
+            'Priority customer support',
+            'Early access to new platform features',
           ],
         },
       },
@@ -369,6 +381,92 @@ export const createUserSubscription = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Failed to create subscription.' });
   } finally {
     session.endSession();
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PET OWNER PLAN UPGRADE (no cancel required — user keeps access until payment clears)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const upgradeUserSubscription = async (req, res) => {
+  const { plan } = req.body;
+  const userId   = req.user._id || req.user.id;
+
+  if (!PAYSTACK_SECRET) {
+    return res.status(500).json({ success: false, message: 'Payment system not configured.' });
+  }
+
+  if (!VALID_USER_PLANS.has(plan)) {
+    return res.status(400).json({ success: false, message: 'Invalid plan.' });
+  }
+
+  try {
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
+    if (!user.email) return res.status(400).json({ success: false, message: 'Account email required.' });
+
+    const sub      = user.subscription;
+    const isActive = sub?.status === 'active' && new Date() < new Date(sub.endDate);
+
+    if (!isActive) {
+      return res.status(400).json({
+        success: false,
+        message: 'No active subscription to upgrade from. Please subscribe first.',
+      });
+    }
+
+    const currentTier = USER_PLAN_TIER[sub.plan] ?? 0;
+    const newTier     = USER_PLAN_TIER[plan]     ?? 0;
+
+    if (newTier <= currentTier) {
+      return res.status(400).json({
+        success: false,
+        message: 'You can only upgrade to a higher plan tier.',
+      });
+    }
+
+    const amount      = PLAN_PRICING[plan];
+    const displayName = user.name || user.email.split('@')[0];
+
+    const initRes = await axios.post(
+      `${PAYSTACK_BASE}/transaction/initialize`,
+      {
+        email:    user.email,
+        amount:   amount * 100,
+        currency: 'NGN',
+        metadata: {
+          userId:           userId.toString(),
+          userName:         displayName,
+          plan,
+          subscriptionType: 'user',
+        },
+        callback_url: process.env.PAYSTACK_CALLBACK_URL,
+        channels: ['card', 'bank', 'ussd', 'qr', 'mobile_money', 'bank_transfer'],
+      },
+      { headers: { Authorization: `Bearer ${PAYSTACK_SECRET}`, 'Content-Type': 'application/json' } },
+    );
+
+    const { data } = initRes;
+    if (!data?.status || !data?.data) {
+      return res.status(500).json({ success: false, message: 'Payment initialization failed.' });
+    }
+
+    logActivity(userId, user.role, 'subscription.upgrade.initiated', {
+      from: sub.plan, to: plan, amount,
+    }, req);
+
+    return res.status(201).json({
+      success: true,
+      message: 'Upgrade payment initialized. Your current plan stays active until the upgrade confirms.',
+      data: {
+        authorization_url: data.data.authorization_url,
+        reference:         data.data.reference,
+        amount,
+      },
+    });
+  } catch (error) {
+    logger.error('Upgrade user subscription error', { error: error.message, userId });
+    return res.status(500).json({ success: false, message: 'Failed to initialize upgrade.' });
   }
 };
 
@@ -843,7 +941,7 @@ export const getSubscriptionStats = async (req, res) => {
         { $match: { plan: 'messaging', status: 'active', endDate: { $gte: now } } },
         { $group: { _id: null, total: { $sum: '$amount' } } },
       ]),
-      User.countDocuments({ 'subscription.status': 'active', 'subscription.plan': { $in: ['user_premium', 'user_monthly'] } }),
+      User.countDocuments({ 'subscription.status': 'active', 'subscription.plan': { $in: ['user_premium', 'user_monthly', 'user_plus'] } }),
       User.countDocuments({}),
     ]);
 

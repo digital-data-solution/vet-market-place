@@ -1,6 +1,7 @@
 import express from 'express';
 import {
   createUserSubscription,
+  upgradeUserSubscription,
   createProfessionalSubscription,
   getUserSubscription,
   cancelSubscription,
@@ -58,6 +59,9 @@ router.get('/me', attachSubscription, checkExpiryWarning, getUserSubscription);
 
 // Initiate payment — pet owners
 router.post('/user', createUserSubscription);
+
+// Upgrade pet owner plan (no cancel required — keeps access until upgrade payment clears)
+router.post('/upgrade', upgradeUserSubscription);
 
 // Initiate payment — professionals / shop owners
 router.post('/professional', createProfessionalSubscription);
