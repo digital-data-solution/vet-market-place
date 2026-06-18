@@ -27,8 +27,7 @@ import upsellRoutes           from './routes/upsell.routes.js';
 
 // Webhook handler — imported directly so it can receive raw body
 import { handlePaystackWebhook } from './api/subscription.controller.js';
-import { listPendingVets, reviewVet }                  from './api/vetVerification.controller.js';
-import { adminProtect }                                from './middlewares/adminAuthMiddleware.js';
+import { adminProtect }          from './middlewares/adminAuthMiddleware.js';
 import {
   getRevenueStats,
   getGrowthStats,
@@ -143,17 +142,24 @@ const authLimiter = rateLimit({
   message: 'Too many requests, please try again later.',
 });
 
-const shopLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000,
-  max: 100,
-  message: 'Shop endpoint rate limit exceeded.',
-});
-
 const messageLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 30,
   keyGenerator: (req) => req.user?._id?.toString() ?? req.ip,
   message: { success: false, message: 'Too many messages sent. Please wait a moment before trying again.' },
+});
+
+const listingLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 120,
+  message: { success: false, message: 'Too many listing requests. Please try again later.' },
+});
+
+const uploadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  keyGenerator: (req) => req.user?._id?.toString() ?? req.ip,
+  message: { success: false, message: 'Upload limit reached. Please wait before uploading more files.' },
 });
 
 // ─── Admin dashboard HTML (served outside public/ so it survives web builds) ─
@@ -208,9 +214,6 @@ app.get('/api/admin/stats/subscriptions', adminProtect, async (req, res) => {
     return res.status(500).json({ success: false, message: 'Failed to fetch stats.' });
   }
 });
-
-app.get('/api/admin/vets/pending',        adminProtect, listPendingVets);
-app.post('/api/admin/vets/review/:id',    adminProtect, reviewVet);
 
 // Users
 app.get('/api/admin/users', adminProtect, async (req, res) => {
@@ -421,12 +424,12 @@ app.get('/api/admin/export/professionals',  adminProtect, exportProfessionals);
 // ─── API routes ───────────────────────────────────────────────────────────────
 app.use('/api/admin/professionals', adminProfessionalRoutes);
 app.use('/api/auth',                authLimiter, authRoutes);
-app.use('/api/v1/professionals',    professionalRoutes);   // ✅ single registration
-app.use('/api/v1/kennels',          kennelRoutes);
-app.use('/api/v1/shops',            shopLimiter, shopRoutes);
+app.use('/api/v1/professionals',    listingLimiter, professionalRoutes);
+app.use('/api/v1/kennels',          listingLimiter, kennelRoutes);
+app.use('/api/v1/shops',            listingLimiter, shopRoutes);
 app.use('/api/v1/vet-verification', vetVerificationRoutes);
 app.use('/api/subscriptions',       subscriptionRoutes);
-app.use('/api/upload',              uploadRoutes);
+app.use('/api/upload',              uploadLimiter, uploadRoutes);
 app.use('/api/messages',            messageLimiter, messagesRoutes);
 app.use('/api/v1/reviews',          reviewRoutes);
 app.use('/api/support',             supportRoutes);
