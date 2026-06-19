@@ -324,6 +324,91 @@ All deep-link routes verified server-side post-fix (curl, cache-busted): `/`, `/
 
 ---
 
+## Google Play Store
+
+### App Details
+- **App name**: Xpress Vet
+- **Category**: Health & Fitness
+- **Pricing**: Free
+- **Package name**: `com.xpressvet.marketplace`
+- **Privacy policy**: `https://xpressvetmarketplace.com/privacy-policy`
+
+### Short Description (80 chars max)
+```
+Find trusted vets, kennels & pet shops near you across Nigeria.
+```
+
+### Full Description
+```
+Xpress Vet is Nigeria's #1 pet care marketplace — connecting pet owners with trusted veterinarians, kennels, groomers, pet shops, and other pet service providers near them.
+
+🐾 FOR PET OWNERS
+• Find verified vets and pet professionals near your location
+• Browse kennels, groomers, trainers, pet shops and more
+• View profiles, gallery photos, ratings and reviews
+• Contact professionals directly via phone or WhatsApp
+• Save your favourite providers for quick access
+• Message professionals directly in-app
+
+🏥 FOR PROFESSIONALS & BUSINESSES
+• List your veterinary clinic, kennel, grooming service or pet shop
+• Get discovered by thousands of pet owners near you
+• Receive direct enquiries via call, WhatsApp or in-app message
+• Manage your profile, gallery and contact details
+• Get verified badge to build trust with pet owners
+
+✅ WHY XPRESS VET?
+• GPS-powered search — finds services closest to you
+• Verified professionals — admin-reviewed listings
+• Covers all 36 states in Nigeria
+• Free to join for pet owners
+• Affordable plans for professionals from ₦1,500/month
+
+📍 SERVICE CATEGORIES
+Veterinarians • Kennels • Groomers • Pet Shops • Trainers • Pet Sitters • Pet Transport • Agro-Vet Suppliers • Pet Pharmacies • Rescue Centers • Pet Hotels • Farms • Insurance Providers • Cremation Services
+
+Download Xpress Vet today and give your pet the care they deserve.
+```
+
+### Keywords / Tags
+```
+vet, veterinarian, pet care, kennel, groomer, pet shop, Nigeria, animal hospital, pet services
+```
+
+### Release Notes — Version 1.0.0
+```
+🎉 Welcome to Xpress Vet — Nigeria's pet care marketplace!
+
+First release includes:
+
+• Find verified vets, kennels, groomers and pet shops near you
+• GPS-powered search across all 36 states in Nigeria
+• View profiles, gallery photos, ratings and reviews
+• Contact professionals via phone, WhatsApp or in-app messaging
+• Save favourites and view recently visited profiles
+• List your pet business and get discovered by thousands of pet owners
+• Secure payments via Paystack
+• Push notifications for listing updates and messages
+
+Download and join thousands of pet owners and professionals already on Xpress Vet.
+```
+
+### Play Store Submission Checklist
+| Item | Status |
+|---|---|
+| Google Play Developer account ($25 one-time) | Required |
+| Production AAB — `eas build --platform android --profile production` | Required |
+| App icon (512×512px) | ✅ `assets/icon.png` |
+| Feature graphic (1024×500px) | Required |
+| Screenshots (min 2, max 8) | Required — take from installed APK |
+| Short description | ✅ Above |
+| Full description | ✅ Above |
+| Release notes | ✅ Above |
+| Privacy policy URL | ✅ `xpressvetmarketplace.com/privacy-policy` |
+| Content rating questionnaire | Complete on Play Console |
+
+---
+
 ## License
 
 Private — all rights reserved.
