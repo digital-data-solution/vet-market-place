@@ -78,6 +78,9 @@ const userSchema = new mongoose.Schema({
 
   // Re-engagement email gate — tracks when last re-engagement email was sent
   reEngagementSentAt: { type: Date, default: null },
+
+  // Expo push notification token — saved from the device after permission granted
+  pushToken: { type: String, default: null },
 }, { timestamps: true });
 
 userSchema.index({ supabaseId: 1 }, { unique: true, sparse: true });

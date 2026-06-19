@@ -6,6 +6,7 @@ import {
   sendVerificationApproved,
   sendVerificationRejected,
 } from '../services/email.service.js';
+import { sendPushToUser } from '../services/pushNotification.service.js';
 
 // Admin: List pending professional verifications (all roles — vet, kennel, groomer, shop, etc.)
 export const listPendingProfessionals = async (req, res) => {
@@ -132,14 +133,17 @@ export const reviewProfessional = async (req, res) => {
     await cache.cacheDel(`professionals:list:${professional.role}:1:50:`);
     await cache.cacheDel(`professionals:list:${professional.role}:1:20:`);
 
-    // Email the professional — fire-and-forget
+    // Email + push — fire-and-forget
     const profEmail = professional.email || professional.userId?.email;
     const profName  = professional.name;
+    const profUserId = professional.userId?._id ?? professional.userId;
     if (profEmail) {
       if (action === 'approve') {
         sendVerificationApproved(profName, profEmail).catch(() => {});
+        sendPushToUser(profUserId, '🎉 Listing Approved!', `Your ${profName} listing is now live on Xpress Vet.`, { type: 'approval', status: 'approved' }).catch(() => {});
       } else {
         sendVerificationRejected(profName, profEmail, adminNotes).catch(() => {});
+        sendPushToUser(profUserId, 'Listing Review Complete', 'Your listing was not approved. Tap to see details.', { type: 'approval', status: 'rejected' }).catch(() => {});
       }
     }
 

@@ -1,7 +1,7 @@
 import express from 'express';
 
 // Supabase-based auth (regular users: pet owners, vets, kennel owners)
-import { register, login, syncUser, getMe, updateProfile, getReferralInfo, getPublicProfile } from '../api/auth.controller.js';
+import { register, login, syncUser, getMe, updateProfile, getReferralInfo, getPublicProfile, savePushToken } from '../api/auth.controller.js';
 
 // JWT-based auth (admin dashboard only)
 import {
@@ -26,6 +26,7 @@ router.get('/me',            protect, getMe);
 router.get('/referral-info',           protect, getReferralInfo);
 router.get('/public-profile/:supabaseId', protect, getPublicProfile);
 router.put('/update-profile',          protect, updateProfile);
+router.post('/push-token',             protect, savePushToken);
 
 // ─── Admin JWT routes ─────────────────────────────────────────────────────────
 router.post('/admin/register',        adminRegister);
