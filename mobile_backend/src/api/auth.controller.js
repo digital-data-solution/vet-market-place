@@ -232,6 +232,23 @@ export const getPublicProfile = async (req, res) => {
   }
 };
 
+export const savePushToken = async (req, res) => {
+  try {
+    const { token } = req.body;
+    if (!token || typeof token !== 'string') {
+      return res.status(400).json({ success: false, message: 'Push token required.' });
+    }
+    if (!token.startsWith('ExponentPushToken[')) {
+      return res.status(400).json({ success: false, message: 'Invalid push token format.' });
+    }
+    await User.findByIdAndUpdate(req.user._id, { $set: { pushToken: token } });
+    return res.json({ success: true });
+  } catch (error) {
+    logger.error('Save push token error', { error: error.message });
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 export const updateProfile = async (req, res) => {
   try {
     const { profileImage, profileImagePath, phone, name, bio } = req.body;

@@ -303,14 +303,14 @@ export const onboardProfessional = async (req, res) => {
       role,
       geocoded: !!location,
     });
+    const REQUIRES_ADMIN_REVIEW = new Set(['vet', 'insurance_provider', 'pet_transport', 'cremation_service', 'agro_vet_supplier', 'pet_pharmacy', 'rescue_center', 'farm']);
+    const needsReview = REQUIRES_ADMIN_REVIEW.has(role);
+
     logActivity(userId, req.user.role, 'professional.onboarded', {
       professionalId: professional._id,
       role,
       needsReview,
     }, req);
-
-    const REQUIRES_ADMIN_REVIEW = new Set(['vet', 'insurance_provider', 'pet_transport', 'cremation_service', 'agro_vet_supplier', 'pet_pharmacy', 'rescue_center', 'farm']);
-    const needsReview = REQUIRES_ADMIN_REVIEW.has(role);
 
     // ── Fire-and-forget emails — never block the response ───────────────────
     const profEmail  = email?.trim() || req.user?.email;

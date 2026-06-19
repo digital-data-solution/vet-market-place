@@ -3,6 +3,43 @@ import Professional from '../models/Professional.js';
 import cache from '../lib/cache.js';
 import logger from '../lib/logger.js';
 import Subscription from '../models/Subscription.js';
+import axios from 'axios';
+
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+const geocodeAddress = async (address) => {
+  const key = `geocode:${address.trim().toLowerCase()}`;
+  return cache.cacheWrap(key, 30 * 24 * 3600, async () => {
+    const liqKey = process.env.LOCATIONIQ_KEY;
+    if (!liqKey) { logger.warn('LOCATIONIQ_KEY not set'); return null; }
+    const parts = address.trim().split(',').map(s => s.trim()).filter(Boolean);
+    const set = new Set();
+    for (let i = 0; i < Math.min(parts.length, 4); i++) set.add(parts.slice(i).join(', '));
+    const lastPart = parts[parts.length - 1] || address.trim();
+    const words = lastPart.split(/\s+/).filter(Boolean);
+    for (let w = 1; w <= Math.min(3, words.length); w++) {
+      const tail = words.slice(words.length - w).join(' ');
+      if (tail.length > 2) set.add(tail);
+    }
+    const candidates = [...set];
+    for (let i = 0; i < candidates.length; i++) {
+      if (i > 0) await sleep(700);
+      try {
+        const response = await axios.get('https://us1.locationiq.com/v1/search', {
+          params: { key: liqKey, q: candidates[i], format: 'json', limit: 1, countrycodes: 'ng' },
+          timeout: 6000,
+        });
+        if (Array.isArray(response.data) && response.data.length > 0) {
+          const { lat, lon } = response.data[0];
+          return { type: 'Point', coordinates: [parseFloat(lon), parseFloat(lat)] };
+        }
+      } catch (error) {
+        logger.warn('Kennel geocoding attempt failed', { candidate: candidates[i], error: error.message });
+      }
+    }
+    return null;
+  });
+};
 
 /**
  * Lift the owner's personal profileImage + uploaded mediaImages to top level so
@@ -76,12 +113,21 @@ export const onboardKennel = async (req, res) => {
       });
     }
 
+    const location = await geocodeAddress(address.trim());
+    if (!location) {
+      return res.status(400).json({
+        success: false,
+        message: 'Could not find your address on the map. Include street name, area, and city separated by commas (e.g. 5 Broad St, Surulere, Lagos).',
+      });
+    }
+
     const kennel = await Professional.create({
       userId,
       role: 'kennel',
       name: user.name,
       businessName: businessName.trim(),
       address: address.trim(),
+      location,
       specialization: specialization?.trim() || undefined,
       phone: phone?.trim() || user.phone || undefined,
       email: email?.trim() || user.email || undefined,
@@ -391,12 +437,23 @@ export const updateKennel = async (req, res) => {
 
     const updateSet = {
       ...(businessName?.trim() && { businessName: businessName.trim() }),
-      ...(address?.trim() && { address: address.trim() }),
       ...(specialization !== undefined && { specialization: specialization.trim() }),
       ...(phone?.trim() && { phone: phone.trim() }),
       ...(email?.trim() && { email: email.trim() }),
       ...(images && { images }),
     };
+
+    if (address?.trim()) {
+      const location = await geocodeAddress(address.trim());
+      if (!location) {
+        return res.status(400).json({
+          success: false,
+          message: 'Could not find that address on the map. Include street name, area, and city.',
+        });
+      }
+      updateSet.address = address.trim();
+      updateSet.location = location;
+    }
 
     const kennel = await Professional.findOneAndUpdate(
       { userId, role: 'kennel' },
