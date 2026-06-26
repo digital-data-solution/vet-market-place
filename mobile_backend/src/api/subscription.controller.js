@@ -250,6 +250,7 @@ export const handlePaystackWebhook = async (req, res) => {
           headers: {
             'Content-Type': 'application/json',
             'x-paystack-signature': req.headers['x-paystack-signature'],
+            'x-ajo-secret': process.env.AJOAPP_WEBHOOK_SECRET,
           },
           timeout: 10000,
         });
