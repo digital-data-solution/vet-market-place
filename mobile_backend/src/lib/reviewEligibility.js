@@ -26,24 +26,32 @@ export async function hasContactedProfessional(userSupabaseId, targetSupabaseId)
   if (userSupabaseId === targetSupabaseId) return false;
 
   try {
-    // PostgREST OR syntax: match rows where either party sent the first message
-    const { count, error } = await supabaseAdmin
-      .from('messages')
-      .select('id', { count: 'exact', head: true })
-      .or(
-        `and(from_user_id.eq.${userSupabaseId},to_user_id.eq.${targetSupabaseId}),` +
-        `and(from_user_id.eq.${targetSupabaseId},to_user_id.eq.${userSupabaseId})`,
-      );
+    // Two simple queries avoid PostgREST nested-AND-in-OR syntax issues.
+    // Check either direction: user→professional or professional→user.
+    const [fwd, rev] = await Promise.all([
+      supabaseAdmin
+        .from('messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('from_user_id', userSupabaseId)
+        .eq('to_user_id',   targetSupabaseId),
+      supabaseAdmin
+        .from('messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('from_user_id', targetSupabaseId)
+        .eq('to_user_id',   userSupabaseId),
+    ]);
 
-    if (error) {
-      logger.error('reviewEligibility: Supabase query failed', { error: error.message });
-      // Fail open — don't block the review if Supabase is temporarily down
-      return false;
+    if (fwd.error || rev.error) {
+      const errMsg = (fwd.error ?? rev.error).message;
+      logger.error('reviewEligibility: Supabase query failed', { error: errMsg });
+      // Fail open — don't block legitimate reviews when Supabase is temporarily down
+      return true;
     }
 
-    return (count ?? 0) > 0;
+    return ((fwd.count ?? 0) + (rev.count ?? 0)) > 0;
   } catch (err) {
     logger.error('reviewEligibility: unexpected error', { error: err.message });
-    return false;
+    // Fail open
+    return true;
   }
 }

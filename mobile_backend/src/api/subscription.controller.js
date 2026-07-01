@@ -13,8 +13,9 @@ import {
 import { applyReferralReward } from '../lib/referralHelper.js';
 import { logActivity }         from '../lib/activityLogger.js';
 
-const PAYSTACK_BASE   = process.env.PAYSTACK_BASE        || 'https://api.paystack.co';
-const PAYSTACK_SECRET = process.env.PAYSTACK_SECRET_KEY  || '';
+const PAYSTACK_BASE        = process.env.PAYSTACK_BASE        || 'https://api.paystack.co';
+const PAYSTACK_SECRET      = process.env.PAYSTACK_SECRET_KEY  || '';
+const AJOAPP_WEBHOOK_URL   = process.env.AJOAPP_WEBHOOK_URL   || '';
 
 const PLAN_PRICING = {
   user_premium: 1500,
@@ -236,6 +237,29 @@ export const handlePaystackWebhook = async (req, res) => {
     const event = JSON.parse(req.body.toString());
     console.log('✅ Webhook event:', event.event, '| Payment status:', event.data?.status);
     console.log('Metadata:', JSON.stringify(event.data?.metadata));
+
+    // Route AjoApp events to the AjoApp backend
+    if (event.data?.metadata?.app === 'ajoapp') {
+      if (!AJOAPP_WEBHOOK_URL) {
+        console.log('⚠ AjoApp event received but AJOAPP_WEBHOOK_URL is not set — dropping event');
+        return res.status(200).send('OK');
+      }
+      console.log(`📤 Forwarding AjoApp webhook event "${event.event}" to ${AJOAPP_WEBHOOK_URL}`);
+      try {
+        await axios.post(AJOAPP_WEBHOOK_URL, event, {
+          headers: {
+            'Content-Type': 'application/json',
+            'x-paystack-signature': req.headers['x-paystack-signature'],
+            'x-ajo-secret': process.env.AJOAPP_WEBHOOK_SECRET,
+          },
+          timeout: 10000,
+        });
+        console.log('✅ AjoApp webhook forwarded successfully');
+      } catch (fwdErr) {
+        console.log('⚠ AjoApp webhook forward failed:', fwdErr.message);
+      }
+      return res.status(200).send('OK');
+    }
 
     if (event.event === 'charge.success' && event.data?.status === 'success') {
       const metadata = event.data.metadata || {};
