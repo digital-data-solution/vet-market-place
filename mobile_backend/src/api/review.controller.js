@@ -227,6 +227,9 @@ export const listReviews = async (req, res) => {
  * Requires authentication.
  */
 export const checkEligibility = async (req, res) => {
+  // Eligibility can change any time a message is sent — never serve a cached response
+  res.set('Cache-Control', 'no-store');
+
   try {
     const { targetType, targetId } = req.params;
 
@@ -267,6 +270,7 @@ export const checkEligibility = async (req, res) => {
         }).lean()
       : null;
 
+    res.set('Cache-Control', 'no-store');
     return res.json({ success: true, eligible, existingReview });
   } catch (err) {
     logger.error('checkEligibility error', { error: err.message });
