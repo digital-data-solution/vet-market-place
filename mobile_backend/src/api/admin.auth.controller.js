@@ -5,7 +5,6 @@ import jwt from 'jsonwebtoken';
 
 const JWT_SECRET  = process.env.JWT_SECRET  || 'your-super-secret-key-change-in-env';
 const JWT_EXPIRE  = '24h';
-const BCRYPT_ROUNDS = 10;
 
 // ============================================================================
 // HELPER FUNCTIONS
@@ -14,18 +13,15 @@ const BCRYPT_ROUNDS = 10;
 function generateToken(user) {
   return jwt.sign(
     {
-      userId: user._id.toString(),
-      email:  user.email,
-      role:   user.role,
-      name:   user.name,
+      userId:  user._id.toString(),
+      email:   user.email,
+      role:    user.role,
+      isAdmin: user.isAdmin === true,
+      name:    user.name,
     },
     JWT_SECRET,
     { expiresIn: JWT_EXPIRE }
   );
-}
-
-async function hashPassword(password) {
-  return bcrypt.hash(password, BCRYPT_ROUNDS);
 }
 
 async function comparePassword(plainPassword, hashedPassword) {
@@ -50,7 +46,7 @@ function verifyToken(token) {
  * Body: { name, email, password }
  */
 export const register = async (req, res) => {
-  const { name, email, password, role } = req.body;
+  const { name, email, password } = req.body;
 
   try {
     if (!name || !email || !password) {
@@ -66,35 +62,46 @@ export const register = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Password must be at least 8 characters long.' });
     }
 
+    // Reached only via adminProtect — an already-authenticated admin is
+    // granting admin-dashboard access to a (possibly existing) account.
     const existing = await User.findOne({ email: email.toLowerCase() });
     if (existing) {
-      logger.warn('Admin registration failed: user already exists', { email });
-      return res.status(400).json({ success: false, message: 'An account with this email already exists.' });
-    }
+      if (existing.isAdmin) {
+        return res.status(400).json({ success: false, message: 'This account already has admin access.' });
+      }
+      existing.isAdmin = true;
+      await existing.save();
 
-    const hashedPassword = await hashPassword(password);
+      logger.info('Existing user granted admin access', { userId: existing._id, email: existing.email });
+
+      return res.status(200).json({
+        success: true,
+        message: 'Admin access granted to existing account.',
+        data: { userId: existing._id, email: existing.email, name: existing.name, isAdmin: true },
+      });
+    }
 
     const user = new User({
       name:       name.trim(),
       email:      email.toLowerCase(),
-      password:   hashedPassword,
-      role:       role === 'admin' ? 'admin' : 'pet_owner',
+      password,
+      isAdmin:    true,
       isVerified: false,
       createdAt:  new Date(),
     });
 
     await user.save();
 
-    logger.info('Admin user registered', { userId: user._id, email: user.email, role: user.role });
+    logger.info('Admin user registered', { userId: user._id, email: user.email });
 
     return res.status(201).json({
       success: true,
       message: 'User registered successfully. Please login.',
       data: {
-        userId: user._id,
-        email:  user.email,
-        name:   user.name,
-        role:   user.role,
+        userId:  user._id,
+        email:   user.email,
+        name:    user.name,
+        isAdmin: user.isAdmin,
       },
     });
   } catch (error) {
@@ -126,9 +133,10 @@ export const login = async (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid email or password.' });
     }
 
-    // ✅ Admin-only gate
-    if (user.role !== 'admin') {
-      logger.warn('Admin login failed: insufficient role', { userId: user._id, role: user.role });
+    // ✅ Admin-only gate — independent of the app-facing `role` field, so an
+    // account can be e.g. both a `vet` in the marketplace and a dashboard admin.
+    if (!user.isAdmin) {
+      logger.warn('Admin login failed: no admin access', { userId: user._id });
       return res.status(403).json({ success: false, message: 'Admin access required.' });
     }
 
@@ -320,7 +328,7 @@ export const changePassword = async (req, res) => {
       return res.status(401).json({ success: false, message: 'Current password is incorrect.' });
     }
 
-    user.password = await hashPassword(newPassword);
+    user.password = newPassword;
     await user.save();
 
     logger.info('Admin password changed successfully', { userId: user._id });

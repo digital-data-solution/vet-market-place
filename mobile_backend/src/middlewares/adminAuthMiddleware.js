@@ -16,7 +16,7 @@ export const adminProtect = (req, res, next) => {
       return res.status(401).json({ success: false, message: 'Invalid token.' });
     }
 
-    if (decoded.role !== 'admin') {
+    if (!decoded.isAdmin) {
       return res.status(403).json({ success: false, message: 'Admin access required.' });
     }
 
