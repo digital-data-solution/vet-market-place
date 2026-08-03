@@ -15,6 +15,7 @@ import {
 } from '../api/admin.auth.controller.js';
 
 import { protect } from '../middlewares/authMiddleware.js';
+import { adminProtect } from '../middlewares/adminAuthMiddleware.js';
 
 const router = express.Router();
 
@@ -29,7 +30,7 @@ router.put('/update-profile',          protect, updateProfile);
 router.post('/push-token',             protect, savePushToken);
 
 // ─── Admin JWT routes ─────────────────────────────────────────────────────────
-router.post('/admin/register',        adminRegister);
+router.post('/admin/register',        adminProtect, adminRegister);
 router.post('/admin/login',           adminLogin);
 router.post('/admin/logout',          adminLogout);
 router.post('/admin/refresh',         adminRefreshToken);

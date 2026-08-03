@@ -19,6 +19,9 @@ const userSchema = new mongoose.Schema({
     enum:    ['pet_owner', 'vet', 'kennel_owner', 'shop_owner', 'admin'],
     default: 'pet_owner',
   },
+  // Admin-dashboard access — independent of `role`, so a user can be e.g.
+  // both a `vet` in the marketplace app and an admin of the dashboard.
+  isAdmin: { type: Boolean, default: false },
 
   // Profile photo (single, managed by ProfileImageUploader)
   profileImage:     { type: String, default: null },
