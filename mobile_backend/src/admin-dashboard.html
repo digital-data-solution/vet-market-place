@@ -554,6 +554,8 @@
       <div id="practice-stats-grid" class="stats-grid"><div class="spinner"></div></div>
       <h3 style="font-size:14px;color:#334155;margin:24px 0 10px">Marketing Campaigns</h3>
       <div id="marketing-stats-grid" class="stats-grid"><div class="spinner"></div></div>
+      <h3 style="font-size:14px;color:#334155;margin:24px 0 10px">Business Suite (shops &amp; inventory)</h3>
+      <div id="business-stats-grid" class="stats-grid"><div class="spinner"></div></div>
       <h3 style="font-size:14px;color:#334155;margin:24px 0 10px">Email Health (last 7 days)</h3>
       <div id="email-health-grid" class="stats-grid"><div class="spinner"></div></div>
     </div>
@@ -1732,6 +1734,20 @@ async function loadPracticeStats() {
     <div class="stat-card"><div class="stat-label">Sent</div><div class="stat-value" style="color:#10B981">${e.sent7d||0}</div></div>
     <div class="stat-card"><div class="stat-label">Failed</div><div class="stat-value" style="color:${e.failed7d?'#DC2626':'#0F172A'}">${e.failed7d||0}</div></div>
     <div class="stat-card"><div class="stat-label">Skipped (no provider key)</div><div class="stat-value" style="color:${e.skipped7d?'#DC2626':'#0F172A'}">${e.skipped7d||0}</div>${e.skipped7d?'<div class="stat-sub" style="color:#DC2626">⚠️ Nothing is sending — check RESEND_API_KEY</div>':''}</div>
+  `;
+
+  // Business Suite — separate endpoint, aggregate only (no per-shop inventory).
+  const br = await api('GET', '/api/admin/stats/business');
+  const b = br?.body?.data?.business || {};
+  document.getElementById('business-stats-grid').innerHTML = `
+    <div class="stat-card"><div class="stat-label">Shops Using It</div><div class="stat-value">${b.ownersUsing||0}</div></div>
+    <div class="stat-card"><div class="stat-label">Total Products</div><div class="stat-value">${b.totalProducts||0}</div></div>
+    <div class="stat-card"><div class="stat-label">Sales Reps</div><div class="stat-value">${b.totalStaff||0}</div></div>
+    <div class="stat-card"><div class="stat-label">Sales Recorded</div><div class="stat-value">${b.salesCount||0}</div></div>
+    <div class="stat-card"><div class="stat-label">Sales Volume</div><div class="stat-value">₦${(b.salesVolume||0).toLocaleString()}</div><div class="stat-sub">through POS, all-time</div></div>
+    <div class="stat-card"><div class="stat-label">Active Paid Shops</div><div class="stat-value">${b.addonActiveCount||0}</div></div>
+    <div class="stat-card"><div class="stat-label">Addon Revenue</div><div class="stat-value">₦${(b.addonRevenue||0).toLocaleString()}</div><div class="stat-sub">lifetime</div></div>
+    <div class="stat-card"><div class="stat-label">Business Promo Sent</div><div class="stat-value">${b.businessPromoSent||0}</div></div>
   `;
 }
 

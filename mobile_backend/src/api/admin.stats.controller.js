@@ -28,10 +28,14 @@ import ActivityLog  from '../models/ActivityLog.js';
 import Client       from '../models/Client.js';
 import Patient      from '../models/Patient.js';
 import EmailLog     from '../models/EmailLog.js';
+import Product      from '../models/Product.js';
+import Sale         from '../models/Sale.js';
+import StaffMember  from '../models/StaffMember.js';
 import cache        from '../lib/cache.js';
 import logger       from '../lib/logger.js';
 import { supabaseAdmin } from '../lib/supabase.js';
 import { PRACTICE_PACKAGES } from './practice.controller.js';
+import { BUSINESS_PACKAGES } from './business.controller.js';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -459,6 +463,57 @@ export const getPracticeStats = async (req, res) => {
   } catch (err) {
     logger.error('getPracticeStats error', { error: err.message });
     return res.status(500).json({ success: false, message: 'Failed to fetch practice/marketing stats.' });
+  }
+};
+
+// GET /api/admin/stats/business — Business Suite adoption (aggregate only, no
+// per-shop inventory or sales detail; matches the practice-stats privacy stance).
+export const getBusinessStats = async (req, res) => {
+  try {
+    const now = new Date();
+    const [
+      ownersUsingIds,
+      totalProducts,
+      totalStaff,
+      addonActiveCount,
+      activatedLogs,
+      businessPromoSent,
+      salesAgg,
+    ] = await Promise.all([
+      Product.distinct('owner'),
+      Product.countDocuments({ isActive: true }),
+      StaffMember.countDocuments({ isActive: true }),
+      User.countDocuments({ 'businessAddon.activeUntil': { $gt: now } }),
+      // 'business.activated' logs store `days` — reconstruct revenue via the
+      // fixed BUSINESS_PACKAGES price table (same approach as practice stats).
+      ActivityLog.find({ action: 'business.activated' }).select('metadata').lean(),
+      User.countDocuments({ businessPromoSentAt: { $ne: null } }),
+      Sale.aggregate([{ $group: { _id: null, count: { $sum: 1 }, revenue: { $sum: '$total' } } }]),
+    ]);
+
+    const addonRevenue = activatedLogs.reduce((sum, log) => {
+      const days = log.metadata?.days;
+      return sum + (BUSINESS_PACKAGES[days]?.price || 0);
+    }, 0);
+
+    return res.json({
+      success: true,
+      data: {
+        business: {
+          ownersUsing: ownersUsingIds.length,
+          totalProducts,
+          totalStaff,
+          addonActiveCount,
+          addonRevenue, // ₦, lifetime, derived from activation events
+          salesCount: salesAgg[0]?.count || 0,
+          salesVolume: salesAgg[0]?.revenue || 0, // ₦ transacted through POS, all-time
+          businessPromoSent,
+        },
+      },
+    });
+  } catch (err) {
+    logger.error('getBusinessStats error', { error: err.message });
+    return res.status(500).json({ success: false, message: 'Failed to fetch business stats.' });
   }
 };
 

@@ -15,6 +15,7 @@ import { logActivity }         from '../lib/activityLogger.js';
 import { activateFeatured }    from './featured.controller.js';
 import { activateWalletFund, handleTransferEvent } from './wallet.controller.js';
 import { activatePracticeAddon } from './practice.controller.js';
+import { activateBusinessAddon } from './business.controller.js';
 
 const PAYSTACK_BASE        = process.env.PAYSTACK_BASE        || 'https://api.paystack.co';
 const PAYSTACK_SECRET      = process.env.PAYSTACK_SECRET_KEY  || '';
@@ -287,6 +288,10 @@ export const handlePaystackWebhook = async (req, res) => {
         console.log('▶ Activating Practice Records addon for professionalId:', metadata.professionalId);
         await activatePracticeAddon(metadata, event.data.reference);
         console.log('✅ Practice Records addon activated');
+      } else if (metadata.type === 'business_addon') {
+        console.log('▶ Activating Business Suite addon for userId:', metadata.userId);
+        await activateBusinessAddon(metadata, event.data.reference);
+        console.log('✅ Business Suite addon activated');
       } else if (metadata.subscriptionType === 'user') {
         console.log('▶ Activating user subscription for userId:', metadata.userId);
         await activateUserSubscription(metadata.userId, metadata.plan, event.data.reference);
@@ -945,6 +950,9 @@ export const verifyPayment = async (req, res) => {
     } else if (metadata.type === 'practice_addon') {
       result = await activatePracticeAddon(metadata, reference);
       return res.json({ success: true, message: 'Payment verified and Practice Records unlocked!', data: result });
+    } else if (metadata.type === 'business_addon') {
+      result = await activateBusinessAddon(metadata, reference);
+      return res.json({ success: true, message: 'Payment verified and Business Suite unlocked!', data: result });
     } else if (metadata.subscriptionType === 'user') {
       result = await activateUserSubscription(metadata.userId, metadata.plan, reference);
     } else if (metadata.subscriptionType === 'professional') {
