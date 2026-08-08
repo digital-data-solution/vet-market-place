@@ -99,6 +99,18 @@ const shopSchema = new mongoose.Schema(
     images: [{
       type: String, // URLs to shop images
     }],
+
+    // Paid boost — listing ranks above non-featured until this date.
+    // Set by a successful "featured" Paystack charge (see featured.controller.js).
+    featuredUntil: {
+      type:  Date,
+      index: true,
+    },
+    // Last Paystack reference applied to featuredUntil — guards against
+    // double-applying the same webhook/verify event.
+    lastFeaturedReference: {
+      type: String,
+    },
   },
   {
     timestamps: true,
