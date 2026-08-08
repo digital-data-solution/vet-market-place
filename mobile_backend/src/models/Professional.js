@@ -196,6 +196,11 @@ const professionalSchema = new mongoose.Schema(
     lastFeaturedReference: {
       type: String,
     },
+    // One-time "try Boost Listing" promo email gate — fires at most once,
+    // and only to professionals who've never bought a boost.
+    boostPromoSentAt: {
+      type: Date,
+    },
   },
   {
     timestamps: true,

@@ -23,6 +23,7 @@ import uploadRoutes          from './routes/uploadRoutes.js';
 import messagesRoutes        from './routes/messages.routes.js';
 import adminProfessionalRoutes from './routes/admin.professional.js';
 import adminWalletRoutes       from './routes/admin.wallet.routes.js';
+import emailRoutes             from './routes/email.routes.js';
 import reviewRoutes           from './routes/review.routes.js';
 import supportRoutes          from './routes/support.routes.js';
 import trackRoutes            from './routes/track.routes.js';
@@ -429,6 +430,7 @@ app.get('/api/admin/export/professionals',  adminProtect, exportProfessionals);
 // ─── API routes ───────────────────────────────────────────────────────────────
 app.use('/api/admin/professionals', adminProfessionalRoutes);
 app.use('/api/admin/wallet',        adminWalletRoutes);
+app.use('/api/email',               emailRoutes);
 app.use('/api/auth',                authLimiter, authRoutes);
 app.use('/api/v1/professionals',    listingLimiter, professionalRoutes);
 app.use('/api/v1/kennels',          listingLimiter, kennelRoutes);

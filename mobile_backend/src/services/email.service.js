@@ -11,11 +11,36 @@
  */
 
 import fetch from 'node-fetch';
+import crypto from 'crypto';
 import logger from '../lib/logger.js';
 
 const FROM    = process.env.EMAIL_FROM    || 'Xpress Vet <noreply@xpressvetmarketplace.com>';
 const RESEND  = process.env.RESEND_API_KEY;
 const BREVO   = process.env.BREVO_API_KEY;
+const APP_URL = process.env.BACKEND_URL    || 'https://vet-market-place-jsj5.onrender.com';
+const UNSUB_SECRET = process.env.JWT_SECRET || 'your-super-secret-key-change-in-env';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UNSUBSCRIBE — signed, stateless one-click link. No token stored on the
+// user; the signature is an HMAC of the user id, so any marketing email can
+// generate a working unsubscribe link without a DB write or lookup table.
+// ─────────────────────────────────────────────────────────────────────────────
+export function unsubscribeUrl(userId) {
+  if (!userId) return null;
+  const uid = userId.toString();
+  const sig = crypto.createHmac('sha256', UNSUB_SECRET).update(uid).digest('hex').slice(0, 32);
+  return `${APP_URL}/api/email/unsubscribe?uid=${uid}&sig=${sig}`;
+}
+
+export function verifyUnsubscribeSig(uid, sig) {
+  if (!uid || !sig) return false;
+  const expected = crypto.createHmac('sha256', UNSUB_SECRET).update(uid.toString()).digest('hex').slice(0, 32);
+  try {
+    return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
+  } catch {
+    return false; // length mismatch etc.
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CORE SEND
@@ -94,7 +119,7 @@ async function sendViaBravo(to, subject, html, text) {
 // SHARED LAYOUT
 // ─────────────────────────────────────────────────────────────────────────────
 
-function layout(title, body) {
+function layout(title, body, unsubLink) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -133,7 +158,8 @@ function layout(title, body) {
     <a href="https://xpressvetmarketplace.com/privacy-policy" style="color:#94A3B8;text-decoration:none;">Privacy Policy</a>
     &nbsp;·&nbsp;
     <a href="https://xpressvetmarketplace.com/terms-and-conditions" style="color:#94A3B8;text-decoration:none;">Terms of Service</a><br/>
-    Questions? Reply to this email — we're happy to help.</p>
+    Questions? Reply to this email — we're happy to help.${unsubLink ? `<br/>
+    <a href="${unsubLink}" style="color:#94A3B8;text-decoration:underline;">Unsubscribe from marketing emails</a>` : ''}</p>
   </div>
 </div>
 </body>
@@ -590,6 +616,57 @@ export async function sendReferralRewardEmail(name, email, bonusDays) {
     </p>
   `);
   await sendEmail(email, `${firstName}, you earned a referral reward on Xpress Vet!`, html);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FEATURE-ADOPTION PROMOS — one-time-ever emails introducing the two revenue
+// features (Boost Listing, Wallet) to users who haven't tried them. Sent by
+// jobs/marketingCampaigns.js, gated on marketingOptOut and each user's own
+// promo-sent timestamp so nobody gets either message twice.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Sent once to a professional/shop who has never bought a listing boost. */
+export async function sendBoostListingPromo(name, email, userId, listingLabel) {
+  const firstName = name?.split(' ')[0] || 'there';
+  const unsub = unsubscribeUrl(userId);
+  const html = layout('Get seen first on Xpress Vet', `
+    <h1>Hey ${firstName}, want more clients finding ${listingLabel || 'your listing'}? 🚀</h1>
+    <p>Right now, search results are sorted with the most active listings first. A <strong>Boost</strong> puts you at the very top for everyone browsing your area — and adds a ⭐ Featured badge that stands out.</p>
+    <div class="highlight">
+      <p>📈 <strong>7 days for ₦1,500</strong> · 14 days for ₦2,500 · 30 days for ₦4,000<br/>
+      One tap, instant activation — no subscription commitment.</p>
+    </div>
+    <p>Boosted listings consistently get more profile views and more contacts. It's the fastest way to stand out this week.</p>
+    <p style="text-align:center;margin:24px 0">
+      <a href="https://xpressvetmarketplace.com" class="btn">Boost My Listing →</a>
+    </p>
+    <p style="color:#94A3B8;font-size:13px">
+      Find it anytime under Profile → 🚀 Boost Your Listing.
+    </p>
+  `, unsub);
+  await sendEmail(email, `${firstName}, get seen first with a Boost on Xpress Vet`, html);
+}
+
+/** Sent once to a user who has never funded/used the escrow Wallet. */
+export async function sendWalletPromo(name, email, userId) {
+  const firstName = name?.split(' ')[0] || 'there';
+  const unsub = unsubscribeUrl(userId);
+  const html = layout('Pay safely on Xpress Vet', `
+    <h1>Hey ${firstName}, pay safely with the Xpress Vet Wallet 🔒</h1>
+    <p>Instead of sending money directly, you can now pay any vet, kennel, groomer or shop through your in-app Wallet — funds are held in escrow and only released to them once you confirm the service was done right.</p>
+    <div class="highlight">
+      <p>🔒 <strong>Your money is protected.</strong><br/>
+      If something goes wrong, you can report it and get a refund — no more paying upfront and hoping for the best.</p>
+    </div>
+    <p>Top up anytime with your card or bank transfer, then pay providers straight from their profile.</p>
+    <p style="text-align:center;margin:24px 0">
+      <a href="https://xpressvetmarketplace.com" class="btn">Set Up My Wallet →</a>
+    </p>
+    <p style="color:#94A3B8;font-size:13px">
+      Find it anytime under Profile → Wallet.
+    </p>
+  `, unsub);
+  await sendEmail(email, `${firstName}, a safer way to pay on Xpress Vet`, html);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

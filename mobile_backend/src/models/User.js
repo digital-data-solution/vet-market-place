@@ -82,6 +82,14 @@ const userSchema = new mongoose.Schema({
   // Re-engagement email gate — tracks when last re-engagement email was sent
   reEngagementSentAt: { type: Date, default: null },
 
+  // Marketing email preferences. Missing/undefined on existing docs reads as
+  // false, so pre-existing users keep receiving marketing mail by default —
+  // matches how it already worked before this field existed. Set true only
+  // via the public unsubscribe link (see routes/email.routes.js).
+  marketingOptOut: { type: Boolean, default: false },
+  // One-time promo gates — each fires at most once per user, ever.
+  walletPromoSentAt: { type: Date, default: null },
+
   // Expo push notification token — saved from the device after permission granted
   pushToken: { type: String, default: null },
 }, { timestamps: true });

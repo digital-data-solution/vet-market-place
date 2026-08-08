@@ -19,6 +19,7 @@ const { default: startWeeklyDigestJob }      = await import('./jobs/weeklyDigest
 const { default: startReEngagementJob }      = await import('./jobs/reEngagement.js');
 const { default: startAbandonedSubJob }      = await import('./jobs/abandonedSub.js');
 const { default: startWalletJobs }           = await import('./jobs/walletJobs.js');
+const { default: startMarketingCampaignJobs } = await import('./jobs/marketingCampaigns.js');
 
 // Start services
 await connectDB();
@@ -46,6 +47,7 @@ startWeeklyDigestJob();
 startReEngagementJob();
 startAbandonedSubJob();
 startWalletJobs();
+startMarketingCampaignJobs();
 
 const PORT = process.env.PORT || 5000;
 
