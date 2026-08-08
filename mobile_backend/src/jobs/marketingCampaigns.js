@@ -13,7 +13,7 @@ import Professional from '../models/Professional.js';
 import Shop from '../models/Shop.js';
 import User from '../models/User.js';
 import Transaction from '../models/Transaction.js';
-import { sendBoostListingPromo, sendWalletPromo } from '../services/email.service.js';
+import { sendBoostListingPromo, sendWalletPromo, sendPracticeAddonPromo } from '../services/email.service.js';
 import logger from '../lib/logger.js';
 
 const BATCH_SIZE = 50; // per campaign per run, matches other marketing jobs
@@ -101,6 +101,41 @@ async function runWalletPromo() {
   logger.info(`Wallet promo: sent ${sent} (${users.length} considered)`);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// CAMPAIGN 3: Practice Records — verified vets who've never activated the add-on
+// ─────────────────────────────────────────────────────────────────────────────
+async function runPracticePromo() {
+  const cutoff = new Date(Date.now() - MIN_ACCOUNT_AGE_MS);
+
+  const vets = await Professional.find({
+    role: 'vet',
+    isVerified: true, // only pitch to vets whose listing is live
+    practicePromoSentAt: null,
+    // Never activated (or has no add-on record at all). Vets currently on a
+    // paid add-on already know the feature exists — exclude them.
+    $or: [
+      { 'practiceAddon.activeUntil': null },
+      { 'practiceAddon.activeUntil': { $exists: false } },
+      { 'practiceAddon.activeUntil': { $lt: new Date() } },
+    ],
+    createdAt: { $lte: cutoff },
+  })
+    .populate('userId', 'name email marketingOptOut')
+    .limit(BATCH_SIZE)
+    .lean();
+
+  let sent = 0;
+  for (const vet of vets) {
+    const account = vet.userId;
+    if (!account?.email || account.marketingOptOut) continue;
+    sendPracticeAddonPromo(account.name, account.email, account._id).catch(() => {});
+    await Professional.findByIdAndUpdate(vet._id, { $set: { practicePromoSentAt: new Date() } });
+    sent++;
+  }
+
+  logger.info(`Practice Records promo: sent ${sent} (${vets.length} vets considered)`);
+}
+
 export default function startMarketingCampaignJobs() {
   // Monday 10:00 UTC (11:00 WAT) — once a week, deliberately gentle cadence.
   cron.schedule('0 10 * * 1', async () => {
@@ -108,6 +143,8 @@ export default function startMarketingCampaignJobs() {
     catch (err) { logger.error('Boost promo job error', { error: err.message }); }
     try { await runWalletPromo(); }
     catch (err) { logger.error('Wallet promo job error', { error: err.message }); }
+    try { await runPracticePromo(); }
+    catch (err) { logger.error('Practice promo job error', { error: err.message }); }
   }, { timezone: 'UTC' });
 
   logger.info('⏰ Marketing campaign jobs scheduled (weekly, Monday 10:00 UTC)');

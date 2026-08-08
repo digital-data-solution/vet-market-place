@@ -697,6 +697,28 @@ export async function sendWalletPromo(name, email, userId) {
   await sendEmail(email, `${firstName}, a safer way to pay on Xpress Vet`, html);
 }
 
+/** Sent once to a vet who has never activated the Practice Records add-on. */
+export async function sendPracticeAddonPromo(name, email, userId) {
+  const firstName = name?.split(' ')[0] || 'Doc';
+  const unsub = unsubscribeUrl(userId);
+  const html = layout('Run your clinic from Xpress Vet', `
+    <h1>Hey ${firstName}, keep your patients' records in one place 📋</h1>
+    <p>Xpress Vet now includes <strong>Practice Records</strong> — a simple clinic tool built into the app. Add your clients and their pets, log every treatment and vaccination, and let the app remind you (and the pet owner) when the next dose or follow-up is due.</p>
+    <div class="highlight">
+      <p>🐾 <strong>Free for your first 5 patients.</strong><br/>
+      Automatic vaccination &amp; follow-up reminders — to you, and optionally straight to your client's email.</p>
+    </div>
+    <p>No spreadsheets, no paper cards. Your clients see that you're on top of their pet's care — and they come back to you.</p>
+    <p style="text-align:center;margin:24px 0">
+      <a href="https://xpressvetmarketplace.com" class="btn">Open Practice Records →</a>
+    </p>
+    <p style="color:#94A3B8;font-size:13px">
+      Find it anytime under Profile → 📋 Practice Records.
+    </p>
+  `, unsub);
+  await sendEmail(email, `${firstName}, track your patients right inside Xpress Vet`, html);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // PRACTICE RECORDS — vaccination/follow-up reminders (jobs/practiceReminders.js)
 // ─────────────────────────────────────────────────────────────────────────────

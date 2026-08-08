@@ -211,6 +211,11 @@ const professionalSchema = new mongoose.Schema(
       activeUntil:           { type: Date, index: true },
       lastPaymentReference:  { type: String },
     },
+    // One-time "try Practice Records" promo email gate — fires at most once,
+    // and only to vets who have never activated the practice add-on.
+    practicePromoSentAt: {
+      type: Date,
+    },
   },
   {
     timestamps: true,
