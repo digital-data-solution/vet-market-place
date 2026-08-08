@@ -13,7 +13,8 @@ import Professional from '../models/Professional.js';
 import Shop from '../models/Shop.js';
 import User from '../models/User.js';
 import Transaction from '../models/Transaction.js';
-import { sendBoostListingPromo, sendWalletPromo, sendPracticeAddonPromo } from '../services/email.service.js';
+import Product from '../models/Product.js';
+import { sendBoostListingPromo, sendWalletPromo, sendPracticeAddonPromo, sendBusinessSuitePromo } from '../services/email.service.js';
 import logger from '../lib/logger.js';
 
 const BATCH_SIZE = 50; // per campaign per run, matches other marketing jobs
@@ -136,6 +137,43 @@ async function runPracticePromo() {
   logger.info(`Practice Records promo: sent ${sent} (${vets.length} vets considered)`);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// CAMPAIGN 4: Business Suite — shop/vet/kennel owners who haven't started using
+// inventory yet (no products) and have never activated the paid add-on.
+// ─────────────────────────────────────────────────────────────────────────────
+async function runBusinessPromo() {
+  const cutoff = new Date(Date.now() - MIN_ACCOUNT_AGE_MS);
+  const now = new Date();
+
+  const usersUsing = await Product.distinct('owner'); // already have inventory — exclude
+
+  const owners = await User.find({
+    role: { $in: ['shop_owner', 'vet', 'kennel_owner'] },
+    _id: { $nin: usersUsing },
+    marketingOptOut: { $ne: true },
+    businessPromoSentAt: null,
+    createdAt: { $lte: cutoff },
+    $or: [
+      { 'businessAddon.activeUntil': null },
+      { 'businessAddon.activeUntil': { $exists: false } },
+      { 'businessAddon.activeUntil': { $lt: now } },
+    ],
+  })
+    .select('name email')
+    .limit(BATCH_SIZE)
+    .lean();
+
+  let sent = 0;
+  for (const user of owners) {
+    if (!user.email) continue;
+    sendBusinessSuitePromo(user.name, user.email, user._id).catch(() => {});
+    await User.findByIdAndUpdate(user._id, { $set: { businessPromoSentAt: new Date() } });
+    sent++;
+  }
+
+  logger.info(`Business Suite promo: sent ${sent} (${owners.length} owners considered)`);
+}
+
 export default function startMarketingCampaignJobs() {
   // Monday 10:00 UTC (11:00 WAT) — once a week, deliberately gentle cadence.
   cron.schedule('0 10 * * 1', async () => {
@@ -145,6 +183,8 @@ export default function startMarketingCampaignJobs() {
     catch (err) { logger.error('Wallet promo job error', { error: err.message }); }
     try { await runPracticePromo(); }
     catch (err) { logger.error('Practice promo job error', { error: err.message }); }
+    try { await runBusinessPromo(); }
+    catch (err) { logger.error('Business promo job error', { error: err.message }); }
   }, { timezone: 'UTC' });
 
   logger.info('⏰ Marketing campaign jobs scheduled (weekly, Monday 10:00 UTC)');

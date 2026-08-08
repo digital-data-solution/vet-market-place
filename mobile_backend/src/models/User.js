@@ -97,6 +97,17 @@ const userSchema = new mongoose.Schema({
 
   // Expo push notification token — saved from the device after permission granted
   pushToken: { type: String, default: null },
+
+  // Business Suite add-on (inventory + POS + staff/reps). Same one-off-extend
+  // pattern as Professional.practiceAddon / featuredUntil — paid time stacks
+  // from the later of (now, existing activeUntil). Free tier still works up to
+  // BUSINESS_FREE_PRODUCT_LIMIT products with no reps — see business.controller.js.
+  businessAddon: {
+    activeUntil:          { type: Date, default: null },
+    lastPaymentReference: { type: String, default: null },
+  },
+  // One-time "try the Business Suite" promo email gate — fires at most once.
+  businessPromoSentAt: { type: Date, default: null },
 }, { timestamps: true });
 
 userSchema.index({ supabaseId: 1 }, { unique: true, sparse: true });

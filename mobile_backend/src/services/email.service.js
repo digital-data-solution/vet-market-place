@@ -719,6 +719,29 @@ export async function sendPracticeAddonPromo(name, email, userId) {
   await sendEmail(email, `${firstName}, track your patients right inside Xpress Vet`, html);
 }
 
+/** Sent once to a shop/vet/kennel owner who hasn't started using the Business Suite. */
+export async function sendBusinessSuitePromo(name, email, userId) {
+  const firstName = name?.split(' ')[0] || 'there';
+  const unsub = unsubscribeUrl(userId);
+  const html = layout('Run your whole shop from Xpress Vet', `
+    <h1>Hey ${firstName}, stop guessing what's in stock 🏪</h1>
+    <p>The new <strong>Business Suite</strong> turns Xpress Vet into your shop's control room — inventory, sales, staff and reports, all in one place.</p>
+    <div class="highlight">
+      <p>📦 <strong>Know exactly what you have.</strong> Every sale updates your stock automatically, and you get an alert before anything runs out.<br/><br/>
+      👥 <strong>Add your sales reps.</strong> Each gets their own PIN, and every sale and stock change is logged under their name.<br/><br/>
+      🔎 <strong>Stop shrinkage.</strong> A tamper-proof audit trail shows who moved every single unit, and when — so nothing goes missing quietly.</p>
+    </div>
+    <p>Free to start with your first 15 products. Upgrade when you're ready for unlimited stock and sales reps.</p>
+    <p style="text-align:center;margin:24px 0">
+      <a href="https://xpressvetmarketplace.com" class="btn">Open the Business Suite →</a>
+    </p>
+    <p style="color:#94A3B8;font-size:13px">
+      Find it anytime under Profile → 🏪 Business Suite.
+    </p>
+  `, unsub);
+  await sendEmail(email, `${firstName}, take control of your shop's stock and sales`, html);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // PRACTICE RECORDS — vaccination/follow-up reminders (jobs/practiceReminders.js)
 // ─────────────────────────────────────────────────────────────────────────────

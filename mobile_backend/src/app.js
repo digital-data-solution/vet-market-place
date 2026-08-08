@@ -25,6 +25,7 @@ import adminProfessionalRoutes from './routes/admin.professional.js';
 import adminWalletRoutes       from './routes/admin.wallet.routes.js';
 import emailRoutes             from './routes/email.routes.js';
 import practiceRoutes          from './routes/practice.routes.js';
+import businessRoutes          from './routes/business.routes.js';
 import reviewRoutes           from './routes/review.routes.js';
 import supportRoutes          from './routes/support.routes.js';
 import trackRoutes            from './routes/track.routes.js';
@@ -40,6 +41,7 @@ import {
   getVerificationStats,
   getReferralStats,
   getPracticeStats,
+  getBusinessStats,
   getContentStats,
   getGeographicStats,
   getMessagingStats,
@@ -419,6 +421,7 @@ app.get('/api/admin/stats/growth',       adminProtect, getGrowthStats);
 app.get('/api/admin/stats/verification', adminProtect, getVerificationStats);
 app.get('/api/admin/stats/referrals',    adminProtect, getReferralStats);
 app.get('/api/admin/stats/practice',     adminProtect, getPracticeStats);
+app.get('/api/admin/stats/business',     adminProtect, getBusinessStats);
 app.get('/api/admin/stats/content',      adminProtect, getContentStats);
 app.get('/api/admin/stats/geographic',   adminProtect, getGeographicStats);
 app.get('/api/admin/stats/messaging',    adminProtect, getMessagingStats);
@@ -435,6 +438,7 @@ app.use('/api/admin/professionals', adminProfessionalRoutes);
 app.use('/api/admin/wallet',        adminWalletRoutes);
 app.use('/api/email',               emailRoutes);
 app.use('/api/v1/practice',         practiceRoutes);
+app.use('/api/v1/business',         businessRoutes);
 app.use('/api/auth',                authLimiter, authRoutes);
 app.use('/api/v1/professionals',    listingLimiter, professionalRoutes);
 app.use('/api/v1/kennels',          listingLimiter, kennelRoutes);
