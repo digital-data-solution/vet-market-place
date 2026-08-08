@@ -42,6 +42,25 @@ export function verifyUnsubscribeSig(uid, sig) {
   }
 }
 
+// Same pattern, separate namespace ('client:' prefix) so a Client._id and a
+// User._id can never produce a colliding signature.
+export function clientReminderUnsubscribeUrl(clientId) {
+  if (!clientId) return null;
+  const cid = clientId.toString();
+  const sig = crypto.createHmac('sha256', UNSUB_SECRET).update(`client:${cid}`).digest('hex').slice(0, 32);
+  return `${APP_URL}/api/email/client-unsubscribe?cid=${cid}&sig=${sig}`;
+}
+
+export function verifyClientReminderSig(cid, sig) {
+  if (!cid || !sig) return false;
+  const expected = crypto.createHmac('sha256', UNSUB_SECRET).update(`client:${cid.toString()}`).digest('hex').slice(0, 32);
+  try {
+    return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
+  } catch {
+    return false;
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // CORE SEND
 // ─────────────────────────────────────────────────────────────────────────────
@@ -159,7 +178,7 @@ function layout(title, body, unsubLink) {
     &nbsp;·&nbsp;
     <a href="https://xpressvetmarketplace.com/terms-and-conditions" style="color:#94A3B8;text-decoration:none;">Terms of Service</a><br/>
     Questions? Reply to this email — we're happy to help.${unsubLink ? `<br/>
-    <a href="${unsubLink}" style="color:#94A3B8;text-decoration:underline;">Unsubscribe from marketing emails</a>` : ''}</p>
+    <a href="${unsubLink}" style="color:#94A3B8;text-decoration:underline;">Stop receiving these emails</a>` : ''}</p>
   </div>
 </div>
 </body>
@@ -667,6 +686,58 @@ export async function sendWalletPromo(name, email, userId) {
     </p>
   `, unsub);
   await sendEmail(email, `${firstName}, a safer way to pay on Xpress Vet`, html);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PRACTICE RECORDS — vaccination/follow-up reminders (jobs/practiceReminders.js)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Daily digest to the vet: everything due across all their patients. One email, not one per item. */
+export async function sendPracticeReminderDigest(vetName, vetEmail, items) {
+  const firstName = vetName?.split(' ')[0] || 'Doc';
+  const rows = items.map(i =>
+    `<li><strong>${i.patientName}</strong> — ${i.label} <span style="color:#94A3B8">(due ${i.dueDateStr})</span></li>`,
+  ).join('');
+  const html = layout(`${items.length} item(s) due soon`, `
+    <h1>Hey ${firstName}, ${items.length} patient item${items.length === 1 ? ' is' : 's are'} coming due 📋</h1>
+    <p>Here's what's due in the next 14 days across your patients:</p>
+    <ul style="font-size:15px;color:#475569;line-height:2;padding-left:20px;">${rows}</ul>
+    <p style="text-align:center;margin:24px 0">
+      <a href="https://xpressvetmarketplace.com" class="btn">Open Practice Records →</a>
+    </p>
+    <p style="color:#94A3B8;font-size:13px">
+      We've also emailed your clients directly for items where you've saved their email address.
+    </p>
+  `);
+  await sendEmail(vetEmail, `${items.length} patient item${items.length === 1 ? '' : 's'} due soon — Xpress Vet Practice Records`, html);
+}
+
+/**
+ * Sent to a vet's CLIENT directly (may not be an Xpress Vet user at all) —
+ * this is the vet relaying their own patient's care to their own client, so
+ * framed as coming from the vet, with a light, honest "sent via Xpress Vet"
+ * mention rather than a sales pitch. Only ever sent because the vet
+ * explicitly opted this client in (Client.emailRemindersEnabled) — Xpress
+ * Vet doesn't decide this on its own. One email per client per day even if
+ * multiple pets/items are due — see groupBy in the job.
+ */
+export async function sendClientReminderEmail(clientName, clientEmail, vetName, items, unsubUrl) {
+  const firstName = clientName?.split(' ')[0] || 'there';
+  const rows = items.map(i =>
+    `<li><strong>${i.patientName}</strong> — ${i.label} <span style="color:#94A3B8">(due ${i.dueDateStr})</span></li>`,
+  ).join('');
+  const html = layout('A reminder for your pet', `
+    <h1>Hi ${firstName}, a reminder from ${vetName || 'your vet'} 🐾</h1>
+    <p>${vetName || 'Your vet'} uses Xpress Vet to keep track of your pet's care, and wanted you to know:</p>
+    <ul style="font-size:15px;color:#475569;line-height:2;padding-left:20px;">${rows}</ul>
+    <div class="highlight">
+      <p>📅 Reach out to ${vetName || 'your vet'} to book this in.</p>
+    </div>
+    <p style="color:#94A3B8;font-size:13px">
+      Curious what else Xpress Vet can do for your pets? <a href="https://xpressvetmarketplace.com" style="color:#2563EB">Take a look</a> — no pressure, this is just a courtesy reminder.
+    </p>
+  `, unsubUrl);
+  await sendEmail(clientEmail, `Reminder for your pet, from ${vetName || 'your vet'}`, html);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
