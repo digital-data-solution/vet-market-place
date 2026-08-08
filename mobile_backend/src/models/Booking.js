@@ -21,6 +21,19 @@ const bookingSchema = new mongoose.Schema({
     index: true,
   },
 
+  // If still 'funded' when this passes, the auto-release job pays the
+  // provider automatically — protects providers from buyers who never
+  // tap Release. Cleared (not enforced) once disputed.
+  autoReleaseAt: { type: Date, index: true },
+
+  // Set when the buyer reports a problem instead of releasing — freezes
+  // the booking so neither side can self-serve release/refund; only an
+  // admin can resolve it from here. See admin.wallet.controller.js.
+  disputeReason: { type: String, trim: true, maxlength: 500 },
+  disputedAt:    { type: Date },
+  disputedBy:    { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  adminNote:     { type: String, trim: true, maxlength: 500 },
+
   fundedAt:   { type: Date },
   releasedAt: { type: Date },
   refundedAt: { type: Date },
