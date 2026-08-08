@@ -20,6 +20,8 @@ import Professional from '../models/Professional.js';
 import Shop        from '../models/Shop.js';
 import logger      from '../lib/logger.js';
 import { logActivity } from '../lib/activityLogger.js';
+import { sendPushToUser } from '../services/pushNotification.service.js';
+import { sendEmail } from '../services/email.service.js';
 
 const PAYSTACK_BASE   = process.env.PAYSTACK_BASE       || 'https://api.paystack.co';
 const PAYSTACK_SECRET = process.env.PAYSTACK_SECRET_KEY || '';
@@ -27,6 +29,8 @@ const PAYSTACK_SECRET = process.env.PAYSTACK_SECRET_KEY || '';
 const COMMISSION_RATE = parseFloat(process.env.WALLET_COMMISSION_RATE || '0.10'); // 10%
 const MIN_FUND        = 100;   // ₦
 const MIN_WITHDRAW    = 500;   // ₦
+const AUTO_RELEASE_DAYS = parseFloat(process.env.WALLET_AUTO_RELEASE_DAYS || '7');
+const ADMIN_EMAIL     = process.env.ADMIN_EMAIL || 'contact@xpressdigitalanddatasolutions.online';
 
 function internalRef(prefix) {
   return `${prefix}_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
@@ -238,6 +242,7 @@ export const payProvider = async (req, res) => {
           { session },
         );
 
+        const now = new Date();
         const booking = await Booking.create([{
           buyer:    buyerId,
           provider: providerId,
@@ -247,7 +252,10 @@ export const payProvider = async (req, res) => {
           providerAmount,
           description,
           status:   'funded',
-          fundedAt: new Date(),
+          fundedAt: now,
+          // Protects the provider: if the buyer never taps Release, this
+          // booking is auto-released by the cron job in jobs/walletJobs.js.
+          autoReleaseAt: new Date(now.getTime() + AUTO_RELEASE_DAYS * 24 * 60 * 60 * 1000),
         }], { session });
         bookingId = booking[0]._id;
 
@@ -268,6 +276,12 @@ export const payProvider = async (req, res) => {
     }
 
     logActivity(buyerId, req.user.role, 'wallet.escrow.funded', { providerId, amount, bookingId }, req);
+    sendPushToUser(
+      providerId,
+      '💰 Payment Held in Escrow',
+      `${req.user.name || 'A customer'} paid ₦${amount.toLocaleString()} for "${description || 'a service'}" — it's held safely and released to you once they confirm.`,
+      { type: 'wallet', bookingId: String(bookingId) },
+    ).catch(() => {});
     return res.status(201).json({
       success: true,
       message: 'Payment held in escrow. Release it once the service is completed.',
@@ -283,55 +297,120 @@ export const payProvider = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// RELEASE ESCROW → provider gets providerAmount, platform keeps commission
-// Only the buyer (or an admin) can release.
+// CORE MUTATIONS — shared by the buyer/provider routes below, the admin
+// dispute-resolution endpoints (admin.wallet.controller.js), and the
+// auto-release cron job (jobs/walletJobs.js). Callers are responsible for
+// authorization and the "status must be funded/disputed" check.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Provider gets providerAmount, platform keeps commission.
+export async function doRelease(booking, { auto = false } = {}) {
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      const buyerWallet    = await getOrCreateWallet(booking.buyer, session);
+      const providerWallet = await getOrCreateWallet(booking.provider, session);
+
+      await Wallet.updateOne({ _id: buyerWallet._id },    { $inc: { escrowBalance: -booking.amount } }, { session });
+      await Wallet.updateOne({ _id: providerWallet._id }, { $inc: { balance: booking.providerAmount } }, { session });
+
+      await Transaction.create([
+        {
+          wallet: providerWallet._id, user: booking.provider, counterparty: booking.buyer,
+          amount: booking.providerAmount, type: 'payment_release', status: 'completed',
+          reference: internalRef('rel'), booking: booking._id,
+          metadata: { description: auto ? 'Escrow auto-released to provider' : 'Escrow released to provider' },
+        },
+        {
+          user: null, counterparty: booking.provider,
+          amount: booking.commissionAmount, type: 'commission', status: 'completed',
+          reference: internalRef('com'), booking: booking._id,
+          metadata: { description: `Platform commission (${Math.round(booking.commissionRate * 100)}%)` },
+        },
+      ], { session });
+
+      booking.status     = 'released';
+      booking.releasedAt = new Date();
+      await booking.save({ session });
+    });
+  } finally {
+    session.endSession();
+  }
+
+  sendPushToUser(
+    booking.provider,
+    '🎉 Payment Released',
+    `You've received ₦${booking.providerAmount.toLocaleString()} (after ${Math.round(booking.commissionRate * 100)}% platform fee).`,
+    { type: 'wallet', bookingId: String(booking._id) },
+  ).catch(() => {});
+  if (auto) {
+    sendPushToUser(
+      booking.buyer,
+      'Payment Auto-Released',
+      `Your ₦${booking.amount.toLocaleString()} payment was automatically released to the provider after ${AUTO_RELEASE_DAYS} days. Contact Support if there was an issue.`,
+      { type: 'wallet', bookingId: String(booking._id) },
+    ).catch(() => {});
+  }
+}
+
+// Buyer gets the full amount back.
+export async function doRefund(booking) {
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      const buyerWallet = await getOrCreateWallet(booking.buyer, session);
+      await Wallet.updateOne(
+        { _id: buyerWallet._id },
+        { $inc: { escrowBalance: -booking.amount, balance: booking.amount } },
+        { session },
+      );
+      await Transaction.create([{
+        wallet: buyerWallet._id, user: booking.buyer, counterparty: booking.provider,
+        amount: booking.amount, type: 'refund', status: 'completed',
+        reference: internalRef('ref'), booking: booking._id,
+        metadata: { description: 'Escrow refunded to buyer' },
+      }], { session });
+
+      booking.status     = 'refunded';
+      booking.refundedAt = new Date();
+      await booking.save({ session });
+    });
+  } finally {
+    session.endSession();
+  }
+
+  sendPushToUser(
+    booking.buyer,
+    '💸 Payment Refunded',
+    `Your ₦${booking.amount.toLocaleString()} payment was refunded to your wallet balance.`,
+    { type: 'wallet', bookingId: String(booking._id) },
+  ).catch(() => {});
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RELEASE ESCROW → buyer confirms the service was done. Buyer-only; once
+// disputed, only an admin can move the booking (see admin.wallet.controller.js).
 // ─────────────────────────────────────────────────────────────────────────────
 export const releaseEscrow = async (req, res) => {
   const userId    = req.user._id || req.user.id;
   const bookingId = req.params.id;
-  const isAdmin   = req.user.role === 'admin';
 
   try {
     const booking = await Booking.findById(bookingId);
     if (!booking) return res.status(404).json({ success: false, message: 'Booking not found.' });
-    if (!isAdmin && booking.buyer.toString() !== userId.toString()) {
+    if (booking.buyer.toString() !== userId.toString()) {
       return res.status(403).json({ success: false, message: 'Only the buyer can release this payment.' });
     }
     if (booking.status !== 'funded') {
-      return res.status(400).json({ success: false, message: `Cannot release a booking that is "${booking.status}".` });
-    }
-
-    const session = await mongoose.startSession();
-    try {
-      await session.withTransaction(async () => {
-        const buyerWallet    = await getOrCreateWallet(booking.buyer, session);
-        const providerWallet = await getOrCreateWallet(booking.provider, session);
-
-        await Wallet.updateOne({ _id: buyerWallet._id },    { $inc: { escrowBalance: -booking.amount } }, { session });
-        await Wallet.updateOne({ _id: providerWallet._id }, { $inc: { balance: booking.providerAmount } }, { session });
-
-        await Transaction.create([
-          {
-            wallet: providerWallet._id, user: booking.provider, counterparty: booking.buyer,
-            amount: booking.providerAmount, type: 'payment_release', status: 'completed',
-            reference: internalRef('rel'), booking: booking._id,
-            metadata: { description: 'Escrow released to provider' },
-          },
-          {
-            user: null, counterparty: booking.provider,
-            amount: booking.commissionAmount, type: 'commission', status: 'completed',
-            reference: internalRef('com'), booking: booking._id,
-            metadata: { description: `Platform commission (${Math.round(booking.commissionRate * 100)}%)` },
-          },
-        ], { session });
-
-        booking.status     = 'released';
-        booking.releasedAt = new Date();
-        await booking.save({ session });
+      return res.status(400).json({
+        success: false,
+        message: booking.status === 'disputed'
+          ? 'This payment is under dispute review and can no longer be released directly.'
+          : `Cannot release a booking that is "${booking.status}".`,
       });
-    } finally {
-      session.endSession();
     }
+
+    await doRelease(booking);
 
     logActivity(userId, req.user.role, 'wallet.escrow.released', {
       bookingId, providerAmount: booking.providerAmount, commission: booking.commissionAmount,
@@ -344,53 +423,89 @@ export const releaseEscrow = async (req, res) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// REFUND ESCROW → buyer gets the money back (provider or admin action)
+// REFUND ESCROW → provider voluntarily gives the money back. Provider-only;
+// once disputed, only an admin can move the booking.
 // ─────────────────────────────────────────────────────────────────────────────
 export const refundEscrow = async (req, res) => {
   const userId    = req.user._id || req.user.id;
   const bookingId = req.params.id;
-  const isAdmin   = req.user.role === 'admin';
 
   try {
     const booking = await Booking.findById(bookingId);
     if (!booking) return res.status(404).json({ success: false, message: 'Booking not found.' });
-    // Provider can refund the buyer; admin can too.
-    if (!isAdmin && booking.provider.toString() !== userId.toString()) {
-      return res.status(403).json({ success: false, message: 'Only the provider or an admin can refund.' });
+    if (booking.provider.toString() !== userId.toString()) {
+      return res.status(403).json({ success: false, message: 'Only the provider can refund this payment.' });
     }
     if (booking.status !== 'funded') {
-      return res.status(400).json({ success: false, message: `Cannot refund a booking that is "${booking.status}".` });
-    }
-
-    const session = await mongoose.startSession();
-    try {
-      await session.withTransaction(async () => {
-        const buyerWallet = await getOrCreateWallet(booking.buyer, session);
-        await Wallet.updateOne(
-          { _id: buyerWallet._id },
-          { $inc: { escrowBalance: -booking.amount, balance: booking.amount } },
-          { session },
-        );
-        await Transaction.create([{
-          wallet: buyerWallet._id, user: booking.buyer, counterparty: booking.provider,
-          amount: booking.amount, type: 'refund', status: 'completed',
-          reference: internalRef('ref'), booking: booking._id,
-          metadata: { description: 'Escrow refunded to buyer' },
-        }], { session });
-
-        booking.status     = 'refunded';
-        booking.refundedAt = new Date();
-        await booking.save({ session });
+      return res.status(400).json({
+        success: false,
+        message: booking.status === 'disputed'
+          ? 'This payment is under dispute review and can no longer be refunded directly.'
+          : `Cannot refund a booking that is "${booking.status}".`,
       });
-    } finally {
-      session.endSession();
     }
+
+    await doRefund(booking);
 
     logActivity(userId, req.user.role, 'wallet.escrow.refunded', { bookingId, amount: booking.amount }, req);
     return res.json({ success: true, message: 'Payment refunded to the buyer.', data: { bookingId } });
   } catch (error) {
     logger.error('Refund escrow error', { error: error.message, bookingId });
     return res.status(500).json({ success: false, message: 'Failed to refund payment.' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DISPUTE ESCROW → buyer reports a problem instead of releasing. Freezes the
+// booking (neither side can self-serve release/refund anymore) and alerts
+// an admin by email to resolve it manually via the admin dashboard.
+// ─────────────────────────────────────────────────────────────────────────────
+export const disputeBooking = async (req, res) => {
+  const userId    = req.user._id || req.user.id;
+  const bookingId = req.params.id;
+  const reason    = (req.body.reason || '').toString().trim().slice(0, 500);
+
+  if (!reason || reason.length < 10) {
+    return res.status(400).json({ success: false, message: 'Please describe the issue (at least 10 characters).' });
+  }
+
+  try {
+    const booking = await Booking.findById(bookingId).populate('buyer', 'name email').populate('provider', 'name email');
+    if (!booking) return res.status(404).json({ success: false, message: 'Booking not found.' });
+    if (booking.buyer._id.toString() !== userId.toString()) {
+      return res.status(403).json({ success: false, message: 'Only the buyer can dispute this payment.' });
+    }
+    if (booking.status !== 'funded') {
+      return res.status(400).json({ success: false, message: `Cannot dispute a booking that is "${booking.status}".` });
+    }
+
+    booking.status        = 'disputed';
+    booking.disputeReason = reason;
+    booking.disputedAt    = new Date();
+    booking.disputedBy    = userId;
+    await booking.save();
+
+    logActivity(userId, req.user.role, 'wallet.escrow.disputed', { bookingId, reason }, req);
+
+    sendEmail(
+      ADMIN_EMAIL,
+      `⚠️ Escrow dispute — ₦${booking.amount.toLocaleString()} held`,
+      `<p><strong>${booking.buyer?.name || 'A buyer'}</strong> (${booking.buyer?.email || 'no email'}) disputed a payment to
+       <strong>${booking.provider?.name || 'a provider'}</strong> (${booking.provider?.email || 'no email'}).</p>
+       <p><strong>Amount:</strong> ₦${booking.amount.toLocaleString()}<br/>
+       <strong>Booking ID:</strong> ${booking._id}<br/>
+       <strong>Reason:</strong> ${reason}</p>
+       <p>Resolve it from the admin dashboard → Escrow Disputes.</p>`,
+    ).catch((err) => logger.error('Dispute admin email failed', { error: err.message }));
+
+    return res.json({
+      success: true,
+      message: "We've frozen this payment and notified our team. We'll resolve it shortly.",
+      data: { bookingId },
+    });
+  } catch (error) {
+    logger.error('Dispute escrow error', { error: error.message, bookingId });
+    return res.status(500).json({ success: false, message: 'Failed to file dispute.' });
   }
 };
 
@@ -409,6 +524,32 @@ export const getBanks = async (_req, res) => {
   } catch (error) {
     logger.error('Get banks error', { error: error.message });
     return res.status(500).json({ success: false, message: 'Failed to load bank list.' });
+  }
+};
+
+// Resolve a bank account to its registered name before the user commits to
+// a withdrawal, so a typo'd account number is caught before money moves.
+export const resolveAccount = async (req, res) => {
+  const bankCode      = (req.query.bankCode || '').toString().trim();
+  const accountNumber = (req.query.accountNumber || '').toString().trim();
+
+  if (!PAYSTACK_SECRET) return res.status(500).json({ success: false, message: 'Payment system not configured.' });
+  if (!bankCode || accountNumber.length !== 10) {
+    return res.status(400).json({ success: false, message: 'A bank and a 10-digit account number are required.' });
+  }
+
+  try {
+    const r = await axios.get(`${PAYSTACK_BASE}/bank/resolve`, {
+      params: { account_number: accountNumber, bank_code: bankCode },
+      headers: { Authorization: `Bearer ${PAYSTACK_SECRET}` },
+    });
+    const accountName = r.data?.data?.account_name;
+    if (!accountName) return res.status(400).json({ success: false, message: 'Could not verify this account.' });
+    return res.json({ success: true, data: { accountName } });
+  } catch (error) {
+    const paystackMsg = error.response?.data?.message;
+    logger.error('Resolve account error', { error: error.message, paystackMsg });
+    return res.status(400).json({ success: false, message: paystackMsg || 'Could not verify this account. Check the details.' });
   }
 };
 
@@ -499,6 +640,12 @@ export async function handleTransferEvent(eventName, data) {
     txn.status = 'completed';
     await txn.save();
     logger.info('Withdrawal completed', { reference });
+    sendPushToUser(
+      txn.user,
+      '✅ Withdrawal Successful',
+      `₦${txn.amount.toLocaleString()} has been sent to your bank account.`,
+      { type: 'wallet' },
+    ).catch(() => {});
   } else if (eventName === 'transfer.failed' || eventName === 'transfer.reversed') {
     // Refund the held amount back to the wallet.
     const session = await mongoose.startSession();
@@ -512,5 +659,11 @@ export async function handleTransferEvent(eventName, data) {
       session.endSession();
     }
     logger.info('Withdrawal reversed — balance restored', { reference });
+    sendPushToUser(
+      txn.user,
+      '⚠️ Withdrawal Failed',
+      `Your ₦${txn.amount.toLocaleString()} withdrawal could not be completed and has been returned to your wallet balance.`,
+      { type: 'wallet' },
+    ).catch(() => {});
   }
 }

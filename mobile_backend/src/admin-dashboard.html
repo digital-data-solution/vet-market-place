@@ -213,6 +213,9 @@
       <div class="nav-item" onclick="showSection('support')" id="nav-support">
         <span class="nav-icon">🆘</span> Support Inbox <span id="support-badge" style="display:none;background:#DC2626;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700;margin-left:4px">!</span>
       </div>
+      <div class="nav-item" onclick="showSection('disputes')" id="nav-disputes">
+        <span class="nav-icon">⚖️</span> Escrow Disputes <span id="disputes-badge" style="display:none;background:#DC2626;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700;margin-left:4px">!</span>
+      </div>
       <div style="padding:8px 20px;font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.6px;margin-top:8px;">Analytics</div>
       <div class="nav-item" onclick="showSection('activity')" id="nav-activity">
         <span class="nav-icon">⚡</span> Activity Feed
@@ -646,6 +649,24 @@
       </div>
     </div>
 
+    <!-- ── Escrow Disputes ──────────────────────────────── -->
+    <div id="section-disputes" class="section">
+      <div class="topbar">
+        <h2>Escrow Disputes</h2>
+        <button class="btn btn-ghost btn-sm" onclick="loadDisputes()">↻ Refresh</button>
+      </div>
+      <div class="card">
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr>
+              <th>Amount</th><th>Buyer</th><th>Provider</th><th>Reason</th><th>Disputed</th><th>Actions</th>
+            </tr></thead>
+            <tbody id="disputes-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Activity Feed ────────────────────────────────── -->
     <div id="section-activity" class="section">
       <div class="topbar">
@@ -937,7 +958,7 @@ function showSection(name) {
   const loaders = {
     overview: loadOverview, pending: loadPending, professionals: loadProfessionals,
     users: loadUsers, shops: loadShops, subscriptions: loadSubscriptions,
-    support: loadSupport,
+    support: loadSupport, disputes: loadDisputes,
     activity: loadActivity,
     revenue: loadRevenue, growth: loadGrowth, geographic: loadGeographic,
     verifstats: loadVerifStats, referrals: loadReferrals, utm: loadUtmStats, content: loadContent,
@@ -953,6 +974,11 @@ async function loadOverview() {
   api('GET', '/api/admin/support?status=open').then(r => {
     const count = r?.body?.data?.length || 0;
     const badge = document.getElementById('support-badge');
+    if (badge) { badge.style.display = count ? '' : 'none'; badge.textContent = count; }
+  }).catch(() => {});
+  api('GET', '/api/admin/wallet/disputes').then(r => {
+    const count = r?.body?.data?.length || 0;
+    const badge = document.getElementById('disputes-badge');
     if (badge) { badge.style.display = count ? '' : 'none'; badge.textContent = count; }
   }).catch(() => {});
 
@@ -1276,6 +1302,39 @@ async function deleteShop(id, name) {
   if (!confirm(`Delete shop "${name}"? Owner will revert to pet_owner.`)) return;
   const r = await api('DELETE', `/api/admin/shops/${id}`);
   if (r?.ok) { toast('Shop deleted'); loadShops(); } else toast(r?.body?.message || 'Failed', 'error');
+}
+
+// ── Escrow Disputes ─────────────────────────────────────────────────────────────
+async function loadDisputes() {
+  document.getElementById('disputes-tbody').innerHTML = '<tr><td colspan="6"><div class="spinner"></div></td></tr>';
+  const r = await api('GET', '/api/admin/wallet/disputes');
+  const data = r?.body?.data || [];
+  const badge = document.getElementById('disputes-badge');
+  if (badge) { badge.style.display = data.length ? '' : 'none'; badge.textContent = data.length; }
+  if (!data.length) {
+    document.getElementById('disputes-tbody').innerHTML = '<tr><td colspan="6" class="no-data">No open disputes. 🎉</td></tr>';
+    return;
+  }
+  document.getElementById('disputes-tbody').innerHTML = data.map(b => `
+    <tr>
+      <td><strong>₦${(b.amount||0).toLocaleString()}</strong><br><small style="color:#64748B">provider gets ₦${(b.providerAmount||0).toLocaleString()}</small></td>
+      <td>${b.buyer?.name||'—'}<br><small style="color:#64748B">${b.buyer?.email||''}</small></td>
+      <td>${b.provider?.name||'—'}<br><small style="color:#64748B">${b.provider?.email||''}</small></td>
+      <td style="max-width:260px"><small>${b.disputeReason||'—'}</small></td>
+      <td>${fmt(b.disputedAt)}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-primary btn-sm" onclick="resolveDispute('${b._id}','release','${(b.provider?.name||'the provider').replace(/'/g,"")}')">Release</button>
+        <button class="btn btn-danger btn-sm" onclick="resolveDispute('${b._id}','refund','${(b.buyer?.name||'the buyer').replace(/'/g,"")}')">Refund</button>
+      </td>
+    </tr>`).join('');
+}
+
+async function resolveDispute(id, action, counterpartyName) {
+  const verb = action === 'release' ? 'release the payment to' : 'refund the payment to';
+  if (!confirm(`Are you sure you want to ${verb} ${counterpartyName}? This cannot be undone.`)) return;
+  const note = prompt('Optional resolution note (visible only in admin logs):') || '';
+  const r = await api('POST', `/api/admin/wallet/disputes/${id}/${action}`, { note });
+  if (r?.ok) { toast(r.body?.message || 'Resolved'); loadDisputes(); } else toast(r?.body?.message || 'Failed', 'error');
 }
 
 // ── Subscriptions ──────────────────────────────────────────────────────────────

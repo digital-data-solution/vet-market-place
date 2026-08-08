@@ -7,7 +7,9 @@ import {
   payProvider,
   releaseEscrow,
   refundEscrow,
+  disputeBooking,
   getBanks,
+  resolveAccount,
   requestWithdrawal,
 } from '../api/wallet.controller.js';
 import { protect } from '../middlewares/authMiddleware.js';
@@ -24,15 +26,17 @@ router.use((req, res, next) => {
 
 router.use(protect);
 
-router.get('/',             getWallet);
-router.get('/transactions', getTransactions);
-router.get('/bookings',     getBookings);
-router.get('/banks',        getBanks);
+router.get('/',              getWallet);
+router.get('/transactions',  getTransactions);
+router.get('/bookings',      getBookings);
+router.get('/banks',         getBanks);
+router.get('/resolve-account', resolveAccount);
 
 router.post('/fund',            fundWallet);
 router.post('/pay',             payProvider);
 router.post('/withdraw',        requestWithdrawal);
 router.post('/bookings/:id/release', releaseEscrow);
 router.post('/bookings/:id/refund',  refundEscrow);
+router.post('/bookings/:id/dispute', disputeBooking);
 
 export default router;
