@@ -13,6 +13,7 @@
 import fetch from 'node-fetch';
 import crypto from 'crypto';
 import logger from '../lib/logger.js';
+import EmailLog from '../models/EmailLog.js';
 
 const FROM    = process.env.EMAIL_FROM    || 'Xpress Vet <noreply@xpressvetmarketplace.com>';
 const RESEND  = process.env.RESEND_API_KEY;
@@ -72,6 +73,11 @@ export function verifyClientReminderSig(cid, sig) {
  * @param {string}   html    HTML body
  * @param {string}   [text]  Plain-text fallback (auto-generated if omitted)
  */
+// Fire-and-forget logging — must never slow down or break the actual send.
+function logEmail(to, subject, status, error) {
+  EmailLog.create({ to, subject, status, error }).catch(() => {});
+}
+
 export async function sendEmail(to, subject, html, text) {
   if (!to || !subject || !html) {
     logger.warn('sendEmail called with missing args', { to, subject });
@@ -80,6 +86,7 @@ export async function sendEmail(to, subject, html, text) {
 
   if (!RESEND && !BREVO) {
     logger.info(`[EMAIL SKIP] To: ${to} | Subject: ${subject} (no provider key set)`);
+    logEmail(to, subject, 'skipped');
     return;
   }
 
@@ -92,8 +99,10 @@ export async function sendEmail(to, subject, html, text) {
       await sendViaBravo(to, subject, html, plainText);
     }
     logger.info('Email sent', { to, subject });
+    logEmail(to, subject, 'sent');
   } catch (err) {
     logger.error('Email send failed', { to, subject, error: err.message });
+    logEmail(to, subject, 'failed', err.message);
     // Never throw — email failure must not break API responses
   }
 }

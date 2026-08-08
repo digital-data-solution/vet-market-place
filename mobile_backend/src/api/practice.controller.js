@@ -25,7 +25,9 @@ const FREE_PATIENT_LIMIT = parseInt(process.env.PRACTICE_FREE_PATIENT_LIMIT || '
 
 // Priced as an add-on, below the Pro subscription tier (₦5,000/mo) since it
 // stacks on top of an existing listing rather than replacing it.
-const PRACTICE_PACKAGES = {
+// Exported so admin.stats.controller.js can turn 'practice.activated'
+// ActivityLog entries (which store `days`, not `amount`) back into revenue.
+export const PRACTICE_PACKAGES = {
   30:  { days: 30,  price: 3000,  label: '1 Month' },
   90:  { days: 90,  price: 8000,  label: '3 Months' },
   365: { days: 365, price: 28000, label: '12 Months' },

@@ -235,6 +235,9 @@
       <div class="nav-item" onclick="showSection('referrals')" id="nav-referrals">
         <span class="nav-icon">🎁</span> Referrals
       </div>
+      <div class="nav-item" onclick="showSection('practice')" id="nav-practice">
+        <span class="nav-icon">🩺</span> Practice &amp; Marketing
+      </div>
       <div class="nav-item" onclick="showSection('utm')" id="nav-utm">
         <span class="nav-icon">🔗</span> UTM Attribution
       </div>
@@ -538,6 +541,21 @@
           <tbody id="ref-top-tbody"></tbody></table>
         </div>
       </div>
+    </div>
+
+    <!-- ── Practice Records + Marketing ─────────────────── -->
+    <div id="section-practice" class="section">
+      <div class="topbar">
+        <h2>Practice Records &amp; Marketing</h2>
+        <button class="btn btn-ghost btn-sm" onclick="loadPracticeStats()">↻ Refresh</button>
+      </div>
+      <p style="color:#64748B;font-size:13px;margin:-8px 0 16px">Aggregate adoption &amp; revenue only — individual vet client/patient records are never shown here.</p>
+      <h3 style="font-size:14px;color:#334155;margin:0 0 10px">Practice Records</h3>
+      <div id="practice-stats-grid" class="stats-grid"><div class="spinner"></div></div>
+      <h3 style="font-size:14px;color:#334155;margin:24px 0 10px">Marketing Campaigns</h3>
+      <div id="marketing-stats-grid" class="stats-grid"><div class="spinner"></div></div>
+      <h3 style="font-size:14px;color:#334155;margin:24px 0 10px">Email Health (last 7 days)</h3>
+      <div id="email-health-grid" class="stats-grid"><div class="spinner"></div></div>
     </div>
 
     <!-- ── UTM Attribution ──────────────────────────────── -->
@@ -1016,7 +1034,7 @@ function showSection(name) {
     support: loadSupport, disputes: loadDisputes,
     activity: loadActivity,
     revenue: loadRevenue, growth: loadGrowth, geographic: loadGeographic,
-    verifstats: loadVerifStats, referrals: loadReferrals, utm: loadUtmStats, content: loadContent,
+    verifstats: loadVerifStats, referrals: loadReferrals, practice: loadPracticeStats, utm: loadUtmStats, content: loadContent,
     messaging: loadMessaging, system: loadSystem,
     exports: () => {},
   };
@@ -1681,6 +1699,40 @@ async function loadReferrals() {
   document.getElementById('ref-top-tbody').innerHTML = (d.topReferrers||[]).length
     ? (d.topReferrers||[]).map(u => `<tr><td><strong>${u.name||'—'}</strong></td><td><small>${u.email||'—'}</small></td><td><code style="background:#F1F5F9;padding:2px 6px;border-radius:4px;font-size:12px">${u.referralCode||'—'}</code></td><td>${u.referralRewardsEarned||0} month(s)</td></tr>`).join('')
     : '<tr><td colspan="4" class="no-data">No referral rewards yet</td></tr>';
+}
+
+// ── Practice Records + Marketing ────────────────────────────────────────────────
+async function loadPracticeStats() {
+  document.getElementById('practice-stats-grid').innerHTML  = '<div class="spinner"></div>';
+  document.getElementById('marketing-stats-grid').innerHTML = '<div class="spinner"></div>';
+  document.getElementById('email-health-grid').innerHTML    = '<div class="spinner"></div>';
+
+  const r = await api('GET', '/api/admin/stats/practice');
+  const p = r?.body?.data?.practice || {};
+  const m = r?.body?.data?.marketing || {};
+  const e = r?.body?.data?.emailHealth || {};
+
+  document.getElementById('practice-stats-grid').innerHTML = `
+    <div class="stat-card"><div class="stat-label">Vets Using It</div><div class="stat-value">${p.vetsUsing||0}</div></div>
+    <div class="stat-card"><div class="stat-label">Total Patients</div><div class="stat-value">${p.totalPatients||0}</div></div>
+    <div class="stat-card"><div class="stat-label">Total Clients</div><div class="stat-value">${p.totalClients||0}</div></div>
+    <div class="stat-card"><div class="stat-label">Active Paid Vets</div><div class="stat-value">${p.addonActiveCount||0}</div></div>
+    <div class="stat-card"><div class="stat-label">Addon Revenue</div><div class="stat-value">₦${(p.addonRevenue||0).toLocaleString()}</div><div class="stat-sub">lifetime</div></div>
+  `;
+
+  document.getElementById('marketing-stats-grid').innerHTML = `
+    <div class="stat-card"><div class="stat-label">Boost Promo Sent</div><div class="stat-value">${m.boostPromoSent||0}</div></div>
+    <div class="stat-card"><div class="stat-label">Wallet Promo Sent</div><div class="stat-value">${m.walletPromoSent||0}</div></div>
+    <div class="stat-card"><div class="stat-label">Marketing Opt-Outs</div><div class="stat-value">${m.marketingOptOutCount||0}</div></div>
+    <div class="stat-card"><div class="stat-label">Clients w/ Reminders On</div><div class="stat-value">${m.clientRemindersEnabledCount||0}</div><div class="stat-sub">vet-enabled</div></div>
+    <div class="stat-card"><div class="stat-label">Client Reminder Opt-Outs</div><div class="stat-value">${m.clientReminderOptOutCount||0}</div></div>
+  `;
+
+  document.getElementById('email-health-grid').innerHTML = `
+    <div class="stat-card"><div class="stat-label">Sent</div><div class="stat-value" style="color:#10B981">${e.sent7d||0}</div></div>
+    <div class="stat-card"><div class="stat-label">Failed</div><div class="stat-value" style="color:${e.failed7d?'#DC2626':'#0F172A'}">${e.failed7d||0}</div></div>
+    <div class="stat-card"><div class="stat-label">Skipped (no provider key)</div><div class="stat-value" style="color:${e.skipped7d?'#DC2626':'#0F172A'}">${e.skipped7d||0}</div>${e.skipped7d?'<div class="stat-sub" style="color:#DC2626">⚠️ Nothing is sending — check RESEND_API_KEY</div>':''}</div>
+  `;
 }
 
 // ── UTM Attribution ───────────────────────────────────────────────────────────

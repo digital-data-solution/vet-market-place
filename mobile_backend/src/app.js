@@ -39,6 +39,7 @@ import {
   getGrowthStats,
   getVerificationStats,
   getReferralStats,
+  getPracticeStats,
   getContentStats,
   getGeographicStats,
   getMessagingStats,
@@ -417,6 +418,7 @@ app.get('/api/admin/stats/revenue',      adminProtect, getRevenueStats);
 app.get('/api/admin/stats/growth',       adminProtect, getGrowthStats);
 app.get('/api/admin/stats/verification', adminProtect, getVerificationStats);
 app.get('/api/admin/stats/referrals',    adminProtect, getReferralStats);
+app.get('/api/admin/stats/practice',     adminProtect, getPracticeStats);
 app.get('/api/admin/stats/content',      adminProtect, getContentStats);
 app.get('/api/admin/stats/geographic',   adminProtect, getGeographicStats);
 app.get('/api/admin/stats/messaging',    adminProtect, getMessagingStats);

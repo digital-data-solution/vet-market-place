@@ -10,6 +10,7 @@
  *   GET /api/admin/stats/growth        — signups, DAU/WAU/MAU, dormant users
  *   GET /api/admin/stats/verification  — queue health, audit log, rates
  *   GET /api/admin/stats/referrals     — funnel, top referrers, reward cost
+ *   GET /api/admin/stats/practice      — Practice Records + marketing campaign adoption (aggregate only, no clinical data)
  *   GET /api/admin/stats/content       — gallery, profile completeness
  *   GET /api/admin/stats/geographic    — density by region (from address field)
  *   GET /api/admin/stats/messaging     — Supabase chat activity
@@ -24,9 +25,13 @@ import Professional from '../models/Professional.js';
 import Subscription from '../models/Subscription.js';
 import Shop         from '../models/Shop.js';
 import ActivityLog  from '../models/ActivityLog.js';
+import Client       from '../models/Client.js';
+import Patient      from '../models/Patient.js';
+import EmailLog     from '../models/EmailLog.js';
 import cache        from '../lib/cache.js';
 import logger       from '../lib/logger.js';
 import { supabaseAdmin } from '../lib/supabase.js';
+import { PRACTICE_PACKAGES } from './practice.controller.js';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -377,6 +382,83 @@ export const getReferralStats = async (req, res) => {
   } catch (err) {
     logger.error('getReferralStats error', { error: err.message });
     return res.status(500).json({ success: false, message: 'Failed to fetch referral stats.' });
+  }
+};
+
+// ─── Practice Records + Marketing Campaigns ────────────────────────────────────
+// Deliberately aggregate-only — never exposes an individual vet's clients or
+// patients (that's private clinical/personal data belonging to the vet's
+// relationship with their client, not Xpress Vet's to browse).
+export const getPracticeStats = async (req, res) => {
+  try {
+    const now = new Date();
+    const [
+      vetsUsingIds,
+      totalPatients,
+      totalClients,
+      addonActiveCount,
+      activatedLogs,
+      boostPromoSent,
+      walletPromoSent,
+      marketingOptOutCount,
+      remindersEnabledCount,
+      clientReminderOptOutCount,
+    ] = await Promise.all([
+      Patient.distinct('vet'),
+      Patient.countDocuments({ isActive: true }),
+      Client.countDocuments({}),
+      Professional.countDocuments({ role: 'vet', 'practiceAddon.activeUntil': { $gt: now } }),
+      // 'practice.activated' logs store `days`, not amount — reconstruct
+      // revenue via the fixed package price table (see PRACTICE_PACKAGES).
+      ActivityLog.find({ action: 'practice.activated' }).select('metadata').lean(),
+      Professional.countDocuments({ boostPromoSentAt: { $ne: null } })
+        .then(async (profCount) => profCount + await Shop.countDocuments({ boostPromoSentAt: { $ne: null } })),
+      User.countDocuments({ walletPromoSentAt: { $ne: null } }),
+      User.countDocuments({ marketingOptOut: true }),
+      Client.countDocuments({ emailRemindersEnabled: true }),
+      Client.countDocuments({ reminderOptOut: true }),
+    ]);
+
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const [emailsSent7d, emailsFailed7d, emailsSkipped7d] = await Promise.all([
+      EmailLog.countDocuments({ status: 'sent', createdAt: { $gte: sevenDaysAgo } }),
+      EmailLog.countDocuments({ status: 'failed', createdAt: { $gte: sevenDaysAgo } }),
+      EmailLog.countDocuments({ status: 'skipped', createdAt: { $gte: sevenDaysAgo } }),
+    ]);
+
+    const addonRevenue = activatedLogs.reduce((sum, log) => {
+      const days = log.metadata?.days;
+      const price = PRACTICE_PACKAGES[days]?.price || 0;
+      return sum + price;
+    }, 0);
+
+    return res.json({
+      success: true,
+      data: {
+        practice: {
+          vetsUsing: vetsUsingIds.length,
+          totalPatients,
+          totalClients,
+          addonActiveCount,
+          addonRevenue, // ₦, lifetime, derived from activation events — see comment above
+        },
+        marketing: {
+          boostPromoSent,
+          walletPromoSent,
+          marketingOptOutCount,
+          clientRemindersEnabledCount: remindersEnabledCount,
+          clientReminderOptOutCount,
+        },
+        emailHealth: {
+          sent7d: emailsSent7d,
+          failed7d: emailsFailed7d,
+          skipped7d: emailsSkipped7d, // >0 means RESEND_API_KEY/BREVO_API_KEY isn't set — nothing is actually sending
+        },
+      },
+    });
+  } catch (err) {
+    logger.error('getPracticeStats error', { error: err.message });
+    return res.status(500).json({ success: false, message: 'Failed to fetch practice/marketing stats.' });
   }
 };
 
