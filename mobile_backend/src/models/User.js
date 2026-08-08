@@ -23,6 +23,11 @@ const userSchema = new mongoose.Schema({
   // both a `vet` in the marketplace app and an admin of the dashboard.
   isAdmin: { type: Boolean, default: false },
 
+  // Contact + bio. Must be declared or Mongoose (strict mode) silently drops
+  // them on $set — the reason phone edits never persisted before.
+  phone: { type: String, default: null },
+  bio:   { type: String, default: null },
+
   // Profile photo (single, managed by ProfileImageUploader)
   profileImage:     { type: String, default: null },
   profileImagePath: { type: String, default: null }, // Cloudinary publicId for overwrite
