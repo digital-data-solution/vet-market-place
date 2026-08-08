@@ -382,7 +382,21 @@ export const listShops = async (req, res) => {
         },
         { $addFields: { profileImage: { $arrayElemAt: ['$_owner.profileImage', 0] } } },
         { $project: { _owner: 0 } },
-        { $sort: { createdAt: -1 } },
+        // Paid boost ranks above non-featured shops.
+        {
+          $addFields: {
+            isFeaturedNow: {
+              $cond: [
+                { $and: [
+                  { $ifNull: ['$featuredUntil', false] },
+                  { $gt: ['$featuredUntil', new Date()] },
+                ] },
+                1, 0,
+              ],
+            },
+          },
+        },
+        { $sort: { isFeaturedNow: -1, createdAt: -1 } },
         { $skip: (parseInt(page) - 1) * parseInt(limit) },
         { $limit: parseInt(limit) }
       ]);

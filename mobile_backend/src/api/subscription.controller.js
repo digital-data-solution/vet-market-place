@@ -12,6 +12,7 @@ import {
 } from '../services/email.service.js';
 import { applyReferralReward } from '../lib/referralHelper.js';
 import { logActivity }         from '../lib/activityLogger.js';
+import { activateFeatured }    from './featured.controller.js';
 
 const PAYSTACK_BASE        = process.env.PAYSTACK_BASE        || 'https://api.paystack.co';
 const PAYSTACK_SECRET      = process.env.PAYSTACK_SECRET_KEY  || '';
@@ -264,7 +265,11 @@ export const handlePaystackWebhook = async (req, res) => {
     if (event.event === 'charge.success' && event.data?.status === 'success') {
       const metadata = event.data.metadata || {};
 
-      if (metadata.subscriptionType === 'user') {
+      if (metadata.type === 'featured') {
+        console.log('▶ Activating featured boost for', metadata.targetType, metadata.targetId);
+        await activateFeatured(metadata, event.data.reference);
+        console.log('✅ Featured boost activated');
+      } else if (metadata.subscriptionType === 'user') {
         console.log('▶ Activating user subscription for userId:', metadata.userId);
         await activateUserSubscription(metadata.userId, metadata.plan, event.data.reference);
         console.log('✅ User subscription activated');
@@ -913,7 +918,10 @@ export const verifyPayment = async (req, res) => {
     const metadata = data.data.metadata || {};
     let result;
 
-    if (metadata.subscriptionType === 'user') {
+    if (metadata.type === 'featured') {
+      result = await activateFeatured(metadata, reference);
+      return res.json({ success: true, message: 'Payment verified and boost activated!', data: result });
+    } else if (metadata.subscriptionType === 'user') {
       result = await activateUserSubscription(metadata.userId, metadata.plan, reference);
     } else if (metadata.subscriptionType === 'professional') {
       result = await activateProfessionalSubscription(metadata.subscriptionId, reference);

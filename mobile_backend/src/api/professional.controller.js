@@ -671,7 +671,16 @@ export const listProfessionals = async (req, res) => {
       });
       const proSet = new Set(proUserIds.map(id => id.toString()));
 
+      // Ranking priority: paid featured boost first, then Pro subscribers,
+      // then everyone else (already ordered newest-first from the query).
+      const now = new Date();
+      const isFeatured = (p) => p.featuredUntil && new Date(p.featuredUntil) > now;
+
       professionals.sort((a, b) => {
+        const aFeat = isFeatured(a);
+        const bFeat = isFeatured(b);
+        if (aFeat !== bFeat) return aFeat ? -1 : 1;
+
         const aIsPro = proSet.has(a.userId?._id?.toString() ?? a.userId?.toString() ?? '');
         const bIsPro = proSet.has(b.userId?._id?.toString() ?? b.userId?.toString() ?? '');
         if (aIsPro && !bIsPro) return -1;
