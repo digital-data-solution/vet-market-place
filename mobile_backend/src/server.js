@@ -20,6 +20,7 @@ const { default: startReEngagementJob }      = await import('./jobs/reEngagement
 const { default: startAbandonedSubJob }      = await import('./jobs/abandonedSub.js');
 const { default: startWalletJobs }           = await import('./jobs/walletJobs.js');
 const { default: startMarketingCampaignJobs } = await import('./jobs/marketingCampaigns.js');
+const { default: startPracticeReminderJob }   = await import('./jobs/practiceReminders.js');
 
 // Start services
 await connectDB();
@@ -48,6 +49,7 @@ startReEngagementJob();
 startAbandonedSubJob();
 startWalletJobs();
 startMarketingCampaignJobs();
+startPracticeReminderJob();
 
 const PORT = process.env.PORT || 5000;
 

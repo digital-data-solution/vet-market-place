@@ -201,6 +201,16 @@ const professionalSchema = new mongoose.Schema(
     boostPromoSentAt: {
       type: Date,
     },
+
+    // Practice Records add-on (patients/clients/treatments/vaccinations +
+    // reminders, vets only). Same one-off-extend pattern as featuredUntil —
+    // paid time stacks from the later of (now, existing activeUntil).
+    // Free tier (no active add-on) still works up to PRACTICE_FREE_PATIENT_LIMIT
+    // patients — see practice.controller.js.
+    practiceAddon: {
+      activeUntil:           { type: Date, index: true },
+      lastPaymentReference:  { type: String },
+    },
   },
   {
     timestamps: true,

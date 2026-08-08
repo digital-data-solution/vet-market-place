@@ -2,8 +2,9 @@
 // inside an email client, so no auth header is available.
 
 import User from '../models/User.js';
+import Client from '../models/Client.js';
 import logger from '../lib/logger.js';
-import { verifyUnsubscribeSig } from '../services/email.service.js';
+import { verifyUnsubscribeSig, verifyClientReminderSig } from '../services/email.service.js';
 
 function page(title, message, ok) {
   return `<!DOCTYPE html>
@@ -47,5 +48,32 @@ export const unsubscribe = async (req, res) => {
   } catch (error) {
     logger.error('Unsubscribe error', { error: error.message, uid });
     return res.status(500).send(page('Something went wrong', 'Please try again in a moment, or reply to any Xpress Vet email to be unsubscribed manually.', false));
+  }
+};
+
+// Separate from the general marketing unsubscribe above: this stops a vet's
+// PATIENT REMINDER emails to a specific client, who is often not an Xpress
+// Vet user at all (just someone their vet added to Practice Records).
+export const clientUnsubscribe = async (req, res) => {
+  const { cid, sig } = req.query;
+
+  if (!verifyClientReminderSig(cid, sig)) {
+    return res.status(400).send(page('Link expired or invalid', 'This unsubscribe link is not valid. Reply to the reminder email and we\'ll take care of it.', false));
+  }
+
+  try {
+    const client = await Client.findByIdAndUpdate(cid, { $set: { reminderOptOut: true } }, { new: true }).select('email');
+    if (!client) {
+      return res.status(404).send(page('Record not found', 'We could not find this reminder subscription.', false));
+    }
+    logger.info('Client unsubscribed from vet reminder emails', { clientId: cid });
+    return res.send(page(
+      "You're unsubscribed",
+      `${client.email || 'This address'} will no longer receive pet-care reminder emails via Xpress Vet.`,
+      true,
+    ));
+  } catch (error) {
+    logger.error('Client unsubscribe error', { error: error.message, cid });
+    return res.status(500).send(page('Something went wrong', 'Please try again in a moment.', false));
   }
 };
