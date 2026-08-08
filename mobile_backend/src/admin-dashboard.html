@@ -253,6 +253,7 @@
     </nav>
     <div class="sidebar-footer">
       <div id="admin-name"></div>
+      <button class="btn btn-ghost btn-sm" style="width:100%;margin-bottom:6px" onclick="openChangePassword()">Change Password</button>
       <button class="btn btn-ghost btn-sm" style="width:100%" onclick="doLogout()">Sign Out</button>
     </div>
   </aside>
@@ -769,6 +770,25 @@
   </main>
 </div>
 
+<!-- ── Change Password Modal ── -->
+<div id="password-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeModal('password-modal')">
+  <div class="modal">
+    <h3>Change Password</h3>
+    <p style="font-size:13px;color:#64748B;margin-bottom:14px">Applies to your admin login (<span id="password-modal-email"></span>).</p>
+    <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Current Password</label>
+    <input type="password" id="pw-current" style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:12px" />
+    <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">New Password (min 8 characters)</label>
+    <input type="password" id="pw-new" style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:12px" />
+    <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Confirm New Password</label>
+    <input type="password" id="pw-confirm" style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;font-size:14px;box-sizing:border-box" onkeydown="if(event.key==='Enter')submitChangePassword()" />
+    <div id="pw-error" style="display:none;color:#DC2626;font-size:13px;margin-top:10px"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('password-modal')">Cancel</button>
+      <button class="btn btn-primary" id="pw-save-btn" onclick="submitChangePassword()">Save Password</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Review Modal ── -->
 <div id="review-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeModal('review-modal')">
   <div class="modal">
@@ -894,6 +914,41 @@ function statusBadge(s) {
 }
 
 function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+
+// ── Change Password ─────────────────────────────────────────────────────────
+function openChangePassword() {
+  document.getElementById('pw-current').value = '';
+  document.getElementById('pw-new').value = '';
+  document.getElementById('pw-confirm').value = '';
+  document.getElementById('pw-error').style.display = 'none';
+  document.getElementById('password-modal-email').textContent = adminUser?.email || '';
+  document.getElementById('password-modal').style.display = 'flex';
+}
+
+async function submitChangePassword() {
+  const current = document.getElementById('pw-current').value;
+  const next    = document.getElementById('pw-new').value;
+  const confirm = document.getElementById('pw-confirm').value;
+  const err     = document.getElementById('pw-error');
+  const btn     = document.getElementById('pw-save-btn');
+
+  if (!current || !next) { err.textContent = 'Both fields are required.'; err.style.display = 'block'; return; }
+  if (next.length < 8) { err.textContent = 'New password must be at least 8 characters.'; err.style.display = 'block'; return; }
+  if (next !== confirm) { err.textContent = 'New passwords do not match.'; err.style.display = 'block'; return; }
+
+  err.style.display = 'none';
+  btn.disabled = true; btn.textContent = 'Saving…';
+  const r = await api('POST', '/api/auth/admin/change-password', { currentPassword: current, newPassword: next });
+  btn.disabled = false; btn.textContent = 'Save Password';
+
+  if (r?.ok) {
+    closeModal('password-modal');
+    toast('Password changed.');
+  } else {
+    err.textContent = r?.body?.message || 'Could not change password.';
+    err.style.display = 'block';
+  }
+}
 
 let _debounceTimer;
 function debounce(fn, ms) { return (...args) => { clearTimeout(_debounceTimer); _debounceTimer = setTimeout(() => fn(...args), ms); }; }
