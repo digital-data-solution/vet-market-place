@@ -21,6 +21,8 @@ const labResultSchema = new mongoose.Schema({
   technicianName: { type: String, trim: true, maxlength: 120 },
   attachmentUrl:  { type: String, trim: true }, // Cloudinary URL of the report (PDF/photo)
   notes:          { type: String, trim: true, maxlength: 1000 },
+
+  createdByName: { type: String, trim: true, maxlength: 120, default: null }, // who logged it in (auto from login)
 }, { timestamps: true });
 
 labResultSchema.index({ vet: 1, patient: 1, performedAt: -1 });

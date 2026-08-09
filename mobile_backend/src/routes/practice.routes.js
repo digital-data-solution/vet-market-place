@@ -23,13 +23,15 @@ import {
   deleteLabResult,
   getDueSoon,
 } from '../api/practice.controller.js';
-import { protect } from '../middlewares/authMiddleware.js';
+import businessAuth from '../middlewares/businessAuth.js';
 
 const router = express.Router();
 
 router.get('/pricing', getPracticePricing); // public — safe to show unauthenticated
 
-router.use(protect);
+// Dual-mode: the vet owner's Supabase token OR a scoped staff token (reception,
+// vet, lab tech). The controller (requireVet) resolves the tenant + permissions.
+router.use(businessAuth);
 
 router.get('/status', getPracticeStatus);
 router.post('/pay',    createPracticePayment);

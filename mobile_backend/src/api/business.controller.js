@@ -682,7 +682,7 @@ export const createStaff = async (req, res) => {
     const doc = { owner: ctx.userId, name: name.trim(), role: req.body.role === 'manager' ? 'manager' : 'rep' };
     if (pin) doc.pinHash = await StaffMember.hashPin(pin);
     if (username) { doc.username = String(username).toLowerCase().trim(); doc.passwordHash = await StaffMember.hashPassword(password); }
-    if (req.body.permissions && typeof req.body.permissions === 'object') doc.permissions = pick(req.body.permissions, ['sell', 'viewReports', 'manageInventory', 'adjustStock', 'manageStaff', 'dispense']);
+    if (req.body.permissions && typeof req.body.permissions === 'object') doc.permissions = pick(req.body.permissions, ['sell', 'viewReports', 'manageInventory', 'adjustStock', 'manageStaff', 'dispense', 'reception', 'clinical', 'lab']);
     const staff = await StaffMember.create(doc);
     const obj = staff.toObject(); delete obj.pinHash; delete obj.passwordHash;
     res.status(201).json({ success: true, data: obj });
@@ -712,7 +712,7 @@ export const updateStaff = async (req, res) => {
       set.username = String(req.body.username).toLowerCase().trim();
     }
     if (req.body.permissions && typeof req.body.permissions === 'object') {
-      set.permissions = pick(req.body.permissions, ['sell', 'viewReports', 'manageInventory', 'adjustStock', 'manageStaff', 'dispense']);
+      set.permissions = pick(req.body.permissions, ['sell', 'viewReports', 'manageInventory', 'adjustStock', 'manageStaff', 'dispense', 'reception', 'clinical', 'lab']);
     }
     const staff = await StaffMember.findOneAndUpdate({ _id: req.params.id, owner: ctx.userId }, { $set: set }, { new: true });
     if (!staff) return res.status(404).json({ success: false, message: 'Staff member not found.' });

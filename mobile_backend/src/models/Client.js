@@ -27,6 +27,8 @@ const clientSchema = new mongoose.Schema({
   reminderOptOut: { type: Boolean, default: false },
 
   notes: { type: String, trim: true, maxlength: 1000 },
+
+  createdByName: { type: String, trim: true, maxlength: 120, default: null }, // who registered them (hospital-flow attribution)
 }, { timestamps: true });
 
 clientSchema.index({ vet: 1, name: 'text', phone: 'text', email: 'text' });

@@ -20,6 +20,8 @@ const treatmentRecordSchema = new mongoose.Schema({
 
   followUpDate:           { type: Date, index: true },
   followUpReminderSentAt: { type: Date },
+
+  createdByName: { type: String, trim: true, maxlength: 120, default: null }, // hospital-flow attribution
 }, { timestamps: true });
 
 treatmentRecordSchema.index({ vet: 1, patient: 1, date: -1 });
