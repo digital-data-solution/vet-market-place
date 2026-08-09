@@ -743,6 +743,90 @@ export async function sendBusinessSuitePromo(name, email, userId) {
   await sendEmail(email, `${firstName}, take control of your shop's stock and sales`, html);
 }
 
+// XPRESS MARKET — launch/adoption announcement (jobs/marketingCampaigns.js).
+// Sent once to any user who hasn't posted a listing yet. Applies to everyone —
+// vets, shops, kennels and pet owners can all buy and sell.
+export async function sendMarketLaunchPromo(name, email, userId) {
+  const firstName = name?.split(' ')[0] || 'there';
+  const unsub = unsubscribeUrl(userId);
+  const html = layout('Buy & sell on Xpress Market', `
+    <h1>Hey ${firstName}, you can now buy & sell on Xpress Vet 🛒</h1>
+    <p>Introducing <strong>Xpress Market</strong> — a place to sell pets and pet products, and find them near you.</p>
+    <div class="highlight">
+      <p>🐾 <strong>Sell pets</strong> — dogs, cats, birds, poultry, livestock. Add breed, age, health details, price and photos.<br/><br/>
+      🛍️ <strong>Sell products</strong> in the Pet Mart — feed, accessories, medicine, equipment and more.<br/><br/>
+      📲 <strong>Share to WhatsApp</strong> — every listing has a Share button, so buyers find you fast.<br/><br/>
+      🛡️ <strong>Get paid safely</strong> — buyers can pay with Buyer Protection (escrow); the money is held until they confirm.</p>
+    </div>
+    <p>It's <strong>free to list</strong>. You only pay if you choose to boost a listing to the top.</p>
+    <p style="text-align:center;margin:24px 0">
+      <a href="https://xpressvetmarketplace.com" class="btn">Start selling now →</a>
+    </p>
+    <p style="color:#94A3B8;font-size:13px">
+      Find it anytime on your Home screen → 🛒 Xpress Market — Buy & Sell.
+    </p>
+  `, unsub);
+  await sendEmail(email, `${firstName}, you can now buy & sell on Xpress Vet`, html);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// XPRESS MARKET — transactional alerts (operational, NOT marketing, so no
+// unsubscribe link / opt-out gating). Fired as buyers and sellers transact.
+// ─────────────────────────────────────────────────────────────────────────────
+export async function sendListingLiveEmail(name, email, title) {
+  const firstName = name?.split(' ')[0] || 'there';
+  const html = layout('Your listing is live', `
+    <h1>Your listing is live, ${firstName} ✅</h1>
+    <p><strong>${title}</strong> is now showing on Xpress Market.</p>
+    <p>Tip: open it and tap <strong>Share</strong> to send it to WhatsApp — that's the fastest way to find a buyer. You can also boost it to the top for more views.</p>
+    <p style="text-align:center;margin:24px 0"><a href="https://xpressvetmarketplace.com" class="btn">View my listings →</a></p>
+  `);
+  await sendEmail(email, `Your listing "${title}" is live on Xpress Market`, html);
+}
+
+export async function sendEscrowSellerEmail(name, email, buyerName, title, amount) {
+  const firstName = name?.split(' ')[0] || 'there';
+  const html = layout('A buyer paid into escrow', `
+    <h1>💰 ${buyerName || 'A buyer'} paid for "${title}"</h1>
+    <p>₦${Number(amount).toLocaleString()} is being held safely in escrow. Arrange delivery/pickup with the buyer — the money is released to you once they confirm they received it.</p>
+    <div class="highlight"><p>Do not hand over the item until you've agreed delivery. If anything goes wrong, the buyer can open a dispute and our team will help.</p></div>
+    <p style="text-align:center;margin:24px 0"><a href="https://xpressvetmarketplace.com" class="btn">Open my Wallet →</a></p>
+  `);
+  await sendEmail(email, `You have a buyer for "${title}" — ₦${Number(amount).toLocaleString()} in escrow`, html);
+}
+
+export async function sendEscrowBuyerEmail(name, email, title, amount) {
+  const firstName = name?.split(' ')[0] || 'there';
+  const html = layout('Your payment is protected', `
+    <h1>Your payment is protected, ${firstName} 🛡️</h1>
+    <p>₦${Number(amount).toLocaleString()} for <strong>${title}</strong> is held safely in escrow — the seller does not get it yet.</p>
+    <div class="highlight"><p>Arrange delivery or pickup with the seller. When you've received exactly what was described, open your Wallet and tap <strong>Release</strong>. If there's a problem, tap <strong>Dispute</strong> instead.</p></div>
+    <p style="color:#94A3B8;font-size:13px">Never release payment before you've received and checked the item.</p>
+    <p style="text-align:center;margin:24px 0"><a href="https://xpressvetmarketplace.com" class="btn">Open my Wallet →</a></p>
+  `);
+  await sendEmail(email, `Payment held safely for "${title}" — release when you receive it`, html);
+}
+
+export async function sendPaymentReleasedEmail(name, email, amount, title, auto) {
+  const firstName = name?.split(' ')[0] || 'there';
+  const html = layout('Payment released to you', `
+    <h1>🎉 You've been paid, ${firstName}</h1>
+    <p>₦${Number(amount).toLocaleString()} for <strong>${title || 'your item'}</strong> has been released to your wallet balance${auto ? ' (auto-released after the confirmation window)' : ''}. You can withdraw it to your bank anytime.</p>
+    <p style="text-align:center;margin:24px 0"><a href="https://xpressvetmarketplace.com" class="btn">Withdraw from Wallet →</a></p>
+  `);
+  await sendEmail(email, `You've been paid ₦${Number(amount).toLocaleString()} on Xpress Vet`, html);
+}
+
+export async function sendPaymentRefundedEmail(name, email, amount, title) {
+  const firstName = name?.split(' ')[0] || 'there';
+  const html = layout('Payment refunded', `
+    <h1>💸 You've been refunded, ${firstName}</h1>
+    <p>₦${Number(amount).toLocaleString()} for <strong>${title || 'your purchase'}</strong> has been returned to your wallet balance.</p>
+    <p style="text-align:center;margin:24px 0"><a href="https://xpressvetmarketplace.com" class="btn">Open my Wallet →</a></p>
+  `);
+  await sendEmail(email, `Refund of ₦${Number(amount).toLocaleString()} — Xpress Vet`, html);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // PRACTICE RECORDS — vaccination/follow-up reminders (jobs/practiceReminders.js)
 // ─────────────────────────────────────────────────────────────────────────────
