@@ -15,6 +15,7 @@ import Client from '../models/Client.js';
 import Patient from '../models/Patient.js';
 import TreatmentRecord from '../models/TreatmentRecord.js';
 import VaccinationRecord from '../models/VaccinationRecord.js';
+import LabResult from '../models/LabResult.js';
 import User from '../models/User.js';
 import logger from '../lib/logger.js';
 import { logActivity } from '../lib/activityLogger.js';
@@ -311,12 +312,13 @@ export const getPatient = async (req, res) => {
     const patient = await Patient.findOne({ _id: req.params.id, vet: ctx.userId }).populate('client', 'name phone email').lean();
     if (!patient) return res.status(404).json({ success: false, message: 'Patient not found.' });
 
-    const [treatments, vaccinations] = await Promise.all([
+    const [treatments, vaccinations, labResults] = await Promise.all([
       TreatmentRecord.find({ patient: patient._id, vet: ctx.userId }).sort({ date: -1 }).lean(),
       VaccinationRecord.find({ patient: patient._id, vet: ctx.userId }).sort({ dateGiven: -1 }).lean(),
+      LabResult.find({ patient: patient._id, vet: ctx.userId }).sort({ performedAt: -1 }).lean(),
     ]);
 
-    res.json({ success: true, data: { ...patient, treatments, vaccinations } });
+    res.json({ success: true, data: { ...patient, treatments, vaccinations, labResults } });
   } catch (error) {
     logger.error('Get patient error', { error: error.message });
     res.status(500).json({ success: false, message: 'Failed to load patient.' });
@@ -350,6 +352,7 @@ export const deletePatient = async (req, res) => {
     await Promise.all([
       TreatmentRecord.deleteMany({ patient: patient._id, vet: ctx.userId }),
       VaccinationRecord.deleteMany({ patient: patient._id, vet: ctx.userId }),
+      LabResult.deleteMany({ patient: patient._id, vet: ctx.userId }),
       Patient.deleteOne({ _id: patient._id }),
     ]);
     res.json({ success: true, message: 'Patient and their records deleted.' });
@@ -407,6 +410,60 @@ export const deleteTreatment = async (req, res) => {
   } catch (error) {
     logger.error('Delete treatment error', { error: error.message });
     res.status(500).json({ success: false, message: 'Failed to delete treatment record.' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LAB RESULTS — for clinics that run their own laboratory. Attach report file
+// (PDF/photo) via the existing /api/upload endpoint, store its URL here.
+// ─────────────────────────────────────────────────────────────────────────────
+const LAB_FIELDS = ['testName', 'sampleType', 'results', 'referenceRange', 'status', 'performedAt', 'technicianName', 'attachmentUrl', 'notes'];
+
+export const createLabResult = async (req, res) => {
+  const ctx = await requireVet(req, res);
+  if (!ctx) return;
+  if (!req.body.testName || !req.body.testName.trim()) return res.status(400).json({ success: false, message: 'Test name is required.' });
+  try {
+    const patient = await Patient.findOne({ _id: req.params.patientId, vet: ctx.userId });
+    if (!patient) return res.status(404).json({ success: false, message: 'Patient not found.' });
+    const record = await LabResult.create({
+      vet: ctx.userId, patient: patient._id, client: patient.client,
+      ...pick(req.body, LAB_FIELDS),
+    });
+    res.status(201).json({ success: true, data: record });
+  } catch (error) {
+    logger.error('Create lab result error', { error: error.message });
+    res.status(500).json({ success: false, message: 'Failed to save lab result.' });
+  }
+};
+
+export const updateLabResult = async (req, res) => {
+  const ctx = await requireVet(req, res);
+  if (!ctx) return;
+  try {
+    const record = await LabResult.findOneAndUpdate(
+      { _id: req.params.id, vet: ctx.userId },
+      { $set: pick(req.body, LAB_FIELDS) },
+      { new: true },
+    );
+    if (!record) return res.status(404).json({ success: false, message: 'Lab result not found.' });
+    res.json({ success: true, data: record });
+  } catch (error) {
+    logger.error('Update lab result error', { error: error.message });
+    res.status(500).json({ success: false, message: 'Failed to update lab result.' });
+  }
+};
+
+export const deleteLabResult = async (req, res) => {
+  const ctx = await requireVet(req, res);
+  if (!ctx) return;
+  try {
+    const result = await LabResult.deleteOne({ _id: req.params.id, vet: ctx.userId });
+    if (!result.deletedCount) return res.status(404).json({ success: false, message: 'Lab result not found.' });
+    res.json({ success: true, message: 'Lab result deleted.' });
+  } catch (error) {
+    logger.error('Delete lab result error', { error: error.message });
+    res.status(500).json({ success: false, message: 'Failed to delete lab result.' });
   }
 };
 

@@ -18,6 +18,9 @@ import {
   createVaccination,
   updateVaccination,
   deleteVaccination,
+  createLabResult,
+  updateLabResult,
+  deleteLabResult,
   getDueSoon,
 } from '../api/practice.controller.js';
 import { protect } from '../middlewares/authMiddleware.js';
@@ -50,5 +53,9 @@ router.delete('/treatments/:id', deleteTreatment);
 router.post('/patients/:patientId/vaccinations', createVaccination);
 router.put('/vaccinations/:id',    updateVaccination);
 router.delete('/vaccinations/:id', deleteVaccination);
+
+router.post('/patients/:patientId/lab', createLabResult);
+router.put('/lab/:id',    updateLabResult);
+router.delete('/lab/:id', deleteLabResult);
 
 export default router;
