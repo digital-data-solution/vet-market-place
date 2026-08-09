@@ -123,6 +123,16 @@ const userSchema = new mongoose.Schema({
     reason: { type: String, default: null },
     setAt:  { type: Date, default: null },
   },
+
+  // Plan tier (config/plans.js): governs usage caps (patients/products/seats) so
+  // the app scales from a solo vet to a hospital and prices by size. Set by admin
+  // after payment (proposal/invoice) or by tier checkout. Falls back to legacy
+  // add-ons for backward compatibility. tier 'free' when unset.
+  plan: {
+    tier:                 { type: String, default: 'free' },
+    activeUntil:          { type: Date, default: null },
+    lastPaymentReference: { type: String, default: null },
+  },
 }, { timestamps: true });
 
 userSchema.index({ supabaseId: 1 }, { unique: true, sparse: true });

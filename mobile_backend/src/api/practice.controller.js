@@ -18,6 +18,7 @@ import VaccinationRecord from '../models/VaccinationRecord.js';
 import LabResult from '../models/LabResult.js';
 import User from '../models/User.js';
 import logger from '../lib/logger.js';
+import { resolveTier, nextTier } from '../config/plans.js';
 import { logActivity } from '../lib/activityLogger.js';
 
 const PAYSTACK_BASE   = process.env.PAYSTACK_BASE       || 'https://api.paystack.co';
@@ -120,12 +121,17 @@ export const getPracticeStatus = async (req, res) => {
     const patientCount = await Patient.countDocuments({ vet: ctx.userId, isActive: true });
     const active = isAddonActive(ctx.professional);
     const until = ctx.professional.practiceAddon?.activeUntil;
+    const owner = await User.findById(ctx.userId).select('plan businessAddon');
+    const tier = resolveTier(owner, active);
     res.json({
       success: true,
       data: {
         patientCount,
         freePatientLimit: FREE_PATIENT_LIMIT,
-        atLimit: !active && patientCount >= FREE_PATIENT_LIMIT,
+        planTier: tier.key,
+        planLabel: tier.label,
+        maxPatients: tier.maxPatients === Infinity ? null : tier.maxPatients,
+        atLimit: patientCount >= tier.maxPatients,
         addonActive: active,
         activeUntil: active ? until : null,
         daysRemaining: active ? Math.ceil((new Date(until) - new Date()) / (1000 * 60 * 60 * 24)) : 0,
@@ -318,16 +324,19 @@ export const createPatient = async (req, res) => {
     const client = await Client.findOne({ _id: clientId, vet: ctx.userId });
     if (!client) return res.status(404).json({ success: false, message: 'Client not found.' });
 
-    const active = isAddonActive(ctx.professional);
-    if (!active) {
-      const count = await Patient.countDocuments({ vet: ctx.userId, isActive: true });
-      if (count >= FREE_PATIENT_LIMIT) {
-        return res.status(402).json({
-          success: false,
-          message: `You've reached the free limit of ${FREE_PATIENT_LIMIT} patients. Upgrade Practice Records to add more.`,
-          code: 'PATIENT_LIMIT_REACHED',
-        });
-      }
+    // Tier-based patient cap (scales solo vet → hospital). Legacy add-on holders
+    // map to the Clinic tier for backward compatibility.
+    const owner = await User.findById(ctx.userId).select('plan businessAddon');
+    const tier = resolveTier(owner, isAddonActive(ctx.professional));
+    const count = await Patient.countDocuments({ vet: ctx.userId, isActive: true });
+    if (count >= tier.maxPatients) {
+      const nt = nextTier(tier.key);
+      return res.status(402).json({
+        success: false,
+        code: 'UPGRADE_REQUIRED',
+        tier: tier.key, nextTier: nt.key,
+        message: `Your ${tier.label} plan allows ${tier.maxPatients} patients. Upgrade to ${nt.label} to add more — contact us to upgrade.`,
+      });
     }
 
     const patient = await Patient.create({

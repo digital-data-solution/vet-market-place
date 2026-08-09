@@ -574,10 +574,21 @@
             <input id="grant-seats" type="number" value="0" min="0" style="width:100%;padding:9px;border:1px solid #CBD5E1;border-radius:8px" />
           </div>
         </div>
-        <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+        <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center">
           <button class="btn btn-sm" onclick="grantBusiness()">✓ Grant / Extend</button>
           <button class="btn btn-ghost btn-sm" onclick="lookupGrant()">🔎 Check status</button>
           <button class="btn btn-ghost btn-sm" onclick="revokeGrant()" style="color:#DC2626">Revoke</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center">
+          <span style="font-size:13px;color:#64748B">Plan tier:</span>
+          <select id="grant-tier" style="padding:8px;border:1px solid #CBD5E1;border-radius:8px">
+            <option value="free">Free</option>
+            <option value="starter">Starter</option>
+            <option value="clinic" selected>Clinic</option>
+            <option value="hospital">Hospital</option>
+            <option value="enterprise">Enterprise</option>
+          </select>
+          <button class="btn btn-sm" onclick="setPlan()">Set plan tier</button>
         </div>
         <div id="grant-result" style="margin-top:12px;font-size:13px;color:#334155"></div>
       </div>
@@ -1808,8 +1819,17 @@ async function lookupGrant() {
   const r = await api('GET', '/api/admin/grants/lookup?email=' + encodeURIComponent(email));
   if (r?.ok) {
     const d = r.body.data;
-    grantMsg(`Account: <b>${d.email}</b> (${d.role||'—'})<br>Status: <b>${d.active ? 'ACTIVE' : 'inactive'}</b>${d.activeUntil ? ' until ' + fmt(d.activeUntil) : ''} · Paid seats: ${d.seatsPaid}`, d.active);
+    grantMsg(`Account: <b>${d.email}</b> (${d.role||'—'})<br>Add-on: <b>${d.active ? 'ACTIVE' : 'inactive'}</b>${d.activeUntil ? ' until ' + fmt(d.activeUntil) : ''} · Seats: ${d.seatsPaid}<br>Plan tier: <b>${(d.planTier||'free').toUpperCase()}</b>${d.planActiveUntil ? ' until ' + fmt(d.planActiveUntil) : ''}${d.onHold ? ' · <span style="color:#DC2626">ON HOLD</span>' : ''}`, d.active || (d.planTier && d.planTier!=='free'));
   } else grantMsg((r?.body?.message) || 'Not found.', false);
+}
+async function setPlan() {
+  const email = document.getElementById('grant-email').value.trim();
+  const tier  = document.getElementById('grant-tier').value;
+  const days  = parseInt(document.getElementById('grant-days').value, 10) || 365;
+  if (!email) return grantMsg('Enter an account email.', false);
+  const r = await api('POST', '/api/admin/grants/plan', { email, tier, days });
+  if (r?.ok) { grantMsg('✓ ' + (r.body.message || 'Plan set.') + (r.body.data?.activeUntil ? ` Until ${fmt(r.body.data.activeUntil)}.` : '')); toast('Plan set'); }
+  else grantMsg((r?.body?.message) || 'Failed to set plan.', false);
 }
 async function revokeGrant() {
   const email = document.getElementById('grant-email').value.trim();
