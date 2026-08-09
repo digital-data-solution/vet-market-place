@@ -24,6 +24,7 @@ import BusinessProfile from '../models/BusinessProfile.js';
 import logger from '../lib/logger.js';
 import { logActivity } from '../lib/activityLogger.js';
 import { signStaffToken } from '../lib/staffToken.js';
+import { resolveTier, nextTier } from '../config/plans.js';
 
 const PAYSTACK_BASE   = process.env.PAYSTACK_BASE       || 'https://api.paystack.co';
 const PAYSTACK_SECRET = process.env.PAYSTACK_SECRET_KEY || '';
@@ -69,7 +70,7 @@ function isAddonActive(user) {
 async function requireOwner(req, res) {
   const ownerId = req.businessOwnerId || req.user?._id || req.user?.id;
   if (!ownerId) { res.status(401).json({ success: false, message: 'Not authorized.' }); return null; }
-  const user = await User.findById(ownerId).select('role email name businessAddon enterpriseHold');
+  const user = await User.findById(ownerId).select('role email name businessAddon enterpriseHold plan');
   if (!user) { res.status(404).json({ success: false, message: 'Business account not found.' }); return null; }
   if (!req.staffActor && !BUSINESS_ROLES.includes(user.role)) {
     res.status(403).json({ success: false, message: 'The Business Suite is available to registered shops, vets and kennels/farms. Complete your business listing first.' });
@@ -152,6 +153,7 @@ export const getBusinessStatus = async (req, res) => {
     const active = isAddonActive(ctx.user);
     const until = ctx.user.businessAddon?.activeUntil;
     const seats = seatInfo(ctx.user);
+    const tier = resolveTier(ctx.user, active);
 
     const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
     const [productCount, lowStockCount, staffCount, todaySales] = await Promise.all([
@@ -169,7 +171,10 @@ export const getBusinessStatus = async (req, res) => {
       data: {
         productCount,
         freeProductLimit: FREE_PRODUCT_LIMIT,
-        atLimit: !active && productCount >= FREE_PRODUCT_LIMIT,
+        planTier: tier.key,
+        planLabel: tier.label,
+        maxProducts: tier.maxProducts === Infinity ? null : tier.maxProducts,
+        atLimit: productCount >= tier.maxProducts,
         lowStockCount,
         staffCount,
         includedSeats: seats.includedSeats,
@@ -325,10 +330,15 @@ export const createProduct = async (req, res) => {
     return res.status(400).json({ success: false, message: 'A valid selling price is required.' });
   }
   try {
-    if (!isAddonActive(ctx.user)) {
+    // Tier-based product cap (scales small shop → hospital pharmacy). Legacy
+    // add-on holders map to the Clinic tier for backward compatibility.
+    {
+      const tier = resolveTier(ctx.user, isAddonActive(ctx.user));
       const count = await Product.countDocuments({ owner: ctx.userId, isActive: true });
-      if (count >= FREE_PRODUCT_LIMIT) {
-        return res.status(402).json({ success: false, message: `You've reached the free limit of ${FREE_PRODUCT_LIMIT} products. Upgrade the Business Suite to add unlimited stock.`, code: 'PRODUCT_LIMIT_REACHED' });
+      if (count >= tier.maxProducts) {
+        const nt = nextTier(tier.key);
+        return res.status(402).json({ success: false, code: 'UPGRADE_REQUIRED', tier: tier.key, nextTier: nt.key,
+          message: `Your ${tier.label} plan allows ${tier.maxProducts} products. Upgrade to ${nt.label} to add more — contact us to upgrade.` });
       }
     }
     const startQty = Math.max(0, parseInt(req.body.quantity, 10) || 0);

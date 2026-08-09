@@ -1,5 +1,5 @@
 import express from 'express';
-import { grantBusinessAddon, lookupAccount, revokeBusinessAddon, largeAccounts, setEnterpriseHold, clearEnterpriseHold } from '../api/admin.grants.controller.js';
+import { grantBusinessAddon, lookupAccount, revokeBusinessAddon, largeAccounts, setEnterpriseHold, clearEnterpriseHold, setPlanTier } from '../api/admin.grants.controller.js';
 import { adminProtect } from '../middlewares/adminAuthMiddleware.js';
 
 const router = express.Router();
@@ -10,6 +10,7 @@ router.post('/business', grantBusinessAddon);
 router.post('/business/revoke', revokeBusinessAddon);
 
 // Whale detection + stop
+router.post('/plan', setPlanTier);
 router.get('/large-accounts', largeAccounts);
 router.post('/enterprise-hold', setEnterpriseHold);
 router.post('/enterprise-hold/clear', clearEnterpriseHold);

@@ -13,6 +13,7 @@ import Product from '../models/Product.js';
 import StaffMember from '../models/StaffMember.js';
 import Sale from '../models/Sale.js';
 import logger from '../lib/logger.js';
+import { PLAN_TIERS, TIER_ORDER } from '../config/plans.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -72,17 +73,49 @@ export const lookupAccount = async (req, res) => {
   try {
     const email = (req.query.email || '').trim().toLowerCase();
     if (!email) return res.status(400).json({ success: false, message: 'Provide an email.' });
-    const user = await User.findOne({ email }).select('email role businessAddon').lean();
+    const user = await User.findOne({ email }).select('email role businessAddon plan enterpriseHold').lean();
     if (!user) return res.status(404).json({ success: false, message: 'No account found.' });
     res.json({ success: true, data: {
       email: user.email, role: user.role,
       activeUntil: user.businessAddon?.activeUntil || null,
       seatsPaid: user.businessAddon?.seatsPaid || 0,
       active: !!(user.businessAddon?.activeUntil && new Date(user.businessAddon.activeUntil) > new Date()),
+      planTier: user.plan?.tier || 'free',
+      planActiveUntil: user.plan?.activeUntil || null,
+      onHold: !!user.enterpriseHold?.active,
     } });
   } catch (error) {
     logger.error('lookupAccount error', { error: error.message });
     res.status(500).json({ success: false, message: 'Lookup failed.' });
+  }
+};
+
+// POST /api/admin/grants/plan  { email | userId, tier, days } — assign a plan tier
+// after payment (proposal/invoice). enterprise/hospital for whales; days extends
+// from the later of (now, existing). tier 'free' clears any paid tier.
+export const setPlanTier = async (req, res) => {
+  try {
+    const tier = String(req.body.tier || '').toLowerCase();
+    if (!TIER_ORDER.includes(tier)) return res.status(400).json({ success: false, message: `Invalid tier. Choose one of: ${TIER_ORDER.join(', ')}.` });
+    const user = await findAccount(req.body);
+    if (!user) return res.status(404).json({ success: false, message: 'No account found.' });
+
+    if (tier === 'free') {
+      user.plan = { tier: 'free', activeUntil: null, lastPaymentReference: `admin-${Date.now()}` };
+    } else {
+      const days = Math.max(1, Number(req.body.days) || 365);
+      user.plan = user.plan || {};
+      user.plan.tier = tier;
+      user.plan.activeUntil = extendFrom(user.plan.activeUntil, days);
+      user.plan.lastPaymentReference = `admin-plan-${Date.now()}`;
+    }
+    await user.save();
+    logger.info('Admin set plan tier', { admin: req.admin?.email, email: user.email, tier, until: user.plan.activeUntil });
+    res.json({ success: true, message: `${user.email} is now on the ${PLAN_TIERS[tier].label} plan.`,
+      data: { email: user.email, tier: user.plan.tier, activeUntil: user.plan.activeUntil } });
+  } catch (error) {
+    logger.error('setPlanTier error', { error: error.message });
+    res.status(500).json({ success: false, message: 'Could not set the plan.' });
   }
 };
 
