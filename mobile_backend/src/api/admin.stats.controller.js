@@ -479,6 +479,9 @@ export const getBusinessStats = async (req, res) => {
       activatedLogs,
       businessPromoSent,
       salesAgg,
+      staffWithLogin,
+      seatsAgg,
+      seatLogs,
     ] = await Promise.all([
       Product.distinct('owner'),
       Product.countDocuments({ isActive: true }),
@@ -489,11 +492,20 @@ export const getBusinessStats = async (req, res) => {
       ActivityLog.find({ action: 'business.activated' }).select('metadata').lean(),
       User.countDocuments({ businessPromoSentAt: { $ne: null } }),
       Sale.aggregate([{ $group: { _id: null, count: { $sum: 1 }, revenue: { $sum: '$total' } } }]),
+      StaffMember.countDocuments({ username: { $ne: null } }),          // staff with an individual login
+      User.aggregate([{ $group: { _id: null, total: { $sum: '$businessAddon.seatsPaid' } } }]), // paid seats sold
+      // 'business.seats' logs carry { seats, pricePer } — reconstruct seat revenue.
+      ActivityLog.find({ action: 'business.seats' }).select('metadata').lean(),
     ]);
 
     const addonRevenue = activatedLogs.reduce((sum, log) => {
       const days = log.metadata?.days;
       return sum + (BUSINESS_PACKAGES[days]?.price || 0);
+    }, 0);
+    const seatRevenue = seatLogs.reduce((sum, log) => {
+      const seats = Number(log.metadata?.seats) || 0;
+      const pricePer = Number(log.metadata?.pricePer) || 0;
+      return sum + seats * pricePer;
     }, 0);
 
     return res.json({
@@ -508,6 +520,9 @@ export const getBusinessStats = async (req, res) => {
           salesCount: salesAgg[0]?.count || 0,
           salesVolume: salesAgg[0]?.revenue || 0, // ₦ transacted through POS, all-time
           businessPromoSent,
+          staffWithLogin,                        // staff members with an individual username/password
+          seatsSold: seatsAgg[0]?.total || 0,    // total paid seats across all owners
+          seatRevenue,                           // ₦, lifetime, from per-seat purchases
         },
       },
     });

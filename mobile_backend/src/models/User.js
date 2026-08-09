@@ -105,6 +105,11 @@ const userSchema = new mongoose.Schema({
   businessAddon: {
     activeUntil:          { type: Date, default: null },
     lastPaymentReference: { type: String, default: null },
+    // Paid staff seats beyond the free BUSINESS_INCLUDED_SEATS. Extended by
+    // activateBusinessSeats (per-seat billing). seatRefs guards idempotency so
+    // the same Paystack reference is never counted twice.
+    seatsPaid:            { type: Number, default: 0 },
+    seatRefs:             { type: [String], default: [] },
   },
   // One-time "try the Business Suite" promo email gate — fires at most once.
   businessPromoSentAt: { type: Date, default: null },

@@ -3,6 +3,7 @@ import {
   getBusinessPricing,
   getBusinessStatus,
   createBusinessPayment,
+  createSeatPayment,
   listProducts,
   createProduct,
   getProduct,
@@ -22,29 +23,35 @@ import {
   updateStaff,
   deleteStaff,
   verifyStaffPin,
+  staffLogin,
+  staffMe,
 } from '../api/business.controller.js';
-import { protect } from '../middlewares/authMiddleware.js';
+import businessAuth from '../middlewares/businessAuth.js';
 
 const router = express.Router();
 
-router.get('/pricing', getBusinessPricing); // public — safe to show unauthenticated
+// Public — safe unauthenticated
+router.get('/pricing', getBusinessPricing);
+router.post('/staff/login', staffLogin); // individual staff sign-in → scoped token
 
-router.use(protect);
+// Everything below requires owner (Supabase) OR staff (scoped) auth
+router.use(businessAuth);
 
 router.get('/status', getBusinessStatus);
-router.post('/pay',   createBusinessPayment);
+router.post('/pay',        createBusinessPayment);
+router.post('/seats/pay',  createSeatPayment);
 
 // Inventory
-router.get('/products',              listProducts);
-router.post('/products',             createProduct);
-router.get('/products/:id',          getProduct);
-router.put('/products/:id',          updateProduct);
-router.delete('/products/:id',       deleteProduct);
-router.post('/products/:id/restock', restockProduct);
-router.post('/products/:id/adjust',  adjustProduct);
+router.get('/products',               listProducts);
+router.post('/products',              createProduct);
+router.get('/products/:id',           getProduct);
+router.put('/products/:id',           updateProduct);
+router.delete('/products/:id',        deleteProduct);
+router.post('/products/:id/restock',  restockProduct);
+router.post('/products/:id/adjust',   adjustProduct);
 router.get('/products/:id/movements', listProductMovements);
 
-// Audit log (all products)
+// Audit log
 router.get('/movements', listMovements);
 
 // Point of sale
@@ -53,14 +60,15 @@ router.get('/sales',         listSales);
 router.get('/sales/summary', getSalesSummary);
 router.get('/sales/:id',     getSale);
 
-// Customers (light CRM)
+// Customers
 router.get('/customers', listCustomers);
 
 // Staff / sales reps
-router.get('/staff',            listStaff);
-router.post('/staff',           createStaff);
+router.get('/staff',             listStaff);
+router.post('/staff',            createStaff);
+router.get('/staff/me',          staffMe);
 router.post('/staff/verify-pin', verifyStaffPin);
-router.put('/staff/:id',        updateStaff);
-router.delete('/staff/:id',     deleteStaff);
+router.put('/staff/:id',         updateStaff);
+router.delete('/staff/:id',      deleteStaff);
 
 export default router;

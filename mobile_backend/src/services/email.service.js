@@ -729,7 +729,8 @@ export async function sendBusinessSuitePromo(name, email, userId) {
     <div class="highlight">
       <p>📦 <strong>Know exactly what you have.</strong> Every sale updates your stock automatically, and you get an alert before anything runs out.<br/><br/>
       👥 <strong>Add your sales reps.</strong> Each gets their own PIN, and every sale and stock change is logged under their name.<br/><br/>
-      🔎 <strong>Stop shrinkage.</strong> A tamper-proof audit trail shows who moved every single unit, and when — so nothing goes missing quietly.</p>
+      🔎 <strong>Stop shrinkage.</strong> A tamper-proof audit trail shows who moved every single unit, and when — so nothing goes missing quietly.<br/><br/>
+      🔐 <strong>Every team member accountable.</strong> Give each staff or vet their own secure login — every sale and stock change is tracked to them by name. Perfect for clinics with several vets.</p>
     </div>
     <p>Free to start with your first 15 products. Upgrade when you're ready for unlimited stock and sales reps.</p>
     <p style="text-align:center;margin:24px 0">

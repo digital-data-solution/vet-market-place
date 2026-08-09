@@ -556,6 +556,31 @@
       <div id="marketing-stats-grid" class="stats-grid"><div class="spinner"></div></div>
       <h3 style="font-size:14px;color:#334155;margin:24px 0 10px">Business Suite (shops &amp; inventory)</h3>
       <div id="business-stats-grid" class="stats-grid"><div class="spinner"></div></div>
+
+      <h3 style="font-size:14px;color:#334155;margin:24px 0 10px">Grant Business Suite (manual / off-platform payment)</h3>
+      <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:16px;max-width:640px">
+        <p style="color:#64748B;font-size:13px;margin:0 0 12px">For clinics/shops that paid by bank transfer, Wise, etc. (e.g. international accounts Paystack can't bill). Time stacks on top of any existing subscription.</p>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">
+          <div style="flex:2;min-width:200px">
+            <label style="font-size:12px;color:#64748B;display:block;margin-bottom:4px">Account email</label>
+            <input id="grant-email" type="email" placeholder="owner@clinic.com" style="width:100%;padding:9px;border:1px solid #CBD5E1;border-radius:8px" />
+          </div>
+          <div style="flex:1;min-width:90px">
+            <label style="font-size:12px;color:#64748B;display:block;margin-bottom:4px">Days</label>
+            <input id="grant-days" type="number" value="30" min="1" style="width:100%;padding:9px;border:1px solid #CBD5E1;border-radius:8px" />
+          </div>
+          <div style="flex:1;min-width:90px">
+            <label style="font-size:12px;color:#64748B;display:block;margin-bottom:4px">Extra seats</label>
+            <input id="grant-seats" type="number" value="0" min="0" style="width:100%;padding:9px;border:1px solid #CBD5E1;border-radius:8px" />
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+          <button class="btn btn-sm" onclick="grantBusiness()">✓ Grant / Extend</button>
+          <button class="btn btn-ghost btn-sm" onclick="lookupGrant()">🔎 Check status</button>
+          <button class="btn btn-ghost btn-sm" onclick="revokeGrant()" style="color:#DC2626">Revoke</button>
+        </div>
+        <div id="grant-result" style="margin-top:12px;font-size:13px;color:#334155"></div>
+      </div>
       <h3 style="font-size:14px;color:#334155;margin:24px 0 10px">Email Health (last 7 days)</h3>
       <div id="email-health-grid" class="stats-grid"><div class="spinner"></div></div>
     </div>
@@ -1748,7 +1773,44 @@ async function loadPracticeStats() {
     <div class="stat-card"><div class="stat-label">Active Paid Shops</div><div class="stat-value">${b.addonActiveCount||0}</div></div>
     <div class="stat-card"><div class="stat-label">Addon Revenue</div><div class="stat-value">₦${(b.addonRevenue||0).toLocaleString()}</div><div class="stat-sub">lifetime</div></div>
     <div class="stat-card"><div class="stat-label">Business Promo Sent</div><div class="stat-value">${b.businessPromoSent||0}</div></div>
+    <div class="stat-card"><div class="stat-label">Staff Logins</div><div class="stat-value">${b.staffWithLogin||0}</div><div class="stat-sub">with own username</div></div>
+    <div class="stat-card"><div class="stat-label">Seats Sold</div><div class="stat-value">${b.seatsSold||0}</div></div>
+    <div class="stat-card"><div class="stat-label">Seat Revenue</div><div class="stat-value">₦${(b.seatRevenue||0).toLocaleString()}</div><div class="stat-sub">lifetime</div></div>
   `;
+}
+
+// ── Grant Business Suite (manual / off-platform) ───────────────────────────────
+function grantMsg(html, ok = true) {
+  const el = document.getElementById('grant-result');
+  el.style.color = ok ? '#047857' : '#DC2626';
+  el.innerHTML = html;
+}
+async function grantBusiness() {
+  const email = document.getElementById('grant-email').value.trim();
+  const days  = parseInt(document.getElementById('grant-days').value, 10);
+  const seats = parseInt(document.getElementById('grant-seats').value, 10) || 0;
+  if (!email) return grantMsg('Enter an account email.', false);
+  if (!days || days < 1) return grantMsg('Enter days (1 or more).', false);
+  const r = await api('POST', '/api/admin/grants/business', { email, days, seats });
+  if (r?.ok) { grantMsg('✓ ' + (r.body.message || 'Granted.') + (r.body.data?.activeUntil ? ` Active until ${fmt(r.body.data.activeUntil)}.` : '')); toast('Subscription granted'); }
+  else grantMsg((r?.body?.message) || 'Failed to grant.', false);
+}
+async function lookupGrant() {
+  const email = document.getElementById('grant-email').value.trim();
+  if (!email) return grantMsg('Enter an account email.', false);
+  const r = await api('GET', '/api/admin/grants/lookup?email=' + encodeURIComponent(email));
+  if (r?.ok) {
+    const d = r.body.data;
+    grantMsg(`Account: <b>${d.email}</b> (${d.role||'—'})<br>Status: <b>${d.active ? 'ACTIVE' : 'inactive'}</b>${d.activeUntil ? ' until ' + fmt(d.activeUntil) : ''} · Paid seats: ${d.seatsPaid}`, d.active);
+  } else grantMsg((r?.body?.message) || 'Not found.', false);
+}
+async function revokeGrant() {
+  const email = document.getElementById('grant-email').value.trim();
+  if (!email) return grantMsg('Enter an account email.', false);
+  if (!confirm('Revoke Business Suite for ' + email + '?')) return;
+  const r = await api('POST', '/api/admin/grants/business/revoke', { email });
+  if (r?.ok) { grantMsg('Revoked for ' + email + '.'); toast('Revoked'); }
+  else grantMsg((r?.body?.message) || 'Failed to revoke.', false);
 }
 
 // ── UTM Attribution ───────────────────────────────────────────────────────────
