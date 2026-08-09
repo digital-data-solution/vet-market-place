@@ -19,6 +19,10 @@ const patientSchema = new mongoose.Schema({
 
   notes: { type: String, trim: true, maxlength: 1000 },
 
+  // Who registered this record (owner or a staff member) — hospital-flow
+  // attribution so it's clear which team member handled each step.
+  createdByName: { type: String, trim: true, maxlength: 120, default: null },
+
   // Soft-delete flag so a vet can archive a patient without losing history,
   // and so archived patients don't count against the free-tier limit.
   isActive: { type: Boolean, default: true, index: true },

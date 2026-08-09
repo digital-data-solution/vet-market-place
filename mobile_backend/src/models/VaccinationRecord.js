@@ -15,6 +15,8 @@ const vaccinationRecordSchema = new mongoose.Schema({
 
   reminderSentAt: { type: Date },
   notes:          { type: String, trim: true, maxlength: 500 },
+
+  createdByName: { type: String, trim: true, maxlength: 120, default: null }, // hospital-flow attribution
 }, { timestamps: true });
 
 vaccinationRecordSchema.index({ vet: 1, patient: 1, dateGiven: -1 });

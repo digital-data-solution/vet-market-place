@@ -48,14 +48,39 @@ function isAddonActive(professional) {
   return !!(until && new Date(until) > new Date());
 }
 
-async function requireVet(req, res) {
-  const userId = req.user._id || req.user.id;
-  const professional = await resolveVet(userId);
+// Practice/hospital-flow staff permissions (StaffMember.permissions).
+const PRACTICE_PERMS = ['reception', 'clinical', 'lab'];
+
+// Resolve the clinic (vet) tenant + the acting person, for BOTH:
+//   • the vet owner (Supabase token via businessAuth → req.user/req.businessOwnerId), and
+//   • a staff member (scoped staff token → req.staffActor), e.g. reception, lab tech.
+// The tenant is always the vet owner, so all records stay under the vet. Options:
+//   perm      — staff must hold this permission (owner always passes)
+//   ownerOnly — staff are refused (billing/limits are the owner's call)
+// Returns { userId (vet tenant), professional, staff, actorName, isOwner } or null.
+async function requireVet(req, res, { perm = null, ownerOnly = false } = {}) {
+  const ownerId = req.businessOwnerId || req.user?._id || req.user?.id;
+  if (!ownerId) { res.status(401).json({ success: false, message: 'Not authorized.' }); return null; }
+
+  const professional = await resolveVet(ownerId);
   if (!professional) {
     res.status(403).json({ success: false, message: 'Practice Records is available to registered veterinarians only.' });
     return null;
   }
-  return { userId, professional };
+
+  const staff = req.staffActor || null;
+  if (staff) {
+    if (ownerOnly) { res.status(403).json({ success: false, message: 'Only the clinic owner can do this.' }); return null; }
+    const perms = staff.permissions || {};
+    if (perm) {
+      if (!perms[perm]) { res.status(403).json({ success: false, message: "You don't have permission for this step. Ask the clinic owner." }); return null; }
+    } else if (!PRACTICE_PERMS.some((p) => perms[p])) {
+      res.status(403).json({ success: false, message: 'You do not have access to clinic records.' }); return null;
+    }
+  }
+
+  const actorName = staff?.name || professional?.name || 'Owner';
+  return { userId: String(ownerId), professional, staff, actorName, isOwner: !staff };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -102,7 +127,7 @@ export const getPracticeStatus = async (req, res) => {
 };
 
 export const createPracticePayment = async (req, res) => {
-  const ctx = await requireVet(req, res);
+  const ctx = await requireVet(req, res, { ownerOnly: true });
   if (!ctx) return;
   const days = parseInt(req.body.days, 10);
   const pkg = PRACTICE_PACKAGES[days];
@@ -191,7 +216,7 @@ export const listClients = async (req, res) => {
 };
 
 export const createClient = async (req, res) => {
-  const ctx = await requireVet(req, res);
+  const ctx = await requireVet(req, res, { perm: 'reception' });
   if (!ctx) return;
   const { name, phone, email, address, notes } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ success: false, message: 'Client name is required.' });
@@ -210,6 +235,7 @@ export const createClient = async (req, res) => {
     const client = await Client.create({
       vet: ctx.userId, name: name.trim(), phone, email, address, notes, linkedUserId,
       emailRemindersEnabled: req.body.emailRemindersEnabled === true,
+      createdByName: ctx.actorName,
     });
     res.status(201).json({ success: true, data: client });
   } catch (error) {
@@ -219,7 +245,7 @@ export const createClient = async (req, res) => {
 };
 
 export const updateClient = async (req, res) => {
-  const ctx = await requireVet(req, res);
+  const ctx = await requireVet(req, res, { perm: 'reception' });
   if (!ctx) return;
   try {
     const client = await Client.findOneAndUpdate(
@@ -236,7 +262,7 @@ export const updateClient = async (req, res) => {
 };
 
 export const deleteClient = async (req, res) => {
-  const ctx = await requireVet(req, res);
+  const ctx = await requireVet(req, res, { perm: 'reception' });
   if (!ctx) return;
   try {
     const patientCount = await Patient.countDocuments({ vet: ctx.userId, client: req.params.id });
@@ -270,7 +296,7 @@ export const listPatients = async (req, res) => {
 };
 
 export const createPatient = async (req, res) => {
-  const ctx = await requireVet(req, res);
+  const ctx = await requireVet(req, res, { perm: 'reception' });
   if (!ctx) return;
   const { clientId, name } = req.body;
   if (!clientId || !name || !name.trim()) {
@@ -297,6 +323,7 @@ export const createPatient = async (req, res) => {
       vet: ctx.userId,
       client: clientId,
       ...pick(req.body, ['name', 'species', 'breed', 'sex', 'dob', 'weightKg', 'color', 'microchipId', 'photo', 'notes']),
+      createdByName: ctx.actorName,
     });
     res.status(201).json({ success: true, data: patient });
   } catch (error) {
@@ -326,7 +353,7 @@ export const getPatient = async (req, res) => {
 };
 
 export const updatePatient = async (req, res) => {
-  const ctx = await requireVet(req, res);
+  const ctx = await requireVet(req, res, { perm: 'reception' });
   if (!ctx) return;
   try {
     const patient = await Patient.findOneAndUpdate(
@@ -343,7 +370,7 @@ export const updatePatient = async (req, res) => {
 };
 
 export const deletePatient = async (req, res) => {
-  const ctx = await requireVet(req, res);
+  const ctx = await requireVet(req, res, { perm: 'reception' });
   if (!ctx) return;
   try {
     const patient = await Patient.findOne({ _id: req.params.id, vet: ctx.userId });
@@ -366,7 +393,7 @@ export const deletePatient = async (req, res) => {
 // TREATMENT RECORDS
 // ─────────────────────────────────────────────────────────────────────────────
 export const createTreatment = async (req, res) => {
-  const ctx = await requireVet(req, res);
+  const ctx = await requireVet(req, res, { perm: 'clinical' });
   if (!ctx) return;
   try {
     const patient = await Patient.findOne({ _id: req.params.patientId, vet: ctx.userId });
@@ -375,6 +402,7 @@ export const createTreatment = async (req, res) => {
     const record = await TreatmentRecord.create({
       vet: ctx.userId, patient: patient._id, client: patient.client,
       ...pick(req.body, ['date', 'reason', 'diagnosis', 'treatment', 'medications', 'weightKg', 'notes', 'followUpDate']),
+      createdByName: ctx.actorName,
     });
     res.status(201).json({ success: true, data: record });
   } catch (error) {
@@ -384,7 +412,7 @@ export const createTreatment = async (req, res) => {
 };
 
 export const updateTreatment = async (req, res) => {
-  const ctx = await requireVet(req, res);
+  const ctx = await requireVet(req, res, { perm: 'clinical' });
   if (!ctx) return;
   try {
     const record = await TreatmentRecord.findOneAndUpdate(
@@ -401,7 +429,7 @@ export const updateTreatment = async (req, res) => {
 };
 
 export const deleteTreatment = async (req, res) => {
-  const ctx = await requireVet(req, res);
+  const ctx = await requireVet(req, res, { perm: 'clinical' });
   if (!ctx) return;
   try {
     const result = await TreatmentRecord.deleteOne({ _id: req.params.id, vet: ctx.userId });
@@ -420,7 +448,7 @@ export const deleteTreatment = async (req, res) => {
 const LAB_FIELDS = ['testName', 'sampleType', 'results', 'referenceRange', 'status', 'performedAt', 'technicianName', 'attachmentUrl', 'notes'];
 
 export const createLabResult = async (req, res) => {
-  const ctx = await requireVet(req, res);
+  const ctx = await requireVet(req, res, { perm: 'lab' });
   if (!ctx) return;
   if (!req.body.testName || !req.body.testName.trim()) return res.status(400).json({ success: false, message: 'Test name is required.' });
   try {
@@ -429,6 +457,9 @@ export const createLabResult = async (req, res) => {
     const record = await LabResult.create({
       vet: ctx.userId, patient: patient._id, client: patient.client,
       ...pick(req.body, LAB_FIELDS),
+      createdByName: ctx.actorName,
+      // Auto-fill the uploader from the logged-in person if not typed in.
+      technicianName: (req.body.technicianName && req.body.technicianName.trim()) || ctx.actorName,
     });
     res.status(201).json({ success: true, data: record });
   } catch (error) {
@@ -438,7 +469,7 @@ export const createLabResult = async (req, res) => {
 };
 
 export const updateLabResult = async (req, res) => {
-  const ctx = await requireVet(req, res);
+  const ctx = await requireVet(req, res, { perm: 'lab' });
   if (!ctx) return;
   try {
     const record = await LabResult.findOneAndUpdate(
@@ -455,7 +486,7 @@ export const updateLabResult = async (req, res) => {
 };
 
 export const deleteLabResult = async (req, res) => {
-  const ctx = await requireVet(req, res);
+  const ctx = await requireVet(req, res, { perm: 'lab' });
   if (!ctx) return;
   try {
     const result = await LabResult.deleteOne({ _id: req.params.id, vet: ctx.userId });
@@ -471,7 +502,7 @@ export const deleteLabResult = async (req, res) => {
 // VACCINATION RECORDS
 // ─────────────────────────────────────────────────────────────────────────────
 export const createVaccination = async (req, res) => {
-  const ctx = await requireVet(req, res);
+  const ctx = await requireVet(req, res, { perm: 'clinical' });
   if (!ctx) return;
   const { vaccineName } = req.body;
   if (!vaccineName || !vaccineName.trim()) return res.status(400).json({ success: false, message: 'Vaccine name is required.' });
@@ -483,6 +514,7 @@ export const createVaccination = async (req, res) => {
     const record = await VaccinationRecord.create({
       vet: ctx.userId, patient: patient._id, client: patient.client,
       ...pick(req.body, ['vaccineName', 'dateGiven', 'nextDueDate', 'notes']),
+      createdByName: ctx.actorName,
     });
     res.status(201).json({ success: true, data: record });
   } catch (error) {
@@ -492,7 +524,7 @@ export const createVaccination = async (req, res) => {
 };
 
 export const updateVaccination = async (req, res) => {
-  const ctx = await requireVet(req, res);
+  const ctx = await requireVet(req, res, { perm: 'clinical' });
   if (!ctx) return;
   try {
     const record = await VaccinationRecord.findOneAndUpdate(
@@ -509,7 +541,7 @@ export const updateVaccination = async (req, res) => {
 };
 
 export const deleteVaccination = async (req, res) => {
-  const ctx = await requireVet(req, res);
+  const ctx = await requireVet(req, res, { perm: 'clinical' });
   if (!ctx) return;
   try {
     const result = await VaccinationRecord.deleteOne({ _id: req.params.id, vet: ctx.userId });

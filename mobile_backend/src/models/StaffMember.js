@@ -21,6 +21,14 @@ const permissionsSchema = new mongoose.Schema(
     adjustStock:     { type: Boolean, default: false },
     manageStaff:     { type: Boolean, default: false },
     dispense:        { type: Boolean, default: false },
+
+    // Practice Records / hospital-flow roles. A clinic assigns each person the
+    // step they own — reception registers clients & patients, clinical staff
+    // (vets) record diagnoses/treatments/vaccinations, lab staff upload results.
+    // Every record they create is stamped with their name for accountability.
+    reception:       { type: Boolean, default: false }, // register/edit clients & patients
+    clinical:        { type: Boolean, default: false }, // treatments, vaccinations (the vet)
+    lab:             { type: Boolean, default: false }, // upload lab results
   },
   { _id: false },
 );
