@@ -79,6 +79,17 @@ async function requireVet(req, res, { perm = null, ownerOnly = false } = {}) {
     }
   }
 
+  // Enterprise hold: block NEW records (any write has a `perm`) when a whale's
+  // usage has outgrown their plan — reads stay open so no data is lost.
+  if (perm) {
+    const owner = await User.findById(ownerId).select('enterpriseHold').lean();
+    if (owner?.enterpriseHold?.active) {
+      res.status(402).json({ success: false, code: 'ENTERPRISE_REQUIRED',
+        message: owner.enterpriseHold.reason || 'Your usage has grown beyond this plan. Please contact us to move to an Enterprise plan and continue.' });
+      return null;
+    }
+  }
+
   const actorName = staff?.name || professional?.name || 'Owner';
   return { userId: String(ownerId), professional, staff, actorName, isOwner: !staff };
 }
