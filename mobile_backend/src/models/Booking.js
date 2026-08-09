@@ -7,6 +7,12 @@ const bookingSchema = new mongoose.Schema({
   buyer:    { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   provider: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
 
+  // What is being paid for. 'service' = paying a registered professional/shop
+  // (the original flow); 'listing' = buying a marketplace item (pet/product),
+  // where `listing` points at the item and `provider` is the seller (any user).
+  kind:    { type: String, enum: ['service', 'listing'], default: 'service' },
+  listing: { type: mongoose.Schema.Types.ObjectId, ref: 'Listing', default: null },
+
   amount:           { type: Number, required: true },     // total the buyer pays
   commissionRate:   { type: Number, required: true },     // e.g. 0.10
   commissionAmount: { type: Number, required: true },     // platform cut

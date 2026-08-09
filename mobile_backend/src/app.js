@@ -32,6 +32,8 @@ import reviewRoutes           from './routes/review.routes.js';
 import supportRoutes          from './routes/support.routes.js';
 import trackRoutes            from './routes/track.routes.js';
 import upsellRoutes           from './routes/upsell.routes.js';
+import marketRoutes           from './routes/market.routes.js';
+import adminMarketRoutes      from './routes/admin.market.routes.js';
 
 // Webhook handler — imported directly so it can receive raw body
 import { handlePaystackWebhook } from './api/subscription.controller.js';
@@ -61,6 +63,7 @@ import User          from './models/User.js';
 import Shop          from './models/Shop.js';
 import Subscription  from './models/Subscription.js';
 import SupportThread from './models/SupportThread.js';
+import Listing       from './models/Listing.js';
 
 const app = express();
 
@@ -132,6 +135,7 @@ app.use((req, res, next) => {
   if (req.method !== 'GET') return next();
   if (
     req.path.startsWith('/api/') ||
+    req.path.startsWith('/l/') ||
     req.path === '/admin' ||
     req.path === '/health'
   ) return next();
@@ -144,6 +148,50 @@ app.use((req, res, next) => {
 // ─── Health ───────────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => {
   res.json({ status: 'OK', version: '8-spa-presend', uptime: process.uptime(), timestamp: new Date().toISOString() });
+});
+
+// ─── Marketplace share preview (/l/:id) ───────────────────────────────────────
+// A shareable short link that returns Open Graph tags so WhatsApp/Facebook/etc.
+// show the listing's photo, title and price when the link is pasted. Human
+// visitors are redirected into the web app. Crawlers read the meta and stop.
+const WEB_APP_ORIGIN = process.env.WEB_APP_ORIGIN || 'https://xpressvetmarketplace.com';
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+app.get('/l/:id', async (req, res) => {
+  const appUrl = `${WEB_APP_ORIGIN}/ListingDetail?id=${encodeURIComponent(req.params.id)}`;
+  try {
+    const listing = await Listing.findById(req.params.id).lean();
+    if (!listing || listing.status === 'removed') {
+      res.set('Content-Type', 'text/html; charset=utf-8');
+      return res.status(404).send(`<!doctype html><meta http-equiv="refresh" content="0;url=${esc(WEB_APP_ORIGIN)}">`);
+    }
+    const title = `${listing.title} — ₦${Number(listing.price).toLocaleString()}`;
+    const desc  = (listing.description || 'For sale on Xpress Vet Marketplace.').slice(0, 180);
+    const img   = listing.images?.[0]?.url || `${WEB_APP_ORIGIN}/favicon.png`;
+    res.set('Content-Type', 'text/html; charset=utf-8');
+    res.set('Cache-Control', 'public, max-age=300');
+    return res.send(`<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${esc(title)}</title>
+<meta name="description" content="${esc(desc)}">
+<meta property="og:type" content="product">
+<meta property="og:title" content="${esc(title)}">
+<meta property="og:description" content="${esc(desc)}">
+<meta property="og:image" content="${esc(img)}">
+<meta property="og:url" content="${esc(`${req.protocol}://${req.get('host')}/l/${listing._id}`)}">
+<meta name="twitter:card" content="summary_large_image">
+<meta http-equiv="refresh" content="0;url=${esc(appUrl)}">
+</head><body style="font-family:system-ui;text-align:center;padding:40px">
+<p>Opening this listing on Xpress Vet…</p>
+<p><a href="${esc(appUrl)}">Tap here if it doesn't open automatically</a></p>
+</body></html>`);
+  } catch {
+    res.set('Content-Type', 'text/html; charset=utf-8');
+    return res.status(200).send(`<!doctype html><meta http-equiv="refresh" content="0;url=${esc(appUrl)}">`);
+  }
 });
 
 // ─── Rate limiters ────────────────────────────────────────────────────────────
@@ -457,6 +505,8 @@ app.use('/api/v1/reviews',          reviewRoutes);
 app.use('/api/support',             supportRoutes);
 app.use('/api/v1/track',            trackRoutes);
 app.use('/api/v1/upsell',           upsellRoutes);
+app.use('/api/v1/market',           listingLimiter, marketRoutes);
+app.use('/api/admin/market',        adminMarketRoutes);
 
 // ─── Client-side error reporting ─────────────────────────────────────────────
 // No auth required — errors may fire before the user is authenticated.
