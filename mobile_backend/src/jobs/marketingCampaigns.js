@@ -14,7 +14,8 @@ import Shop from '../models/Shop.js';
 import User from '../models/User.js';
 import Transaction from '../models/Transaction.js';
 import Product from '../models/Product.js';
-import { sendBoostListingPromo, sendWalletPromo, sendPracticeAddonPromo, sendBusinessSuitePromo } from '../services/email.service.js';
+import Listing from '../models/Listing.js';
+import { sendBoostListingPromo, sendWalletPromo, sendPracticeAddonPromo, sendBusinessSuitePromo, sendMarketLaunchPromo } from '../services/email.service.js';
 import logger from '../lib/logger.js';
 
 const BATCH_SIZE = 50; // per campaign per run, matches other marketing jobs
@@ -174,6 +175,38 @@ async function runBusinessPromo() {
   logger.info(`Business Suite promo: sent ${sent} (${owners.length} owners considered)`);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// CAMPAIGN 5: Xpress Market — one-time launch/adoption email to EVERYONE who
+// hasn't posted a listing yet (anyone can buy & sell: vets, shops, kennels,
+// pet owners). Skips opt-outs, brand-new signups, and existing sellers.
+// ─────────────────────────────────────────────────────────────────────────────
+async function runMarketPromo() {
+  const cutoff = new Date(Date.now() - MIN_ACCOUNT_AGE_MS);
+
+  const sellerIds = await Listing.distinct('seller'); // already listed — they know it exists
+
+  const users = await User.find({
+    _id: { $nin: sellerIds },
+    role: { $ne: 'admin' },
+    marketingOptOut: { $ne: true },
+    marketPromoSentAt: null,
+    createdAt: { $lte: cutoff },
+  })
+    .select('name email')
+    .limit(BATCH_SIZE)
+    .lean();
+
+  let sent = 0;
+  for (const user of users) {
+    if (!user.email) continue;
+    sendMarketLaunchPromo(user.name, user.email, user._id).catch(() => {});
+    await User.findByIdAndUpdate(user._id, { $set: { marketPromoSentAt: new Date() } });
+    sent++;
+  }
+
+  logger.info(`Xpress Market promo: sent ${sent} (${users.length} considered)`);
+}
+
 export default function startMarketingCampaignJobs() {
   // Monday 10:00 UTC (11:00 WAT) — once a week, deliberately gentle cadence.
   cron.schedule('0 10 * * 1', async () => {
@@ -185,6 +218,8 @@ export default function startMarketingCampaignJobs() {
     catch (err) { logger.error('Practice promo job error', { error: err.message }); }
     try { await runBusinessPromo(); }
     catch (err) { logger.error('Business promo job error', { error: err.message }); }
+    try { await runMarketPromo(); }
+    catch (err) { logger.error('Market promo job error', { error: err.message }); }
   }, { timezone: 'UTC' });
 
   logger.info('⏰ Marketing campaign jobs scheduled (weekly, Monday 10:00 UTC)');

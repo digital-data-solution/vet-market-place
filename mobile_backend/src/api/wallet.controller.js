@@ -21,7 +21,7 @@ import Shop        from '../models/Shop.js';
 import logger      from '../lib/logger.js';
 import { logActivity } from '../lib/activityLogger.js';
 import { sendPushToUser } from '../services/pushNotification.service.js';
-import { sendEmail } from '../services/email.service.js';
+import { sendEmail, sendPaymentReleasedEmail, sendPaymentRefundedEmail } from '../services/email.service.js';
 
 const PAYSTACK_BASE   = process.env.PAYSTACK_BASE       || 'https://api.paystack.co';
 const PAYSTACK_SECRET = process.env.PAYSTACK_SECRET_KEY || '';
@@ -343,6 +343,9 @@ export async function doRelease(booking, { auto = false } = {}) {
     `You've received ₦${booking.providerAmount.toLocaleString()} (after ${Math.round(booking.commissionRate * 100)}% platform fee).`,
     { type: 'wallet', bookingId: String(booking._id) },
   ).catch(() => {});
+  User.findById(booking.provider).select('name email').lean().then((p) => {
+    if (p?.email) sendPaymentReleasedEmail(p.name, p.email, booking.providerAmount, booking.description, auto).catch(() => {});
+  }).catch(() => {});
   if (auto) {
     sendPushToUser(
       booking.buyer,
@@ -385,6 +388,9 @@ export async function doRefund(booking) {
     `Your ₦${booking.amount.toLocaleString()} payment was refunded to your wallet balance.`,
     { type: 'wallet', bookingId: String(booking._id) },
   ).catch(() => {});
+  User.findById(booking.buyer).select('name email').lean().then((b) => {
+    if (b?.email) sendPaymentRefundedEmail(b.name, b.email, booking.amount, booking.description).catch(() => {});
+  }).catch(() => {});
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

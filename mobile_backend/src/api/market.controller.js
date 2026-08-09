@@ -24,7 +24,7 @@ import Booking     from '../models/Booking.js';
 import logger      from '../lib/logger.js';
 import { logActivity } from '../lib/activityLogger.js';
 import { sendPushToUser } from '../services/pushNotification.service.js';
-import { sendEmail }      from '../services/email.service.js';
+import { sendEmail, sendListingLiveEmail, sendEscrowSellerEmail, sendEscrowBuyerEmail } from '../services/email.service.js';
 import { deleteFromCloudinary } from '../lib/cloudinaryUpload.js';
 import { PET_CATEGORIES, PRODUCT_CATEGORIES } from '../models/Listing.js';
 
@@ -325,6 +325,7 @@ export const createListing = async (req, res) => {
     ).catch(() => {});
 
     logActivity(userId, req.user.role, 'market.listing.created', { listingId: listing._id, kind, price }, req);
+    if (req.user.email) sendListingLiveEmail(req.user.name, req.user.email, listing.title).catch(() => {});
     return res.status(201).json({ success: true, message: 'Listing published.', data: publicListing(listing) });
   } catch (error) {
     logger.error('Create listing error', { error: error.message, userId });
@@ -618,6 +619,11 @@ export const buyListing = async (req, res) => {
       `${req.user.name || 'A buyer'} paid ₦${payAmount.toLocaleString()} for "${listing.title}". It's held safely and released to you once they confirm delivery.`,
       { type: 'market', bookingId: String(bookingId), listingId: String(listing._id) },
     ).catch(() => {});
+    // Keep both sides posted by email too.
+    User.findById(listing.seller).select('name email').lean().then((seller) => {
+      if (seller?.email) sendEscrowSellerEmail(seller.name, seller.email, req.user.name, listing.title, payAmount).catch(() => {});
+    }).catch(() => {});
+    if (req.user.email) sendEscrowBuyerEmail(req.user.name, req.user.email, listing.title, payAmount).catch(() => {});
 
     return res.status(201).json({
       success: true,

@@ -33,6 +33,9 @@ const userSchema = new mongoose.Schema({
   // recorded on the Listing itself (riskAccepted).
   sellerAgreementAcceptedAt: { type: Date, default: null },
 
+  // One-time Xpress Market launch/adoption email (marketingCampaigns.js).
+  marketPromoSentAt: { type: Date, default: null },
+
   // Profile photo (single, managed by ProfileImageUploader)
   profileImage:     { type: String, default: null },
   profileImagePath: { type: String, default: null }, // Cloudinary publicId for overwrite
