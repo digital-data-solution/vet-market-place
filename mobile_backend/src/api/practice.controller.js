@@ -107,8 +107,9 @@ export const getPracticePricing = async (_req, res) => {
       packages: Object.values(PRACTICE_PACKAGES),
       benefits: [
         `Free up to ${FREE_PATIENT_LIMIT} patients — clients, treatment history, vaccination schedules`,
-        'Unlimited patients when you upgrade',
+        'Clinic plan: up to 300 patients',
         'Automatic email + push reminders for upcoming vaccinations and follow-ups',
+        'Running a large clinic or hospital? Contact us for the Hospital or Enterprise plan',
       ],
     },
   });

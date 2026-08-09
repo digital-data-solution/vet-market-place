@@ -136,11 +136,12 @@ export const getBusinessPricing = async (_req, res) => {
       packages: Object.values(BUSINESS_PACKAGES),
       benefits: [
         `Free up to ${FREE_PRODUCT_LIMIT} products — track stock and record sales`,
-        'Unlimited products when you upgrade',
-        `Includes ${BUSINESS_INCLUDED_SEATS} staff logins — each with their own username & password, every action tracked to them`,
+        'Clinic plan: up to 600 products & 8 staff logins',
+        `Each staff login has their own username & password — every action tracked to them`,
         `Add more staff/vets any time at ₦${BUSINESS_PER_SEAT_PRICE.toLocaleString()} per seat / 30 days`,
         'Theft-proof audit trail — see who moved every unit, and when',
         'Low-stock alerts, daily sales & profit reports, customer records',
+        'Running a large clinic or hospital? Contact us for the Hospital or Enterprise plan',
       ],
     },
   });
