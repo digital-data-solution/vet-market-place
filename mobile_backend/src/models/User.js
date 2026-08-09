@@ -113,6 +113,16 @@ const userSchema = new mongoose.Schema({
   },
   // One-time "try the Business Suite" promo email gate — fires at most once.
   businessPromoSentAt: { type: Date, default: null },
+
+  // Enterprise hold — a big "whale" whose usage outgrew their plan. When active,
+  // the app blocks NEW records (reads still work, so no data is lost) until they
+  // move to an Enterprise plan. Set by admin (admin.grants) after usage flags
+  // them or if they under-declared their size, forcing a pricing conversation.
+  enterpriseHold: {
+    active: { type: Boolean, default: false },
+    reason: { type: String, default: null },
+    setAt:  { type: Date, default: null },
+  },
 }, { timestamps: true });
 
 userSchema.index({ supabaseId: 1 }, { unique: true, sparse: true });

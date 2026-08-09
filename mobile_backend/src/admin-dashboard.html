@@ -581,6 +581,13 @@
         </div>
         <div id="grant-result" style="margin-top:12px;font-size:13px;color:#334155"></div>
       </div>
+
+      <h3 style="font-size:14px;color:#334155;margin:24px 0 10px">Whale accounts (usage too big for their plan)</h3>
+      <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:16px;max-width:900px">
+        <p style="color:#64748B;font-size:13px;margin:0 0 12px">Accounts whose usage (patients / staff seats / products / 30-day sales) flags them as large. Talk to whales to move them to Enterprise pricing; "Hold" blocks their new records until they pay.</p>
+        <button class="btn btn-sm" onclick="loadWhales()">↻ Load large accounts</button>
+        <div id="whale-list" style="margin-top:12px;overflow-x:auto"></div>
+      </div>
       <h3 style="font-size:14px;color:#334155;margin:24px 0 10px">Email Health (last 7 days)</h3>
       <div id="email-health-grid" class="stats-grid"><div class="spinner"></div></div>
     </div>
@@ -1811,6 +1818,42 @@ async function revokeGrant() {
   const r = await api('POST', '/api/admin/grants/business/revoke', { email });
   if (r?.ok) { grantMsg('Revoked for ' + email + '.'); toast('Revoked'); }
   else grantMsg((r?.body?.message) || 'Failed to revoke.', false);
+}
+
+// ── Whale accounts ─────────────────────────────────────────────────────────────
+async function loadWhales() {
+  const el = document.getElementById('whale-list');
+  el.innerHTML = '<div class="spinner"></div>';
+  const r = await api('GET', '/api/admin/grants/large-accounts');
+  if (!r?.ok) { el.innerHTML = '<span style="color:#DC2626">Failed to load.</span>'; return; }
+  const rows = r.body.data || [];
+  if (rows.length === 0) { el.innerHTML = '<span style="color:#64748B">No large accounts yet.</span>'; return; }
+  const t = r.body.thresholds || {};
+  let html = '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="text-align:left;color:#64748B">' +
+    '<th style="padding:6px">Account</th><th>Patients</th><th>Seats</th><th>Products</th><th>Sales 30d</th><th>Flags</th><th>Status</th><th></th></tr></thead><tbody>';
+  rows.forEach(a => {
+    const flags = (a.flags||[]).length ? a.flags.join(', ') : '—';
+    const status = a.onHold ? '<span style="color:#DC2626;font-weight:700">ON HOLD</span>' : (a.isWhale ? '<span style="color:#D97706;font-weight:700">WHALE</span>' : (a.addonActive?'paid':'free'));
+    const btn = a.onHold
+      ? `<button class="btn btn-ghost btn-sm" onclick="unholdWhale('${a.email}')">Release</button>`
+      : `<button class="btn btn-sm" style="background:#DC2626" onclick="holdWhale('${a.email}')">Hold</button>`;
+    html += `<tr style="border-top:1px solid #EEF2F7"><td style="padding:6px">${a.email||a.ownerId}<br><span style="color:#94A3B8">${a.role||''}</span></td>`+
+      `<td>${a.patients}</td><td>${a.seats}</td><td>${a.products}</td><td>${a.sales30} (₦${(a.volume30||0).toLocaleString()})</td>`+
+      `<td>${flags}</td><td>${status}</td><td>${a.email?btn:''}</td></tr>`;
+  });
+  html += `</tbody></table><p style="color:#94A3B8;font-size:12px;margin-top:8px">Whale thresholds — patients ≥ ${t.patients}, seats ≥ ${t.seats}, products ≥ ${t.products}, 30-day sales ≥ ${t.sales30}.</p>`;
+  el.innerHTML = html;
+}
+async function holdWhale(email) {
+  const reason = prompt('Reason shown to the account (optional):', 'Your usage requires an Enterprise plan. Please contact us.');
+  if (reason === null) return;
+  const r = await api('POST', '/api/admin/grants/enterprise-hold', { email, reason });
+  if (r?.ok) { toast('Hold set'); loadWhales(); } else { toast((r?.body?.message)||'Failed', 'error'); }
+}
+async function unholdWhale(email) {
+  if (!confirm('Release Enterprise hold for ' + email + '?')) return;
+  const r = await api('POST', '/api/admin/grants/enterprise-hold/clear', { email });
+  if (r?.ok) { toast('Hold cleared'); loadWhales(); } else { toast((r?.body?.message)||'Failed', 'error'); }
 }
 
 // ── UTM Attribution ───────────────────────────────────────────────────────────

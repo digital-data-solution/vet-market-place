@@ -69,7 +69,7 @@ function isAddonActive(user) {
 async function requireOwner(req, res) {
   const ownerId = req.businessOwnerId || req.user?._id || req.user?.id;
   if (!ownerId) { res.status(401).json({ success: false, message: 'Not authorized.' }); return null; }
-  const user = await User.findById(ownerId).select('role email name businessAddon');
+  const user = await User.findById(ownerId).select('role email name businessAddon enterpriseHold');
   if (!user) { res.status(404).json({ success: false, message: 'Business account not found.' }); return null; }
   if (!req.staffActor && !BUSINESS_ROLES.includes(user.role)) {
     res.status(403).json({ success: false, message: 'The Business Suite is available to registered shops, vets and kennels/farms. Complete your business listing first.' });
@@ -83,6 +83,17 @@ async function requireOwner(req, res) {
 function blocked(ctx, res, key) {
   if (ctx.staff && !ctx.staff.permissions?.[key]) {
     res.status(403).json({ success: false, message: `You don't have permission to ${PERM_LABEL[key] || 'do that'}. Ask the owner.` });
+    return true;
+  }
+  return false;
+}
+
+// Enterprise hold: block NEW records for a whale who outgrew their plan. Returns
+// true if BLOCKED (402 already sent), so callers do `if (heldForWrite(...)) return;`.
+function heldForWrite(ctx, res) {
+  if (ctx.user?.enterpriseHold?.active) {
+    res.status(402).json({ success: false, code: 'ENTERPRISE_REQUIRED',
+      message: ctx.user.enterpriseHold.reason || 'Your usage has grown beyond this plan. Please contact us to move to an Enterprise plan and continue.' });
     return true;
   }
   return false;
@@ -307,6 +318,7 @@ export const createProduct = async (req, res) => {
   const ctx = await requireOwner(req, res);
   if (!ctx) return;
   if (blocked(ctx, res, 'manageInventory')) return;
+  if (heldForWrite(ctx, res)) return;
   const { name, sellPrice } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ success: false, message: 'Product name is required.' });
   if (sellPrice === undefined || sellPrice === null || isNaN(Number(sellPrice)) || Number(sellPrice) < 0) {
@@ -482,6 +494,7 @@ export const createSale = async (req, res) => {
   const ctx = await requireOwner(req, res);
   if (!ctx) return;
   if (blocked(ctx, res, 'sell')) return;
+  if (heldForWrite(ctx, res)) return;
   const items = Array.isArray(req.body.items) ? req.body.items : [];
   if (!items.length) return res.status(400).json({ success: false, message: 'Add at least one item to the sale.' });
 
