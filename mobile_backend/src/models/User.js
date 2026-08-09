@@ -28,6 +28,11 @@ const userSchema = new mongoose.Schema({
   phone: { type: String, default: null },
   bio:   { type: String, default: null },
 
+  // Stamped the first time a user accepts the marketplace Seller Agreement
+  // (selling pets/products). Kept for audit; per-listing acceptance is also
+  // recorded on the Listing itself (riskAccepted).
+  sellerAgreementAcceptedAt: { type: Date, default: null },
+
   // Profile photo (single, managed by ProfileImageUploader)
   profileImage:     { type: String, default: null },
   profileImagePath: { type: String, default: null }, // Cloudinary publicId for overwrite
