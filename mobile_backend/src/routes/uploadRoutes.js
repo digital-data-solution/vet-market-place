@@ -20,6 +20,7 @@ import express from 'express';
 import multer  from 'multer';
 
 import { protect }                                  from '../middlewares/authMiddleware.js';
+import businessAuth                                 from '../middlewares/businessAuth.js';
 import { uploadToCloudinary, deleteFromCloudinary } from '../lib/cloudinaryUpload.js';
 import User                                         from '../models/User.js';
 import cache                                        from '../lib/cache.js';
@@ -264,6 +265,28 @@ router.post('/', protect, singleImage('image'), async (req, res) => {
       success: false,
       message: error.message || 'Failed to upload profile image.',
     });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/upload/asset
+// Generic business/practice asset upload (receipt logo, lab-result photo, etc.).
+// Dual-auth (businessAuth): the owner's Supabase token OR a scoped staff token,
+// so a lab technician can upload a result photo. Does NOT touch the user's
+// profileImage/mediaImages and does not enforce media plan limits — it just
+// stores the file under a per-owner folder and returns its URL.
+// ─────────────────────────────────────────────────────────────────────────────
+router.post('/asset', businessAuth, singleImage('image'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, message: 'No image file provided.' });
+    const ownerId = req.businessOwnerId || req.user?._id;
+    if (!ownerId) return res.status(401).json({ success: false, message: 'Not authorized.' });
+    const rawFolder = (req.body.folder || 'business-assets').toString().replace(/[^a-z0-9\-_/]/gi, '').slice(0, 40) || 'business-assets';
+    const uploadResult = await uploadToCloudinary(req.file.buffer, { folder: `${rawFolder}/${ownerId}` });
+    return res.status(200).json({ success: true, url: uploadResult.url, publicId: uploadResult.publicId, message: 'Uploaded.' });
+  } catch (error) {
+    console.error('Asset upload error:', error);
+    return res.status(500).json({ success: false, message: error.message || 'Failed to upload.' });
   }
 });
 
