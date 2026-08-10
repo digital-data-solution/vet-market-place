@@ -530,7 +530,22 @@ export const createSale = async (req, res) => {
     }
 
     const discount = Math.max(0, Number(req.body.discount) || 0);
-    const total = Math.max(0, subtotal - discount);
+    const base = Math.max(0, subtotal - discount); // net taxable amount
+
+    // Apply the business's own tax settings (self-service, per BusinessProfile).
+    // Exclusive → tax adds on top; inclusive → tax already inside `base`.
+    const profile = await BusinessProfile.findOne({ owner: ctx.userId }).select('tax').lean();
+    const tx = profile?.tax || {};
+    const rate = tx.enabled && Number(tx.rate) > 0 ? Number(tx.rate) : 0;
+    let taxAmount = 0;
+    if (rate > 0) {
+      taxAmount = tx.inclusive
+        ? base - base / (1 + rate / 100)   // extract embedded tax
+        : base * (rate / 100);             // add tax on top
+      taxAmount = Math.round(taxAmount * 100) / 100;
+    }
+    const total = rate > 0 && !tx.inclusive ? base + taxAmount : base;
+    const taxSnapshot = { name: rate > 0 ? (tx.name || 'Tax') : null, rate, amount: taxAmount, inclusive: !!tx.inclusive };
     const actor = await actorFor(ctx, req);
 
     for (const li of lineItems) {
@@ -547,7 +562,7 @@ export const createSale = async (req, res) => {
     }
 
     const sale = await Sale.create({
-      owner: ctx.userId, items: lineItems, subtotal, discount, total, costTotal,
+      owner: ctx.userId, items: lineItems, subtotal, discount, tax: taxSnapshot, total, costTotal,
       amountPaid: req.body.amountPaid !== undefined ? Number(req.body.amountPaid) : total,
       paymentMethod: req.body.paymentMethod || 'cash',
       customerName: req.body.customerName || null, customerPhone: req.body.customerPhone || null,

@@ -14,6 +14,7 @@ import StaffMember from '../models/StaffMember.js';
 import Sale from '../models/Sale.js';
 import logger from '../lib/logger.js';
 import { PLAN_TIERS, TIER_ORDER } from '../config/plans.js';
+import { MODULE_KEYS, MODULES, resolveEntitlements } from '../config/entitlements.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -73,7 +74,7 @@ export const lookupAccount = async (req, res) => {
   try {
     const email = (req.query.email || '').trim().toLowerCase();
     if (!email) return res.status(400).json({ success: false, message: 'Provide an email.' });
-    const user = await User.findOne({ email }).select('email role businessAddon plan enterpriseHold').lean();
+    const user = await User.findOne({ email }).select('email role businessAddon plan enterpriseHold entitlements customPricing').lean();
     if (!user) return res.status(404).json({ success: false, message: 'No account found.' });
     res.json({ success: true, data: {
       email: user.email, role: user.role,
@@ -83,6 +84,9 @@ export const lookupAccount = async (req, res) => {
       planTier: user.plan?.tier || 'free',
       planActiveUntil: user.plan?.activeUntil || null,
       onHold: !!user.enterpriseHold?.active,
+      entitlements: resolveEntitlements(user),  // { provisioned, modules:{key:bool} }
+      moduleCatalog: MODULES,
+      customPricing: user.customPricing?.active ? user.customPricing : null,
     } });
   } catch (error) {
     logger.error('lookupAccount error', { error: error.message });
@@ -201,6 +205,78 @@ export const clearEnterpriseHold = async (req, res) => {
   } catch (error) {
     logger.error('clearEnterpriseHold error', { error: error.message });
     res.status(500).json({ success: false, message: 'Could not clear the hold.' });
+  }
+};
+
+// POST /api/admin/grants/entitlements  { email | userId, modules:{key:bool}, note? }
+// Provision an enterprise's module access (the checkboxes). Sets provisioned=true
+// so ONLY the ticked modules are active for this account. Unknown keys ignored.
+export const setEntitlements = async (req, res) => {
+  try {
+    const user = await findAccount(req.body);
+    if (!user) return res.status(404).json({ success: false, message: 'No account found.' });
+
+    const incoming = req.body.modules && typeof req.body.modules === 'object' ? req.body.modules : {};
+    const modules = new Map();
+    for (const key of MODULE_KEYS) modules.set(key, !!incoming[key]);
+
+    user.entitlements = {
+      provisioned: true,
+      modules,
+      note: req.body.note ? String(req.body.note).slice(0, 200) : (user.entitlements?.note || null),
+      setAt: new Date(),
+    };
+    await user.save();
+    logger.info('Admin set entitlements', { admin: req.admin?.email, email: user.email, modules: Object.fromEntries(modules) });
+    res.json({ success: true, message: `Module access updated for ${user.email}.`, data: resolveEntitlements(user) });
+  } catch (error) {
+    logger.error('setEntitlements error', { error: error.message });
+    res.status(500).json({ success: false, message: 'Could not set module access.' });
+  }
+};
+
+// POST /api/admin/grants/entitlements/clear  { email | userId }
+// Revert to defaults — the account gets every role-appropriate module again.
+export const clearEntitlements = async (req, res) => {
+  try {
+    const user = await findAccount(req.body);
+    if (!user) return res.status(404).json({ success: false, message: 'No account found.' });
+    user.entitlements = { provisioned: false, modules: undefined, note: null, setAt: null };
+    await user.save();
+    logger.info('Admin cleared entitlements', { admin: req.admin?.email, email: user.email });
+    res.json({ success: true, message: `Reverted ${user.email} to full default access.`, data: resolveEntitlements(user) });
+  } catch (error) {
+    logger.error('clearEntitlements error', { error: error.message });
+    res.status(500).json({ success: false, message: 'Could not clear module access.' });
+  }
+};
+
+// POST /api/admin/grants/custom-price  { email | userId, active, label, amount, currency, period, note }
+// Set (or clear) a negotiated price shown to this account — lets a rep close at
+// any figure. Display-only; does not itself charge anything.
+export const setCustomPricing = async (req, res) => {
+  try {
+    const user = await findAccount(req.body);
+    if (!user) return res.status(404).json({ success: false, message: 'No account found.' });
+    const active = req.body.active !== false && req.body.active !== 'false';
+    if (!active) {
+      user.customPricing = { active: false, label: null, amount: null, currency: null, period: null, note: null };
+    } else {
+      user.customPricing = {
+        active: true,
+        label:    req.body.label ? String(req.body.label).slice(0, 80) : 'Custom plan',
+        amount:   req.body.amount !== undefined ? Number(req.body.amount) : null,
+        currency: req.body.currency ? String(req.body.currency).toUpperCase().slice(0, 3) : null,
+        period:   req.body.period ? String(req.body.period).slice(0, 20) : 'month',
+        note:     req.body.note ? String(req.body.note).slice(0, 300) : null,
+      };
+    }
+    await user.save();
+    logger.info('Admin set custom pricing', { admin: req.admin?.email, email: user.email, pricing: user.customPricing });
+    res.json({ success: true, message: `Custom price ${active ? 'set' : 'cleared'} for ${user.email}.`, data: user.customPricing });
+  } catch (error) {
+    logger.error('setCustomPricing error', { error: error.message });
+    res.status(500).json({ success: false, message: 'Could not set custom price.' });
   }
 };
 
