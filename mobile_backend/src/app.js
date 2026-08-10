@@ -39,6 +39,7 @@ import adminMarketRoutes      from './routes/admin.market.routes.js';
 import { handlePaystackWebhook } from './api/subscription.controller.js';
 import { regeocodeAll }          from './api/professional.controller.js';
 import { adminProtect }          from './middlewares/adminAuthMiddleware.js';
+import { supabaseAdmin }         from './lib/supabase.js';
 import {
   getRevenueStats,
   getGrowthStats,
@@ -314,6 +315,35 @@ app.delete('/api/admin/users/:id', adminProtect, async (req, res) => {
     return res.json({ success: true, message: 'User deleted.' });
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Failed to delete user.' });
+  }
+});
+
+// Reconcile the email-verified flag against Supabase (source of truth). Mongo's
+// isVerified can be a stale "false" for users who actually confirmed their email
+// (confirmation + first login happen in the same instant, so the token that
+// syncUser saw didn't carry the confirmation, and they never logged in again).
+// This ONLY ever flips false -> true where Supabase confirms it — never the
+// reverse — so nobody is un-verified by running it.
+app.post('/api/admin/users/resync-verification', adminProtect, async (req, res) => {
+  try {
+    const users = await User.find({ isVerified: { $ne: true }, supabaseId: { $ne: null } })
+      .select('_id supabaseId email').limit(1000).lean();
+    let checked = 0, fixed = 0;
+    for (const u of users) {
+      if (!u.supabaseId) continue;
+      checked++;
+      try {
+        const { data, error } = await supabaseAdmin.auth.admin.getUserById(u.supabaseId);
+        if (error) continue;
+        if (data?.user?.email_confirmed_at) {
+          await User.updateOne({ _id: u._id }, { $set: { isVerified: true } });
+          fixed++;
+        }
+      } catch { /* skip this one, keep going */ }
+    }
+    return res.json({ success: true, message: `Checked ${checked} unverified account(s); corrected ${fixed} that were already confirmed in Supabase.`, data: { checked, fixed } });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Re-sync failed.' });
   }
 });
 
