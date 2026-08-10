@@ -81,3 +81,6 @@ jspm_packages/
 .Trashes
 ehthumbs.db
 Thumbs.db
+# Firebase client config (do not commit at repo root)
+google-services.json
+/google-services.json
