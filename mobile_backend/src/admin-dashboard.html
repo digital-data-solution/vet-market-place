@@ -352,6 +352,7 @@
       <div class="topbar">
         <h2>All Users</h2>
         <div style="display:flex;gap:8px">
+          <button class="btn btn-sm" onclick="resyncVerification()" title="Fix stale 'No' flags by checking each account against Supabase">🔄 Re-sync email status</button>
           <button class="btn btn-ghost btn-sm" onclick="exportUsersCSV()">⬇️ Export CSV</button>
           <button class="btn btn-ghost btn-sm" onclick="loadUsers()">↻ Refresh</button>
         </div>
@@ -382,7 +383,7 @@
         <div class="tbl-wrap">
           <table>
             <thead><tr>
-              <th>Name</th><th>Email</th><th>Role</th><th>Verified</th><th>Joined</th><th>Actions</th>
+              <th>Name</th><th>Email</th><th>Role</th><th title="Whether they confirmed their email address. Separate from vet/professional approval.">Email&nbsp;✓</th><th>Joined</th><th>Actions</th>
             </tr></thead>
             <tbody id="users-tbody"></tbody>
           </table>
@@ -1413,6 +1414,16 @@ async function deleteUser(id, name) {
   if (!confirm(`Delete user "${name}"? This is irreversible.`)) return;
   const r = await api('DELETE', `/api/admin/users/${id}`);
   if (r?.ok) { toast('User deleted'); loadUsers(); } else toast(r?.body?.message || 'Failed', 'error');
+}
+
+// Reconcile Mongo's email-verified flag against Supabase (the source of truth).
+// Fixes stale "No" rows for accounts that actually confirmed their email.
+async function resyncVerification() {
+  if (!confirm('Check every unverified account against Supabase and correct the ones that are actually confirmed?\n\nThis only ever turns "No" into "Yes" — it never removes anyone\'s verification.')) return;
+  toast('Re-syncing… this can take a moment.');
+  const r = await api('POST', '/api/admin/users/resync-verification', {});
+  if (r?.ok) { toast(r.body?.message || 'Done.'); loadUsers(); }
+  else toast(r?.body?.message || 'Re-sync failed.', 'error');
 }
 
 function openGrantSubModal(id, name) {
