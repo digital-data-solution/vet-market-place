@@ -596,6 +596,37 @@
         <div id="grant-result" style="margin-top:12px;font-size:13px;color:#334155"></div>
       </div>
 
+      <h3 style="font-size:14px;color:#334155;margin:24px 0 10px">🏢 Provision Enterprise — module access &amp; custom price</h3>
+      <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:16px;max-width:900px">
+        <p style="color:#64748B;font-size:13px;margin:0 0 12px">Give a VIP/enterprise account exactly the modules it should see, and set a negotiated price. Uses the <b>Account email</b> field above. Tick the modules, then <b>Save module access</b>. "Reset to full access" reverts them to seeing every module their role allows.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+          <button class="btn btn-sm" onclick="loadEntitlements()">🔎 Load this account's modules</button>
+          <span id="ent-account" style="font-size:13px;color:#334155"></span>
+        </div>
+        <div id="ent-modules" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px;margin-bottom:12px"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <button class="btn btn-sm" onclick="saveEntitlements()">✓ Save module access</button>
+          <button class="btn btn-ghost btn-sm" onclick="resetEntitlements()">Reset to full access</button>
+        </div>
+
+        <h4 style="font-size:13px;color:#334155;margin:18px 0 8px">Custom / negotiated price (display-only)</h4>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end">
+          <div style="flex:2;min-width:160px"><label style="font-size:12px;color:#64748B;display:block;margin-bottom:4px">Label</label>
+            <input id="cp-label" placeholder="Enterprise (Saudi pilot)" style="width:100%;padding:9px;border:1px solid #CBD5E1;border-radius:8px" /></div>
+          <div style="flex:1;min-width:90px"><label style="font-size:12px;color:#64748B;display:block;margin-bottom:4px">Amount</label>
+            <input id="cp-amount" type="number" min="0" placeholder="200" style="width:100%;padding:9px;border:1px solid #CBD5E1;border-radius:8px" /></div>
+          <div style="flex:1;min-width:80px"><label style="font-size:12px;color:#64748B;display:block;margin-bottom:4px">Currency</label>
+            <input id="cp-currency" placeholder="SAR" maxlength="3" style="width:100%;padding:9px;border:1px solid #CBD5E1;border-radius:8px;text-transform:uppercase" /></div>
+          <div style="flex:1;min-width:90px"><label style="font-size:12px;color:#64748B;display:block;margin-bottom:4px">Period</label>
+            <select id="cp-period" style="width:100%;padding:9px;border:1px solid #CBD5E1;border-radius:8px"><option value="month">/month</option><option value="year">/year</option><option value="one-off">one-off</option></select></div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center">
+          <button class="btn btn-sm" onclick="saveCustomPrice()">✓ Set custom price</button>
+          <button class="btn btn-ghost btn-sm" onclick="clearCustomPrice()" style="color:#DC2626">Clear price</button>
+          <span id="ent-result" style="font-size:13px;color:#334155"></span>
+        </div>
+      </div>
+
       <h3 style="font-size:14px;color:#334155;margin:24px 0 10px">Whale accounts (usage too big for their plan)</h3>
       <div style="background:#fff;border:1px solid #E2E8F0;border-radius:12px;padding:16px;max-width:900px">
         <p style="color:#64748B;font-size:13px;margin:0 0 12px">Accounts whose usage (patients / staff seats / products / 30-day sales) flags them as large. Talk to whales to move them to Enterprise pricing; "Hold" blocks their new records until they pay.</p>
@@ -1911,6 +1942,82 @@ async function revokeGrant() {
   const r = await api('POST', '/api/admin/grants/business/revoke', { email });
   if (r?.ok) { grantMsg('Revoked for ' + email + '.'); toast('Revoked'); }
   else grantMsg((r?.body?.message) || 'Failed to revoke.', false);
+}
+
+// ── Provision Enterprise: module access (checkboxes) + custom price ────────────
+function entMsg(html, ok = true) {
+  const el = document.getElementById('ent-result');
+  el.style.color = ok ? '#047857' : '#DC2626';
+  el.innerHTML = html;
+}
+async function loadEntitlements() {
+  const email = document.getElementById('grant-email').value.trim();
+  if (!email) return entMsg('Enter the Account email above first.', false);
+  const r = await api('GET', '/api/admin/grants/lookup?email=' + encodeURIComponent(email));
+  if (!r?.ok) return entMsg((r?.body?.message) || 'Account not found.', false);
+  const d = r.body.data;
+  const catalog = d.moduleCatalog || [];
+  const modules = d.entitlements?.modules || {};
+  document.getElementById('ent-account').innerHTML =
+    `<b>${d.email}</b> (${d.role||'—'}) · access: <b>${d.entitlements?.provisioned ? 'CUSTOM' : 'full default'}</b>`;
+  const wrap = document.getElementById('ent-modules');
+  wrap.innerHTML = catalog.map(m =>
+    `<label style="display:flex;gap:8px;align-items:flex-start;padding:8px;border:1px solid #E2E8F0;border-radius:8px;cursor:pointer">
+      <input type="checkbox" class="ent-mod" data-key="${m.key}" ${modules[m.key] ? 'checked' : ''} style="margin-top:2px" />
+      <span><b style="font-size:13px;color:#334155">${m.label}</b><br><span style="font-size:11px;color:#94A3B8">${m.description}</span></span>
+    </label>`).join('');
+  // Prefill custom price if set
+  const cp = d.customPricing;
+  if (cp) {
+    document.getElementById('cp-label').value = cp.label || '';
+    document.getElementById('cp-amount').value = cp.amount ?? '';
+    document.getElementById('cp-currency').value = cp.currency || '';
+    if (cp.period) document.getElementById('cp-period').value = cp.period;
+  }
+  entMsg('Loaded. Tick the modules this account should have, then Save.');
+}
+function collectModules() {
+  const out = {};
+  document.querySelectorAll('.ent-mod').forEach(cb => { out[cb.getAttribute('data-key')] = cb.checked; });
+  return out;
+}
+async function saveEntitlements() {
+  const email = document.getElementById('grant-email').value.trim();
+  if (!email) return entMsg('Enter the Account email above first.', false);
+  const modules = collectModules();
+  if (!Object.keys(modules).length) return entMsg('Load the account first to see its modules.', false);
+  const r = await api('POST', '/api/admin/grants/entitlements', { email, modules });
+  if (r?.ok) { entMsg('✓ ' + (r.body.message || 'Saved.')); toast('Module access saved'); }
+  else entMsg((r?.body?.message) || 'Failed to save.', false);
+}
+async function resetEntitlements() {
+  const email = document.getElementById('grant-email').value.trim();
+  if (!email) return entMsg('Enter the Account email above first.', false);
+  if (!confirm('Reset ' + email + ' to full default access (see every module their role allows)?')) return;
+  const r = await api('POST', '/api/admin/grants/entitlements/clear', { email });
+  if (r?.ok) { entMsg('✓ ' + (r.body.message || 'Reset.')); toast('Reset to full access'); loadEntitlements(); }
+  else entMsg((r?.body?.message) || 'Failed.', false);
+}
+async function saveCustomPrice() {
+  const email = document.getElementById('grant-email').value.trim();
+  if (!email) return entMsg('Enter the Account email above first.', false);
+  const body = {
+    email, active: true,
+    label: document.getElementById('cp-label').value.trim(),
+    amount: parseFloat(document.getElementById('cp-amount').value) || null,
+    currency: document.getElementById('cp-currency').value.trim(),
+    period: document.getElementById('cp-period').value,
+  };
+  const r = await api('POST', '/api/admin/grants/custom-price', body);
+  if (r?.ok) { entMsg('✓ ' + (r.body.message || 'Price set.')); toast('Custom price set'); }
+  else entMsg((r?.body?.message) || 'Failed.', false);
+}
+async function clearCustomPrice() {
+  const email = document.getElementById('grant-email').value.trim();
+  if (!email) return entMsg('Enter the Account email above first.', false);
+  const r = await api('POST', '/api/admin/grants/custom-price', { email, active: false });
+  if (r?.ok) { entMsg('Price cleared.'); toast('Cleared'); }
+  else entMsg((r?.body?.message) || 'Failed.', false);
 }
 
 // ── Whale accounts ─────────────────────────────────────────────────────────────

@@ -59,7 +59,7 @@ const PRACTICE_PERMS = ['reception', 'clinical', 'lab'];
 //   perm      — staff must hold this permission (owner always passes)
 //   ownerOnly — staff are refused (billing/limits are the owner's call)
 // Returns { userId (vet tenant), professional, staff, actorName, isOwner } or null.
-async function requireVet(req, res, { perm = null, ownerOnly = false } = {}) {
+export async function requireVet(req, res, { perm = null, ownerOnly = false } = {}) {
   const ownerId = req.businessOwnerId || req.user?._id || req.user?.id;
   if (!ownerId) { res.status(401).json({ success: false, message: 'Not authorized.' }); return null; }
 

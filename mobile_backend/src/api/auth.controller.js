@@ -4,6 +4,7 @@ import { supabaseAdmin, verifySupabaseToken } from '../lib/supabase.js';
 import { sendWelcomeEmail } from '../services/email.service.js';
 import { logActivity } from '../lib/activityLogger.js';
 import { applyReferralReward } from '../lib/referralHelper.js';
+import { resolveEntitlements } from '../config/entitlements.js';
 
 export const register = async (req, res) => {
   const { name, email, password, role, location, vetDetails, kennelDetails, vcnNumber, cacNumber, referralCode,
@@ -178,7 +179,11 @@ export const syncUser = async (req, res) => {
 
 // GET /api/auth/me — returns the authenticated user loaded by protect middleware
 export const getMe = async (req, res) => {
-  return res.json({ user: req.user });
+  // Attach resolved module access + any negotiated price so the app can show/hide
+  // module tiles. Non-breaking: existing `user` field is unchanged.
+  const entitlements = resolveEntitlements(req.user);
+  const customPricing = req.user?.customPricing?.active ? req.user.customPricing : null;
+  return res.json({ user: req.user, entitlements, customPricing });
 };
 
 export const getReferralInfo = async (req, res) => {

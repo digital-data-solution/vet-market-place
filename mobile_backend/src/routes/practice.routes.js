@@ -23,6 +23,24 @@ import {
   deleteLabResult,
   getDueSoon,
 } from '../api/practice.controller.js';
+import {
+  listHospitalizations,
+  admitPatient,
+  addHospitalizationLog,
+  updateHospitalization,
+  dischargePatient,
+  deleteHospitalization,
+  createSurgery,
+  updateSurgery,
+  deleteSurgery,
+  createGrooming,
+  updateGrooming,
+  deleteGrooming,
+  createProcedure,
+  updateProcedure,
+  deleteProcedure,
+  getPatientClinical,
+} from '../api/practice.clinical.controller.js';
 import businessAuth from '../middlewares/businessAuth.js';
 
 const router = express.Router();
@@ -59,5 +77,27 @@ router.delete('/vaccinations/:id', deleteVaccination);
 router.post('/patients/:patientId/lab', createLabResult);
 router.put('/lab/:id',    updateLabResult);
 router.delete('/lab/:id', deleteLabResult);
+
+// ── Clinical extensions: hospitalization (wards), surgery, grooming ──────────
+router.get('/patients/:patientId/clinical', getPatientClinical);
+
+router.get('/hospitalizations', listHospitalizations); // ward board (?status=&patientId=)
+router.post('/patients/:patientId/hospitalizations', admitPatient);
+router.post('/hospitalizations/:id/logs', addHospitalizationLog);
+router.post('/hospitalizations/:id/discharge', dischargePatient);
+router.put('/hospitalizations/:id', updateHospitalization);
+router.delete('/hospitalizations/:id', deleteHospitalization);
+
+router.post('/patients/:patientId/surgeries', createSurgery);
+router.put('/surgeries/:id', updateSurgery);
+router.delete('/surgeries/:id', deleteSurgery);
+
+router.post('/patients/:patientId/grooming', createGrooming);
+router.put('/grooming/:id', updateGrooming);
+router.delete('/grooming/:id', deleteGrooming);
+
+router.post('/patients/:patientId/procedures', createProcedure);
+router.put('/procedures/:id', updateProcedure);
+router.delete('/procedures/:id', deleteProcedure);
 
 export default router;

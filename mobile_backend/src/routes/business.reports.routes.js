@@ -9,12 +9,20 @@ import {
   listDayCloses,
   getMonth,
   getMonthCsv,
+  getSettings,
+  setOwnerPin,
+  verifyOwnerPin,
 } from '../api/business.reports.controller.js';
 import businessAuth from '../middlewares/businessAuth.js';
 
 const router = express.Router();
 
 router.use(businessAuth);
+
+// Self-service Settings hub (entitlements + profile + completion + PIN state)
+router.get('/settings', getSettings);
+router.post('/owner-pin', setOwnerPin);
+router.post('/verify-owner-pin', verifyOwnerPin);
 
 // Receipt identity (logo/header/footer)
 router.get('/business-profile', getBusinessProfile);

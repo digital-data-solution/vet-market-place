@@ -22,9 +22,19 @@ const saleSchema = new mongoose.Schema(
     owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
 
     items:    { type: [saleItemSchema], required: true },
-    subtotal: { type: Number, required: true, min: 0 },
+    subtotal: { type: Number, required: true, min: 0 }, // sum of line totals, before discount
     discount: { type: Number, default: 0, min: 0 },
-    total:    { type: Number, required: true, min: 0 },
+    // Tax snapshot at sale time (from the business's own tax settings). `amount`
+    // is the tax charged; `inclusive` records whether it was already inside the
+    // line prices. `total` is what the customer actually pays (tax-inclusive).
+    // Tax collected is NOT profit — reporting subtracts `tax.amount` from profit.
+    tax: {
+      name:      { type: String, default: null }, // VAT | GST | Sales Tax | Zakat...
+      rate:      { type: Number, default: 0 },     // percent applied
+      amount:    { type: Number, default: 0 },     // currency amount of tax on this sale
+      inclusive: { type: Boolean, default: false },
+    },
+    total:    { type: Number, required: true, min: 0 }, // grand total the customer pays
     costTotal:{ type: Number, default: 0 }, // sum of unitCost*qty — for profit
     amountPaid: { type: Number, default: 0, min: 0 },
 

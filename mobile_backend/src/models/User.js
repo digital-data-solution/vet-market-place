@@ -141,6 +141,36 @@ const userSchema = new mongoose.Schema({
     activeUntil:          { type: Date, default: null },
     lastPaymentReference: { type: String, default: null },
   },
+
+  // Per-account module access ("what this business can use"). Set by admin when
+  // provisioning an enterprise (see config/entitlements.js + admin.grants). When
+  // `provisioned` is false/absent the app behaves exactly as before — every
+  // role-appropriate module is on — so nobody is locked out by this field's
+  // mere existence. `modules` is a free-form map of { moduleKey: Boolean }.
+  entitlements: {
+    provisioned: { type: Boolean, default: false },
+    modules:     { type: Map, of: Boolean, default: undefined },
+    note:        { type: String, default: null }, // free-text label e.g. "Saudi pilot"
+    setAt:       { type: Date, default: null },
+  },
+
+  // Negotiated / custom price shown to this account instead of the standard tier
+  // price — lets a rep close a deal at any figure (boss can drop the price).
+  // Display-only; billing still happens off-platform or via the tier flow.
+  customPricing: {
+    active:   { type: Boolean, default: false },
+    label:    { type: String, default: null }, // e.g. "Enterprise (Saudi pilot)"
+    amount:   { type: Number, default: null },
+    currency: { type: String, default: null }, // e.g. "SAR", "USD", "NGN"
+    period:   { type: String, default: null }, // e.g. "month", "year", "one-off"
+    note:     { type: String, default: null },
+  },
+
+  // Owner's quick-unlock PIN (self-service, set/changed in Settings). Separate
+  // from the Supabase password used to log in — this is a convenience gate for
+  // the owner on a shared device, mirroring StaffMember.pinHash. select:false so
+  // it never leaves the server.
+  ownerPinHash: { type: String, select: false, default: null },
 }, { timestamps: true });
 
 userSchema.index({ supabaseId: 1 }, { unique: true, sparse: true });
