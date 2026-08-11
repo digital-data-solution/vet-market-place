@@ -16,6 +16,7 @@
 import axios from 'axios';
 import mongoose from 'mongoose';
 import Product from '../models/Product.js';
+import Batch from '../models/Batch.js';
 import StockMovement from '../models/StockMovement.js';
 import Sale from '../models/Sale.js';
 import StaffMember from '../models/StaffMember.js';
@@ -115,6 +116,38 @@ async function resolveActor(userId, staffId) {
 
 function recordMovement(fields) {
   return StockMovement.create(fields);
+}
+
+// Deplete `qty` units from a batch-tracked product's active batches in policy
+// order — FEFO (earliest expiry first; null-expiry lots last) or FIFO (earliest
+// received first). Caller must have already confirmed the product-level total
+// covers `qty`. Depleted lots are deactivated. Returns { remaining, touched };
+// remaining > 0 signals under-depletion (roll-up/batch drift — logged, not fatal).
+const FAR_FUTURE = 8640000000000000; // max representable epoch ms
+async function depleteBatches(owner, productId, qty, policy) {
+  const batches = await Batch.find({ owner, product: productId, isActive: true, quantity: { $gt: 0 } }).lean();
+  batches.sort((a, b) => {
+    if (policy === 'FIFO') return new Date(a.createdAt) - new Date(b.createdAt);
+    const ea = a.expiryDate ? new Date(a.expiryDate).getTime() : FAR_FUTURE;
+    const eb = b.expiryDate ? new Date(b.expiryDate).getTime() : FAR_FUTURE;
+    return (ea - eb) || (new Date(a.createdAt) - new Date(b.createdAt)); // tiebreak: oldest received
+  });
+  let remaining = qty;
+  const touched = [];
+  for (const b of batches) {
+    if (remaining <= 0) break;
+    const take = Math.min(b.quantity, remaining);
+    const upd = await Batch.findOneAndUpdate(
+      { _id: b._id, owner, quantity: { $gte: take } },
+      { $inc: { quantity: -take } },
+      { new: true },
+    );
+    if (!upd) continue; // lost a race for this lot — try the next one
+    remaining -= take;
+    touched.push({ batch: b._id, lotNumber: b.lotNumber, expiryDate: b.expiryDate, taken: take });
+    if (upd.quantity <= 0) await Batch.updateOne({ _id: b._id, owner }, { $set: { isActive: false } });
+  }
+  return { remaining, touched };
 }
 
 function seatInfo(user) {
@@ -345,13 +378,22 @@ export const createProduct = async (req, res) => {
     const startQty = Math.max(0, parseInt(req.body.quantity, 10) || 0);
     const product = await Product.create({
       owner: ctx.userId, quantity: startQty,
-      ...pick(req.body, ['name', 'sku', 'barcode', 'category', 'unit', 'photo', 'costPrice', 'sellPrice', 'lowStockThreshold']),
+      ...pick(req.body, ['name', 'sku', 'barcode', 'category', 'unit', 'photo', 'costPrice', 'sellPrice', 'lowStockThreshold', 'trackBatches', 'stockPolicy']),
     });
     if (startQty > 0) {
       const actor = await actorFor(ctx, req);
+      // Opening stock as a first batch (lot/expiry optional) when the product is tracked.
+      if (product.trackBatches) {
+        await Batch.create({ owner: ctx.userId, product: product._id, productName: product.name,
+          lotNumber: (req.body.lotNumber || '').trim() || null,
+          expiryDate: req.body.expiryDate ? new Date(req.body.expiryDate) : null,
+          quantity: startQty, received: startQty, costPrice: product.costPrice || 0 });
+      }
       await recordMovement({ owner: ctx.userId, product: product._id, productName: product.name,
         type: 'initial', quantityChange: startQty, quantityBefore: 0, quantityAfter: startQty,
-        unitCost: product.costPrice || null, staff: actor.staffId, staffName: actor.staffName });
+        unitCost: product.costPrice || null,
+        reason: product.trackBatches && req.body.lotNumber ? `Lot ${req.body.lotNumber}` : null,
+        staff: actor.staffId, staffName: actor.staffName });
     }
     res.status(201).json({ success: true, data: product });
   } catch (error) {
@@ -367,7 +409,19 @@ export const getProduct = async (req, res) => {
     const product = await Product.findOne({ _id: req.params.id, owner: ctx.userId }).lean();
     if (!product) return res.status(404).json({ success: false, message: 'Product not found.' });
     const movements = await StockMovement.find({ product: product._id, owner: ctx.userId }).sort({ createdAt: -1 }).limit(100).lean();
-    res.json({ success: true, data: { ...product, movements } });
+    let batches = [];
+    if (product.trackBatches) {
+      const rows = await Batch.find({ owner: ctx.userId, product: product._id, isActive: true, quantity: { $gt: 0 } }).lean();
+      const now = Date.now();
+      batches = rows
+        .map((b) => ({ ...b, expired: !!b.expiryDate && new Date(b.expiryDate).getTime() < now }))
+        .sort((a, b) => { // FEFO display order (matches consumption for the common case)
+          const ea = a.expiryDate ? new Date(a.expiryDate).getTime() : FAR_FUTURE;
+          const eb = b.expiryDate ? new Date(b.expiryDate).getTime() : FAR_FUTURE;
+          return (ea - eb) || (new Date(a.createdAt) - new Date(b.createdAt));
+        });
+    }
+    res.json({ success: true, data: { ...product, movements, batches } });
   } catch (error) {
     logger.error('Get product error', { error: error.message });
     res.status(500).json({ success: false, message: 'Failed to load product.' });
@@ -381,7 +435,7 @@ export const updateProduct = async (req, res) => {
   try {
     const product = await Product.findOneAndUpdate(
       { _id: req.params.id, owner: ctx.userId },
-      { $set: pick(req.body, ['name', 'sku', 'barcode', 'category', 'unit', 'photo', 'costPrice', 'sellPrice', 'lowStockThreshold', 'isActive']) },
+      { $set: pick(req.body, ['name', 'sku', 'barcode', 'category', 'unit', 'photo', 'costPrice', 'sellPrice', 'lowStockThreshold', 'trackBatches', 'stockPolicy', 'isActive']) },
       { new: true },
     );
     if (!product) return res.status(404).json({ success: false, message: 'Product not found.' });
@@ -423,10 +477,19 @@ export const restockProduct = async (req, res) => {
       { $inc: { quantity: qty }, ...(Object.keys(set).length ? { $set: set } : {}) },
       { new: true },
     );
+    // Tracked products: each restock is a new dated lot (feeds FEFO/FIFO + expiry alerts).
+    let lotNote = null;
+    if (before.trackBatches) {
+      const lotNumber = (req.body.lotNumber || '').trim() || null;
+      await Batch.create({ owner: ctx.userId, product: before._id, productName: before.name,
+        lotNumber, expiryDate: req.body.expiryDate ? new Date(req.body.expiryDate) : null,
+        quantity: qty, received: qty, costPrice: !isNaN(unitCost) ? unitCost : (before.costPrice || 0) });
+      if (lotNumber) lotNote = `Lot ${lotNumber}`;
+    }
     const actor = await actorFor(ctx, req);
     await recordMovement({ owner: ctx.userId, product: updated._id, productName: updated.name,
       type: 'restock', quantityChange: qty, quantityBefore: updated.quantity - qty, quantityAfter: updated.quantity,
-      unitCost: !isNaN(unitCost) ? unitCost : null, reason: req.body.reason || null, staff: actor.staffId, staffName: actor.staffName });
+      unitCost: !isNaN(unitCost) ? unitCost : null, reason: req.body.reason || lotNote || null, staff: actor.staffId, staffName: actor.staffName });
     res.json({ success: true, data: updated });
   } catch (error) {
     logger.error('Restock product error', { error: error.message });
@@ -471,6 +534,61 @@ export const listProductMovements = async (req, res) => {
   } catch (error) {
     logger.error('List product movements error', { error: error.message });
     res.status(500).json({ success: false, message: 'Failed to load history.' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BATCHES / EXPIRY (FEFO)
+// ─────────────────────────────────────────────────────────────────────────────
+// Expiring & expired stock across the whole business, soonest first. `days`
+// query (default 60) sets the "expiring soon" horizon.
+export const listExpiring = async (req, res) => {
+  const ctx = await requireOwner(req, res);
+  if (!ctx) return;
+  try {
+    const days = Math.min(365, Math.max(1, parseInt(req.query.days, 10) || 60));
+    const horizon = new Date(Date.now() + days * 86400000);
+    const rows = await Batch.find({
+      owner: ctx.userId, isActive: true, quantity: { $gt: 0 },
+      expiryDate: { $ne: null, $lte: horizon },
+    }).sort({ expiryDate: 1 }).limit(500).lean();
+    const now = Date.now();
+    const data = rows.map((b) => ({ ...b, expired: new Date(b.expiryDate).getTime() < now }));
+    res.json({ success: true, data, horizonDays: days });
+  } catch (error) {
+    logger.error('List expiring error', { error: error.message });
+    res.status(500).json({ success: false, message: 'Failed to load expiring stock.' });
+  }
+};
+
+// Write off a whole batch (expired / damaged): zeroes the lot, drops the product
+// roll-up, and records a 'damage' movement so it stays in the audit trail.
+export const writeOffBatch = async (req, res) => {
+  const ctx = await requireOwner(req, res);
+  if (!ctx) return;
+  if (blocked(ctx, res, 'adjustStock')) return;
+  try {
+    const batch = await Batch.findOne({ _id: req.params.batchId, owner: ctx.userId });
+    if (!batch || !batch.isActive || batch.quantity <= 0) {
+      return res.status(404).json({ success: false, message: 'Batch not found or already cleared.' });
+    }
+    const qty = batch.quantity;
+    batch.quantity = 0; batch.isActive = false;
+    await batch.save();
+    const updated = await Product.findOneAndUpdate(
+      { _id: batch.product, owner: ctx.userId },
+      { $inc: { quantity: -qty } }, { new: true },
+    );
+    const after = updated?.quantity ?? 0;
+    const actor = await actorFor(ctx, req);
+    await recordMovement({ owner: ctx.userId, product: batch.product, productName: batch.productName,
+      type: 'damage', quantityChange: -qty, quantityBefore: after + qty, quantityAfter: after,
+      reason: (req.body.reason || '').trim() || `Wrote off lot ${batch.lotNumber || '(no lot no.)'}`,
+      staff: actor.staffId, staffName: actor.staffName });
+    res.json({ success: true, data: updated });
+  } catch (error) {
+    logger.error('Write-off batch error', { error: error.message });
+    res.status(500).json({ success: false, message: 'Failed to write off batch.' });
   }
 };
 
@@ -549,6 +667,7 @@ export const createSale = async (req, res) => {
     const actor = await actorFor(ctx, req);
 
     for (const li of lineItems) {
+      const p = byId.get(String(li.product));
       const ok = await Product.findOneAndUpdate(
         { _id: li.product, owner: ctx.userId, quantity: { $gte: li.quantity } },
         { $inc: { quantity: -li.quantity } },
@@ -558,7 +677,7 @@ export const createSale = async (req, res) => {
         for (const done of decremented) await Product.updateOne({ _id: done.product, owner: ctx.userId }, { $inc: { quantity: done.quantity } });
         return res.status(409).json({ success: false, message: `Not enough stock for ${li.productName}.`, code: 'INSUFFICIENT_STOCK' });
       }
-      decremented.push({ product: li.product, quantity: li.quantity, after: ok.quantity });
+      decremented.push({ product: li.product, quantity: li.quantity, after: ok.quantity, trackBatches: p.trackBatches, policy: p.stockPolicy });
     }
 
     const sale = await Sale.create({
@@ -569,12 +688,21 @@ export const createSale = async (req, res) => {
       staff: actor.staffId, staffName: actor.staffName, note: req.body.note || null,
     });
 
-    await StockMovement.insertMany(lineItems.map((li) => {
+    const movements = [];
+    for (const li of lineItems) {
       const d = decremented.find((x) => x.product.equals(li.product));
-      return { owner: ctx.userId, product: li.product, productName: li.productName,
+      let lotNote = null;
+      if (d.trackBatches) {
+        // Consume this product's oldest/earliest-expiring lots (FEFO/FIFO).
+        const { remaining, touched } = await depleteBatches(ctx.userId, li.product, li.quantity, d.policy);
+        if (touched.length) lotNote = touched.map((t) => `${t.lotNumber || 'lot'}×${t.taken}`).join(', ');
+        if (remaining > 0) logger.warn('Batch under-depletion on sale', { product: String(li.product), remaining });
+      }
+      movements.push({ owner: ctx.userId, product: li.product, productName: li.productName,
         type: 'sale', quantityChange: -li.quantity, quantityBefore: d.after + li.quantity, quantityAfter: d.after,
-        unitPrice: li.unitPrice, staff: actor.staffId, staffName: actor.staffName, sale: sale._id };
-    }));
+        unitPrice: li.unitPrice, reason: lotNote, staff: actor.staffId, staffName: actor.staffName, sale: sale._id });
+    }
+    await StockMovement.insertMany(movements);
 
     logActivity(ctx.userId, ctx.user.role, 'business.sale', { total, items: lineItems.length, staff: actor.staffName });
     res.status(201).json({ success: true, data: sale });

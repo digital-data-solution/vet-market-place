@@ -122,6 +122,11 @@ const userSchema = new mongoose.Schema({
   // One-time "try the Business Suite" promo email gate — fires at most once.
   businessPromoSentAt: { type: Date, default: null },
 
+  // Set by jobs/mediaCleanup.js when a lapsed member is warned that their extra
+  // gallery photos will be removed. Cleared when they renew / drop back within
+  // limit, so a future lapse warns again. Guarantees notice before any deletion.
+  mediaCleanupWarnedAt: { type: Date, default: null },
+
   // Enterprise hold — a big "whale" whose usage outgrew their plan. When active,
   // the app blocks NEW records (reads still work, so no data is lost) until they
   // move to an Enterprise plan. Set by admin (admin.grants) after usage flags

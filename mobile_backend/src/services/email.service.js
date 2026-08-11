@@ -308,6 +308,26 @@ export async function sendSubscriptionExpired(name, email, plan, isProfessional)
   await sendEmail(email, `Your Xpress Vet ${planLabel} plan has expired`, html);
 }
 
+/**
+ * Warns a lapsed member that their EXTRA gallery photos (beyond the free plan)
+ * will be removed on `removalDate` unless they renew. Sent once by
+ * jobs/mediaCleanup.js before any deletion happens.
+ */
+export async function sendMediaCleanupWarning(name, email, removeCount, keepCount, removalDate) {
+  const firstName = name?.split(' ')[0] || 'there';
+  const when = new Date(removalDate).toLocaleDateString('en-NG', { day: 'numeric', month: 'long', year: 'numeric' });
+
+  const html = layout('Action needed — your extra photos', `
+    <h1>⏳ ${removeCount} of your photos will be removed on ${when}</h1>
+    <p>Hi ${firstName}, your paid plan has ended, so your gallery is over the free limit.</p>
+    <div class="highlight"><p>⚠️ To free up storage, <strong>${removeCount} extra photo${removeCount !== 1 ? 's' : ''}</strong> will be permanently deleted on <strong>${when}</strong>. Your first ${keepCount} photo${keepCount !== 1 ? 's' : ''} will be kept.</p></div>
+    <p><strong>Renew before then to keep everything.</strong> Open the Xpress Vet app and go to <strong>Profile → Subscription</strong>.</p>
+    <p>If you don't renew, deleted photos can't be recovered — but you can always re-upload after renewing.</p>
+    <p style="margin-top:24px;">We'd love to keep you,<br/><strong>The Xpress Vet Team</strong> 🐾</p>
+  `);
+  await sendEmail(email, `Renew to keep your ${removeCount} extra photo${removeCount !== 1 ? 's' : ''} — removal on ${when}`, html);
+}
+
 /** Sent to a vet/professional when admin approves their verification */
 export async function sendVerificationApproved(name, email) {
   const firstName = name?.split(' ')[0] || 'there';
