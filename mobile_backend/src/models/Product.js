@@ -21,8 +21,15 @@ const productSchema = new mongoose.Schema(
     costPrice: { type: Number, default: 0, min: 0 },  // what the owner paid (for profit calc)
     sellPrice: { type: Number, required: true, min: 0 }, // what customers pay
 
-    quantity:           { type: Number, default: 0 },     // current stock on hand
+    quantity:           { type: Number, default: 0 },     // current stock on hand (roll-up of all active batches when tracked)
     lowStockThreshold:  { type: Number, default: 5, min: 0 },
+
+    // Batch / lot + expiry tracking (opt-in per product — a vaccine needs it, a
+    // leash doesn't). When on, each restock creates a Batch and sales deplete
+    // batches in `stockPolicy` order. `quantity` above stays the roll-up total,
+    // so all existing low-stock / reporting logic keeps working unchanged.
+    trackBatches: { type: Boolean, default: false },
+    stockPolicy:  { type: String, enum: ['FEFO', 'FIFO'], default: 'FEFO' }, // FEFO = earliest-expiry-first (vet/pharmacy default)
 
     isActive: { type: Boolean, default: true }, // soft delete — keeps sales history intact
   },

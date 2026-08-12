@@ -133,7 +133,10 @@ export const browseListings = async (req, res) => {
     if (category) filter.category = category;
     if (q) {
       const re = new RegExp(q.toString().trim().slice(0, 60).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-      filter.$and = [{ $or: [{ title: re }, { description: re }, { breed: re }, { species: re }] }];
+      // Match text AND location: buyers commonly type a city/area ("Lagos",
+      // "Ikeja") into the search box expecting location filtering, so include
+      // city + address alongside the content fields.
+      filter.$and = [{ $or: [{ title: re }, { description: re }, { breed: re }, { species: re }, { city: re }, { address: re }] }];
     }
     const price = {};
     if (minPrice) price.$gte = parseInt(minPrice, 10);

@@ -59,8 +59,13 @@ const listingSchema = new mongoose.Schema({
   contactWhatsapp: { type: String, trim: true, default: null },
 
   // Location — GeoJSON point for "near me" browsing + human-readable text.
+  // NOTE: no `default: 'Point'` on `type` — a default would make Mongoose
+  // materialise `location: { type: 'Point' }` with NO coordinates whenever a
+  // seller lists without granting GPS. A 2dsphere index rejects that malformed
+  // point, so EVERY GPS-less listing would fail to save. Leaving it undefined
+  // means the whole `location` object is simply absent (index skips it).
   location: {
-    type:        { type: String, enum: ['Point'], default: 'Point' },
+    type:        { type: String, enum: ['Point'] },
     coordinates: { type: [Number], default: undefined }, // [lng, lat]
   },
   address: { type: String, trim: true, maxlength: 200, default: null },

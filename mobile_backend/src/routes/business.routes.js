@@ -12,6 +12,8 @@ import {
   restockProduct,
   adjustProduct,
   listProductMovements,
+  listExpiring,
+  writeOffBatch,
   listMovements,
   createSale,
   listSales,
@@ -50,6 +52,10 @@ router.delete('/products/:id',        deleteProduct);
 router.post('/products/:id/restock',  restockProduct);
 router.post('/products/:id/adjust',   adjustProduct);
 router.get('/products/:id/movements', listProductMovements);
+
+// Batches / expiry (FEFO)
+router.get('/batches/expiring',            listExpiring);
+router.post('/batches/:batchId/write-off', writeOffBatch);
 
 // Audit log
 router.get('/movements', listMovements);
