@@ -206,11 +206,14 @@ app.get('/l/:id', async (req, res) => {
 });
 
 // ─── Rate limiters ────────────────────────────────────────────────────────────
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
-  message: 'Too many requests, please try again later.',
-});
+// authLimiter used to live here and wrap the ENTIRE /api/auth router — that
+// meant every frequently-called, non-brute-forceable endpoint under it
+// (sync, me, referral-info, push-token, web-push-subscription — all called
+// on every single login) shared one 20-req/15min bucket per IP with actual
+// login/register. Confirmed in production: routine use exhausted it and
+// produced real 429s on /me and /web-push-subscription. Moved into
+// routes/auth.routes.js, scoped to just the routes that do real credential
+// work (register, admin/login).
 
 const messageLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -533,7 +536,7 @@ app.use('/api/email',               emailRoutes);
 app.use('/api/v1/practice',         practiceRoutes);
 app.use('/api/v1/business/reports', businessReportsRoutes);
 app.use('/api/v1/business',         businessRoutes);
-app.use('/api/auth',                authLimiter, authRoutes);
+app.use('/api/auth',                authRoutes);
 app.use('/api/v1/professionals',    listingLimiter, professionalRoutes);
 app.use('/api/v1/kennels',          listingLimiter, kennelRoutes);
 app.use('/api/v1/shops',            listingLimiter, shopRoutes);
