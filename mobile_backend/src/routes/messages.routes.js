@@ -5,6 +5,7 @@ import { supabaseAdmin }         from '../lib/supabase.js';
 import logger                    from '../lib/logger.js';
 import { logActivity }           from '../lib/activityLogger.js';
 import User                      from '../models/User.js';
+import { sendPushNotification }  from '../services/pushNotification.service.js';
 
 const router = express.Router();
 
@@ -54,6 +55,26 @@ router.post('/send', protect, enforceSubscription, async (req, res) => {
     logActivity(req.user._id || req.user.id, req.user.role, 'message.sent', {
       toSupabaseId: toUserId,
     }, req);
+
+    // Push the recipient — fire-and-forget, never blocks the send response.
+    // Recipient is keyed by supabaseId here (Supabase is the message store),
+    // so resolve their Mongo user to get the saved Expo push token.
+    (async () => {
+      try {
+        const recipient = await User.findOne({ supabaseId: toUserId }).select('pushToken').lean();
+        if (recipient?.pushToken) {
+          const preview = trimmedText.length > 80 ? `${trimmedText.slice(0, 80)}…` : trimmedText;
+          await sendPushNotification(
+            recipient.pushToken,
+            req.user.name ? `💬 ${req.user.name}` : '💬 New message',
+            preview,
+            { type: 'message', fromUserId },
+          );
+        }
+      } catch (err) {
+        logger.error('Message push notification failed', { error: err.message, toUserId });
+      }
+    })();
 
     return res.status(201).json({ success: true, data });
   } catch (error) {

@@ -55,17 +55,25 @@ async function runBoostPromo() {
     const account = prof.userId;
     if (!account?.email || account.marketingOptOut) continue;
     const label = prof.businessName || prof.name;
-    sendBoostListingPromo(account.name, account.email, account._id, label).catch(() => {});
-    await Professional.findByIdAndUpdate(prof._id, { $set: { boostPromoSentAt: new Date() } });
-    sent++;
+    try {
+      await sendBoostListingPromo(account.name, account.email, account._id, label);
+      await Professional.findByIdAndUpdate(prof._id, { $set: { boostPromoSentAt: new Date() } });
+      sent++;
+    } catch (err) {
+      logger.error('Boost promo send failed (professional)', { professionalId: prof._id, error: err.message });
+    }
   }
 
   for (const shop of shops) {
     const account = shop.owner;
     if (!account?.email || account.marketingOptOut) continue;
-    sendBoostListingPromo(account.name, account.email, account._id, shop.name).catch(() => {});
-    await Shop.findByIdAndUpdate(shop._id, { $set: { boostPromoSentAt: new Date() } });
-    sent++;
+    try {
+      await sendBoostListingPromo(account.name, account.email, account._id, shop.name);
+      await Shop.findByIdAndUpdate(shop._id, { $set: { boostPromoSentAt: new Date() } });
+      sent++;
+    } catch (err) {
+      logger.error('Boost promo send failed (shop)', { shopId: shop._id, error: err.message });
+    }
   }
 
   logger.info(`Boost Listing promo: sent ${sent} (${professionals.length} professionals, ${shops.length} shops considered)`);
@@ -95,9 +103,13 @@ async function runWalletPromo() {
   let sent = 0;
   for (const user of users) {
     if (!user.email) continue;
-    sendWalletPromo(user.name, user.email, user._id).catch(() => {});
-    await User.findByIdAndUpdate(user._id, { $set: { walletPromoSentAt: new Date() } });
-    sent++;
+    try {
+      await sendWalletPromo(user.name, user.email, user._id);
+      await User.findByIdAndUpdate(user._id, { $set: { walletPromoSentAt: new Date() } });
+      sent++;
+    } catch (err) {
+      logger.error('Wallet promo send failed', { userId: user._id, error: err.message });
+    }
   }
 
   logger.info(`Wallet promo: sent ${sent} (${users.length} considered)`);
@@ -130,9 +142,13 @@ async function runPracticePromo() {
   for (const vet of vets) {
     const account = vet.userId;
     if (!account?.email || account.marketingOptOut) continue;
-    sendPracticeAddonPromo(account.name, account.email, account._id).catch(() => {});
-    await Professional.findByIdAndUpdate(vet._id, { $set: { practicePromoSentAt: new Date() } });
-    sent++;
+    try {
+      await sendPracticeAddonPromo(account.name, account.email, account._id);
+      await Professional.findByIdAndUpdate(vet._id, { $set: { practicePromoSentAt: new Date() } });
+      sent++;
+    } catch (err) {
+      logger.error('Practice promo send failed', { professionalId: vet._id, error: err.message });
+    }
   }
 
   logger.info(`Practice Records promo: sent ${sent} (${vets.length} vets considered)`);
@@ -167,9 +183,13 @@ async function runBusinessPromo() {
   let sent = 0;
   for (const user of owners) {
     if (!user.email) continue;
-    sendBusinessSuitePromo(user.name, user.email, user._id).catch(() => {});
-    await User.findByIdAndUpdate(user._id, { $set: { businessPromoSentAt: new Date() } });
-    sent++;
+    try {
+      await sendBusinessSuitePromo(user.name, user.email, user._id);
+      await User.findByIdAndUpdate(user._id, { $set: { businessPromoSentAt: new Date() } });
+      sent++;
+    } catch (err) {
+      logger.error('Business Suite promo send failed', { userId: user._id, error: err.message });
+    }
   }
 
   logger.info(`Business Suite promo: sent ${sent} (${owners.length} owners considered)`);
@@ -199,9 +219,13 @@ async function runMarketPromo() {
   let sent = 0;
   for (const user of users) {
     if (!user.email) continue;
-    sendMarketLaunchPromo(user.name, user.email, user._id).catch(() => {});
-    await User.findByIdAndUpdate(user._id, { $set: { marketPromoSentAt: new Date() } });
-    sent++;
+    try {
+      await sendMarketLaunchPromo(user.name, user.email, user._id);
+      await User.findByIdAndUpdate(user._id, { $set: { marketPromoSentAt: new Date() } });
+      sent++;
+    } catch (err) {
+      logger.error('Xpress Market promo send failed', { userId: user._id, error: err.message });
+    }
   }
 
   logger.info(`Xpress Market promo: sent ${sent} (${users.length} considered)`);
