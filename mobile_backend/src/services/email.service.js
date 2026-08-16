@@ -8,6 +8,9 @@
  *
  * If neither key is set, all send calls are logged and skipped silently
  * so the app works correctly in dev without email credentials.
+ *
+ * Delivery/open/click tracking (Resend only) lives in routes/webhooks.routes.js
+ * — it correlates back to EmailLog via the resendEmailId captured here.
  */
 
 import fetch from 'node-fetch';
@@ -74,8 +77,8 @@ export function verifyClientReminderSig(cid, sig) {
  * @param {string}   [text]  Plain-text fallback (auto-generated if omitted)
  */
 // Fire-and-forget logging — must never slow down or break the actual send.
-function logEmail(to, subject, status, error) {
-  EmailLog.create({ to, subject, status, error }).catch(() => {});
+function logEmail(to, subject, status, error, resendEmailId) {
+  EmailLog.create({ to, subject, status, error, resendEmailId: resendEmailId || null }).catch(() => {});
 }
 
 export async function sendEmail(to, subject, html, text) {
@@ -93,13 +96,14 @@ export async function sendEmail(to, subject, html, text) {
   const plainText = text || html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 
   try {
+    let resendEmailId = null;
     if (RESEND) {
-      await sendViaResend(to, subject, html, plainText);
+      resendEmailId = await sendViaResend(to, subject, html, plainText);
     } else {
       await sendViaBravo(to, subject, html, plainText);
     }
     logger.info('Email sent', { to, subject });
-    logEmail(to, subject, 'sent');
+    logEmail(to, subject, 'sent', null, resendEmailId);
   } catch (err) {
     logger.error('Email send failed', { to, subject, error: err.message });
     logEmail(to, subject, 'failed', err.message);
@@ -107,6 +111,8 @@ export async function sendEmail(to, subject, html, text) {
   }
 }
 
+// Returns Resend's message id (used later to correlate delivery/open/click
+// webhook events back to this send — see routes/webhooks.routes.js).
 async function sendViaResend(to, subject, html, text) {
   const res = await fetch('https://api.resend.com/emails', {
     method:  'POST',
@@ -120,6 +126,8 @@ async function sendViaResend(to, subject, html, text) {
     const body = await res.text();
     throw new Error(`Resend error ${res.status}: ${body}`);
   }
+  const body = await res.json().catch(() => null);
+  return body?.id || null;
 }
 
 async function sendViaBravo(to, subject, html, text) {

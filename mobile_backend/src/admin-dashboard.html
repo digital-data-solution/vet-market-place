@@ -253,6 +253,9 @@
       <div class="nav-item" onclick="showSection('notifications')" id="nav-notifications">
         <span class="nav-icon">🔔</span> Push Notifications
       </div>
+      <div class="nav-item" onclick="showSection('emailstats')" id="nav-emailstats">
+        <span class="nav-icon">📧</span> Email Analytics
+      </div>
       <div class="nav-item" onclick="showSection('exports')" id="nav-exports">
         <span class="nav-icon">📥</span> Exports
       </div>
@@ -798,6 +801,42 @@
       </div>
     </div>
 
+    <!-- ── Email Analytics ─────────────────────────────── -->
+    <div id="section-emailstats" class="section">
+      <div class="topbar">
+        <h2>Email Analytics <span style="font-size:13px;color:#94A3B8;font-weight:500">(last 30 days)</span></h2>
+        <button class="btn btn-ghost btn-sm" onclick="loadEmailStats()">↻ Refresh</button>
+      </div>
+      <div id="email-webhook-warning" style="display:none;background:#FEF9C3;border:1px solid #FDE68A;color:#854D0E;border-radius:10px;padding:14px 18px;font-size:13px;margin-bottom:20px">
+        ⚠️ Delivered/opened/clicked/bounced tracking isn't live yet — <code>RESEND_WEBHOOK_SECRET</code> isn't set. Sent/failed counts below are always accurate regardless.
+      </div>
+      <div id="email-stats-grid" class="stats-grid"><div class="spinner"></div></div>
+
+      <div class="card">
+        <div class="card-head">
+          <h3>Recent emails</h3>
+          <div style="display:flex;gap:8px">
+            <input type="text" id="email-log-search" placeholder="Search by recipient…" oninput="onEmailLogSearch()" autocomplete="off"
+              style="padding:6px 10px;border-radius:8px;border:1px solid #E2E8F0;font-size:13px" />
+            <select id="email-log-status-filter" onchange="loadEmailLogs()" style="padding:6px 10px;border-radius:8px;border:1px solid #E2E8F0;font-size:13px">
+              <option value="">All statuses</option>
+              <option value="sent">Sent</option>
+              <option value="failed">Failed</option>
+              <option value="skipped">Skipped</option>
+            </select>
+          </div>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr>
+              <th>To</th><th>Subject</th><th>Status</th><th>Delivered</th><th>Opened</th><th>Clicked</th><th>Bounced</th><th>Sent</th>
+            </tr></thead>
+            <tbody id="email-log-tbody"><tr><td colspan="8"><div class="spinner"></div></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Support Inbox ─────────────────────────────────── -->
     <div id="section-support" class="section">
       <div class="topbar">
@@ -1235,6 +1274,7 @@ function showSection(name) {
     verifstats: loadVerifStats, referrals: loadReferrals, practice: loadPracticeStats, utm: loadUtmStats, content: loadContent,
     messaging: loadMessaging, system: loadSystem,
     notifications: loadNotifications,
+    emailstats: loadEmailStats,
     exports: () => {},
   };
   loaders[name]?.();
@@ -2429,6 +2469,62 @@ async function viewNotificationOpens(id) {
       </div>
       <div style="font-size:12px;color:#94A3B8">${fmt(o.openedAt)}</div>
     </div>`).join('');
+}
+
+// ── Email Analytics ─────────────────────────────────────────────────────────────
+async function loadEmailStats() {
+  document.getElementById('email-stats-grid').innerHTML = '<div class="spinner"></div>';
+  const r = await api('GET', '/api/admin/stats/email');
+  const d = r?.body?.data || {};
+
+  document.getElementById('email-webhook-warning').style.display = d.webhookConfigured ? 'none' : '';
+
+  document.getElementById('email-stats-grid').innerHTML = `
+    <div class="stat-card"><div class="stat-label">Sent</div><div class="stat-value">${(d.sent||0).toLocaleString()}</div></div>
+    <div class="stat-card"><div class="stat-label">Delivered</div><div class="stat-value">${(d.delivered||0).toLocaleString()}</div><div class="stat-sub">${d.deliveryRate||0}% of sent</div></div>
+    <div class="stat-card"><div class="stat-label">Opened</div><div class="stat-value">${(d.opened||0).toLocaleString()}</div><div class="stat-sub">${d.openRate||0}% open rate</div></div>
+    <div class="stat-card"><div class="stat-label">Clicked</div><div class="stat-value">${(d.clicked||0).toLocaleString()}</div><div class="stat-sub">${d.clickRate||0}% click rate</div></div>
+    <div class="stat-card" style="${d.bounced ? 'border:1px solid #FEE2E2' : ''}"><div class="stat-label" style="${d.bounced ? 'color:#991B1B' : ''}">Bounced</div><div class="stat-value" style="${d.bounced ? 'color:#991B1B' : ''}">${(d.bounced||0).toLocaleString()}</div><div class="stat-sub">${d.bounceRate||0}% bounce rate</div></div>
+    <div class="stat-card"><div class="stat-label">Failed to send</div><div class="stat-value">${(d.failed||0).toLocaleString()}</div></div>
+    <div class="stat-card"><div class="stat-label">Skipped</div><div class="stat-value">${(d.skipped||0).toLocaleString()}</div><div class="stat-sub">no provider key</div></div>
+    ${d.complained ? `<div class="stat-card" style="border:1px solid #FEE2E2"><div class="stat-label" style="color:#991B1B">Marked as Spam</div><div class="stat-value" style="color:#991B1B">${d.complained}</div></div>` : ''}
+  `;
+
+  loadEmailLogs();
+}
+
+const onEmailLogSearch = debounce(() => loadEmailLogs(), 350);
+
+function emailStatusBadge(s) {
+  const map = { sent: 'badge-green', failed: 'badge-red', skipped: 'badge-gray' };
+  return `<span class="badge ${map[s] || 'badge-gray'}">${s || '—'}</span>`;
+}
+
+async function loadEmailLogs() {
+  const tbody = document.getElementById('email-log-tbody');
+  tbody.innerHTML = '<tr><td colspan="8"><div class="spinner"></div></td></tr>';
+  const search = document.getElementById('email-log-search').value.trim();
+  const status = document.getElementById('email-log-status-filter').value;
+  const params = new URLSearchParams({ limit: 50 });
+  if (search) params.set('search', search);
+  if (status) params.set('status', status);
+  const r = await api('GET', `/api/admin/email-logs?${params}`);
+  const data = r?.body?.data || [];
+  if (!data.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="no-data">No emails found.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.map(e => `
+    <tr>
+      <td><small>${e.to}</small></td>
+      <td style="max-width:200px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.subject}</td>
+      <td>${emailStatusBadge(e.status)}</td>
+      <td>${e.deliveredAt ? '✅' : '—'}</td>
+      <td>${e.openCount ? `✅ ×${e.openCount}` : '—'}</td>
+      <td>${e.clickCount ? `✅ ×${e.clickCount}` : '—'}</td>
+      <td>${e.bouncedAt ? `<span title="${e.bounceReason||''}">⚠️</span>` : '—'}</td>
+      <td style="white-space:nowrap;font-size:12px">${fmt(e.createdAt)}</td>
+    </tr>`).join('');
 }
 
 // ── System Health ─────────────────────────────────────────────────────────────

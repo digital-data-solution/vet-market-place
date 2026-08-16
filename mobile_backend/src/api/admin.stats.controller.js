@@ -687,6 +687,72 @@ export const getMessagingStats = async (req, res) => {
   }
 };
 
+// ─── Email Analytics ──────────────────────────────────────────────────────────
+// Delivered/opened/clicked/bounced come from the Resend webhook (see
+// resendWebhook.controller.js) — only populated once RESEND_WEBHOOK_SECRET is
+// set and the webhook is registered in Resend's dashboard. Before that, this
+// still shows sent/failed/skipped (always tracked) with the rest at 0.
+
+export const getEmailStats = async (req, res) => {
+  try {
+    const since = daysAgo(30);
+    const filter = { createdAt: { $gte: since } };
+
+    const [sent, failed, skipped, delivered, opened, clicked, bounced, complained] = await Promise.all([
+      EmailLog.countDocuments({ ...filter, status: 'sent' }),
+      EmailLog.countDocuments({ ...filter, status: 'failed' }),
+      EmailLog.countDocuments({ ...filter, status: 'skipped' }),
+      EmailLog.countDocuments({ ...filter, deliveredAt: { $ne: null } }),
+      EmailLog.countDocuments({ ...filter, openedAt: { $ne: null } }),
+      EmailLog.countDocuments({ ...filter, clickedAt: { $ne: null } }),
+      EmailLog.countDocuments({ ...filter, bouncedAt: { $ne: null } }),
+      EmailLog.countDocuments({ ...filter, complainedAt: { $ne: null } }),
+    ]);
+
+    const rate = (n, d) => (d > 0 ? Math.round((n / d) * 1000) / 10 : 0); // one decimal place
+
+    return res.json({
+      success: true,
+      data: {
+        windowDays: 30,
+        sent, failed, skipped, delivered, opened, clicked, bounced, complained,
+        deliveryRate:  rate(delivered, sent),
+        openRate:      rate(opened, delivered || sent),
+        clickRate:     rate(clicked, delivered || sent),
+        bounceRate:    rate(bounced, sent),
+        webhookConfigured: !!process.env.RESEND_WEBHOOK_SECRET,
+      },
+    });
+  } catch (err) {
+    logger.error('getEmailStats error', { error: err.message });
+    return res.status(500).json({ success: false, message: 'Failed to fetch email stats.' });
+  }
+};
+
+/**
+ * GET /api/admin/email-logs
+ * Paginated, searchable (by recipient) recent email log — the per-message
+ * drill-down behind the aggregate stats above.
+ */
+export const listEmailLogs = async (req, res) => {
+  try {
+    const { page = 1, limit = 30, search, status } = req.query;
+    const filter = {};
+    if (status) filter.status = status;
+    if (search) filter.to = new RegExp(search, 'i');
+
+    const [data, total] = await Promise.all([
+      EmailLog.find(filter).sort({ createdAt: -1 }).skip((+page - 1) * +limit).limit(+limit).lean(),
+      EmailLog.countDocuments(filter),
+    ]);
+
+    return res.json({ success: true, data, total, page: +page, totalPages: Math.ceil(total / +limit) });
+  } catch (err) {
+    logger.error('listEmailLogs error', { error: err.message });
+    return res.status(500).json({ success: false, message: 'Failed to fetch email logs.' });
+  }
+};
+
 // ─── System Health ────────────────────────────────────────────────────────────
 
 export const getSystemHealth = async (req, res) => {

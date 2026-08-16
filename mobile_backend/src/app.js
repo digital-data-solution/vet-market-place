@@ -39,6 +39,7 @@ import notificationsRoutes    from './routes/notifications.routes.js';
 
 // Webhook handler — imported directly so it can receive raw body
 import { handlePaystackWebhook } from './api/subscription.controller.js';
+import { handleResendWebhook }  from './api/resendWebhook.controller.js';
 import { regeocodeAll }          from './api/professional.controller.js';
 import { adminProtect }          from './middlewares/adminAuthMiddleware.js';
 import { supabaseAdmin }         from './lib/supabase.js';
@@ -52,6 +53,8 @@ import {
   getContentStats,
   getGeographicStats,
   getMessagingStats,
+  getEmailStats,
+  listEmailLogs,
   getSystemHealth,
   getActivityStats,
   getUtmStats,
@@ -73,11 +76,16 @@ const app = express();
 // ─── Trust proxy (required for Render / rate limiting) ────────────────────────
 app.set('trust proxy', 1);
 
-// ─── Webhook route — MUST be registered BEFORE express.json() ────────────────
+// ─── Webhook routes — MUST be registered BEFORE express.json() ───────────────
 app.post(
   '/api/subscriptions/webhook',
   express.raw({ type: 'application/json' }),
   handlePaystackWebhook,
+);
+app.post(
+  '/api/webhooks/resend',
+  express.raw({ type: 'application/json' }),
+  handleResendWebhook,
 );
 
 // ─── Global middleware ────────────────────────────────────────────────────────
@@ -507,6 +515,8 @@ app.get('/api/admin/stats/business',     adminProtect, getBusinessStats);
 app.get('/api/admin/stats/content',      adminProtect, getContentStats);
 app.get('/api/admin/stats/geographic',   adminProtect, getGeographicStats);
 app.get('/api/admin/stats/messaging',    adminProtect, getMessagingStats);
+app.get('/api/admin/stats/email',        adminProtect, getEmailStats);
+app.get('/api/admin/email-logs',         adminProtect, listEmailLogs);
 app.get('/api/admin/stats/system',       adminProtect, getSystemHealth);
 app.get('/api/admin/stats/activity',     adminProtect, getActivityStats);
 app.get('/api/admin/stats/utm',          adminProtect, getUtmStats);
