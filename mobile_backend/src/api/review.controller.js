@@ -17,6 +17,7 @@ import User                          from '../models/User.js';
 import logger                        from '../lib/logger.js';
 import { hasContactedProfessional }  from '../lib/reviewEligibility.js';
 import { logActivity }               from '../lib/activityLogger.js';
+import { sendPushToUser }            from '../services/pushNotification.service.js';
 
 const { Types } = mongoose;
 
@@ -134,7 +135,9 @@ export const createOrUpdateReview = async (req, res) => {
     }
 
     // ── Upsert review (preserves professionalResponse on edit) ───────────────
-    const review = await Review.findOneAndUpdate(
+    // rawResult lets us tell a brand-new review apart from an edit, so the
+    // owner only gets pushed once per reviewer, not on every star tweak.
+    const upsertResult = await Review.findOneAndUpdate(
       {
         reviewer:   req.user._id,
         targetType,
@@ -146,11 +149,23 @@ export const createOrUpdateReview = async (req, res) => {
           comment: comment?.trim() || null,
         },
       },
-      { upsert: true, new: true, setDefaultsOnInsert: true },
+      { upsert: true, new: true, setDefaultsOnInsert: true, rawResult: true },
     );
+    const review = upsertResult.value;
+    const isNewReview = !upsertResult.lastErrorObject?.updatedExisting;
 
     // ── Recalculate aggregate on the target document ──────────────────────────
     await recalculateRating(targetType, targetId);
+
+    if (isNewReview && ownerObjectId) {
+      const stars = '⭐'.repeat(Math.round(ratingNum));
+      sendPushToUser(
+        ownerObjectId,
+        `${stars} New review`,
+        comment?.trim() ? `"${comment.trim().slice(0, 100)}"` : `You received a ${ratingNum}-star review.`,
+        { type: 'review', targetType, targetId: String(targetId) },
+      ).catch(() => {});
+    }
 
     logger.info('Review upserted', {
       reviewId:   review._id,
@@ -323,6 +338,13 @@ export const respondToReview = async (req, res) => {
     await review.save();
 
     logger.info('Review response saved', { reviewId, responderId: req.user._id });
+
+    sendPushToUser(
+      review.reviewer,
+      '💬 Reply to your review',
+      response.trim().length > 100 ? `${response.trim().slice(0, 100)}…` : response.trim(),
+      { type: 'review_response', reviewId: String(review._id) },
+    ).catch(() => {});
 
     return res.json({ success: true, data: review });
   } catch (err) {

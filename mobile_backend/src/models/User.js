@@ -103,8 +103,23 @@ const userSchema = new mongoose.Schema({
   // One-time promo gates — each fires at most once per user, ever.
   walletPromoSentAt: { type: Date, default: null },
 
-  // Expo push notification token — saved from the device after permission granted
+  // Expo push notification token (native iOS/Android only) — saved from the
+  // device after permission granted.
   pushToken: { type: String, default: null },
+
+  // Web push subscription (browser only). Expo's push relay rejects
+  // type:"web" tokens outright (confirmed against the live API — only
+  // apns/fcm/gcm are accepted), so web can't go through the same pushToken
+  // path; it gets a real W3C Push API subscription instead, delivered
+  // directly via services/pushNotification.service.js's sendWebPush using
+  // our own VAPID key pair (web-push package — see WEB_PUSH_VAPID_PRIVATE_KEY).
+  webPushSubscription: {
+    endpoint: { type: String, default: null },
+    keys: {
+      p256dh: { type: String, default: null },
+      auth:   { type: String, default: null },
+    },
+  },
 
   // Business Suite add-on (inventory + POS + staff/reps). Same one-off-extend
   // pattern as Professional.practiceAddon / featuredUntil — paid time stacks

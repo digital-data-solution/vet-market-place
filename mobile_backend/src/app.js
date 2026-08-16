@@ -34,6 +34,8 @@ import trackRoutes            from './routes/track.routes.js';
 import upsellRoutes           from './routes/upsell.routes.js';
 import marketRoutes           from './routes/market.routes.js';
 import adminMarketRoutes      from './routes/admin.market.routes.js';
+import adminNotificationsRoutes from './routes/admin.notifications.routes.js';
+import notificationsRoutes    from './routes/notifications.routes.js';
 
 // Webhook handler — imported directly so it can receive raw body
 import { handlePaystackWebhook } from './api/subscription.controller.js';
@@ -537,6 +539,8 @@ app.use('/api/v1/track',            trackRoutes);
 app.use('/api/v1/upsell',           upsellRoutes);
 app.use('/api/v1/market',           listingLimiter, marketRoutes);
 app.use('/api/admin/market',        adminMarketRoutes);
+app.use('/api/admin/notifications', adminNotificationsRoutes);
+app.use('/api/notifications',       notificationsRoutes);
 
 // ─── Client-side error reporting ─────────────────────────────────────────────
 // No auth required — errors may fire before the user is authenticated.

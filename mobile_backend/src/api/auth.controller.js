@@ -254,6 +254,28 @@ export const savePushToken = async (req, res) => {
   }
 };
 
+// Web's counterpart to savePushToken — a browser never gets an
+// ExponentPushToken (Expo's relay rejects type:"web" outright), it gets a
+// real W3C Push API subscription instead. See services/pushNotification.service.js.
+export const saveWebPushSubscription = async (req, res) => {
+  try {
+    const { subscription } = req.body;
+    const endpoint = subscription?.endpoint;
+    const p256dh   = subscription?.keys?.p256dh;
+    const auth     = subscription?.keys?.auth;
+    if (!endpoint || !p256dh || !auth) {
+      return res.status(400).json({ success: false, message: 'A valid push subscription (endpoint + keys) is required.' });
+    }
+    await User.findByIdAndUpdate(req.user._id, {
+      $set: { webPushSubscription: { endpoint, keys: { p256dh, auth } } },
+    });
+    return res.json({ success: true });
+  } catch (error) {
+    logger.error('Save web push subscription error', { error: error.message });
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 export const updateProfile = async (req, res) => {
   try {
     const { profileImage, profileImagePath, phone, name, bio } = req.body;

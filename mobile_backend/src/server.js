@@ -23,6 +23,7 @@ const { default: startMarketingCampaignJobs } = await import('./jobs/marketingCa
 const { default: startPracticeReminderJob }   = await import('./jobs/practiceReminders.js');
 const { default: startMarketJobs }            = await import('./jobs/marketJobs.js');
 const { default: startMediaCleanupJob }       = await import('./jobs/mediaCleanup.js');
+const { default: startAdminNotificationDispatchJob } = await import('./jobs/adminNotificationDispatch.js');
 
 // Start services
 await connectDB();
@@ -54,6 +55,7 @@ startMarketingCampaignJobs();
 startPracticeReminderJob();
 startMarketJobs();
 startMediaCleanupJob();
+startAdminNotificationDispatchJob();
 
 const PORT = process.env.PORT || 5000;
 

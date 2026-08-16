@@ -250,6 +250,9 @@
       <div class="nav-item" onclick="showSection('messaging')" id="nav-messaging">
         <span class="nav-icon">💬</span> Messaging
       </div>
+      <div class="nav-item" onclick="showSection('notifications')" id="nav-notifications">
+        <span class="nav-icon">🔔</span> Push Notifications
+      </div>
       <div class="nav-item" onclick="showSection('exports')" id="nav-exports">
         <span class="nav-icon">📥</span> Exports
       </div>
@@ -711,6 +714,90 @@
       <div id="msg-stats-grid" class="stats-grid"><div class="spinner"></div></div>
     </div>
 
+    <!-- ── Push Notifications ───────────────────────────── -->
+    <div id="section-notifications" class="section">
+      <div class="topbar">
+        <h2>Push Notifications</h2>
+        <button class="btn btn-ghost btn-sm" onclick="loadNotifications()">↻ Refresh</button>
+      </div>
+
+      <!-- Compose -->
+      <div class="card">
+        <div class="card-head"><h3>Send a notification</h3></div>
+        <div style="padding:20px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+            <div class="field">
+              <label>Title</label>
+              <input type="text" id="notif-title" maxlength="120" placeholder="e.g. New feature: Boost Listing" />
+            </div>
+            <div class="field">
+              <label>Send at (leave blank to send now)</label>
+              <input type="datetime-local" id="notif-schedule" onchange="previewNotificationReach()" />
+            </div>
+          </div>
+          <div class="field">
+            <label>Message</label>
+            <textarea id="notif-body" maxlength="500" rows="3"
+              style="width:100%;padding:10px 14px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:14px;outline:none;resize:vertical;font-family:inherit"
+              placeholder="What do you want to tell them?"></textarea>
+          </div>
+
+          <div class="field">
+            <label>Send to</label>
+            <div style="display:flex;gap:8px;margin-bottom:10px">
+              <button class="btn btn-sm" id="notif-target-user-btn"    onclick="setNotifTargetType('user')"    style="background:#F1F5F9">A specific person</button>
+              <button class="btn btn-sm" id="notif-target-segment-btn" onclick="setNotifTargetType('segment')" style="background:#F1F5F9">A smart segment</button>
+              <button class="btn btn-sm" id="notif-target-all-btn"     onclick="setNotifTargetType('all')"     style="background:#F1F5F9">Everyone</button>
+            </div>
+
+            <!-- Pick a person -->
+            <div id="notif-target-user-picker" style="display:none;position:relative">
+              <input type="text" id="notif-user-search" placeholder="Search by name or email…"
+                oninput="onNotifUserSearch()" autocomplete="off"
+                style="width:100%;padding:10px 14px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:14px;outline:none" />
+              <div id="notif-user-results" style="display:none;position:absolute;z-index:5;top:44px;left:0;right:0;background:#fff;border:1px solid #E2E8F0;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.1);max-height:260px;overflow-y:auto"></div>
+              <div id="notif-user-picked" style="margin-top:8px"></div>
+            </div>
+
+            <!-- Pick a segment -->
+            <select id="notif-segment-select" style="display:none;width:100%;padding:10px 14px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:14px" onchange="previewNotificationReach()">
+              <option value="">Loading segments…</option>
+            </select>
+            <p id="notif-segment-desc" style="display:none;font-size:12px;color:#64748B;margin-top:6px"></p>
+          </div>
+
+          <div id="notif-reach-preview" style="font-size:13px;color:#64748B;margin:14px 0;min-height:18px"></div>
+
+          <button class="btn btn-primary" id="notif-send-btn" onclick="sendNotification()">Send Notification</button>
+        </div>
+      </div>
+
+      <!-- History -->
+      <div class="card">
+        <div class="card-head">
+          <h3>Send history</h3>
+          <select id="notif-history-filter" onchange="loadNotifications()" style="padding:6px 10px;border-radius:8px;border:1px solid #E2E8F0;font-size:13px">
+            <option value="">All statuses</option>
+            <option value="sent">Sent</option>
+            <option value="scheduled">Scheduled</option>
+            <option value="sending">Sending</option>
+            <option value="failed">Failed</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr>
+              <th>Message</th><th>Target</th><th>Status</th>
+              <th>Reached</th><th>Sent</th><th>Skipped</th><th>Failed</th><th>Opened</th>
+              <th>When</th><th></th>
+            </tr></thead>
+            <tbody id="notif-history-tbody"><tr><td colspan="10"><div class="spinner"></div></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Support Inbox ─────────────────────────────────── -->
     <div id="section-support" class="section">
       <div class="topbar">
@@ -977,6 +1064,17 @@
   </div>
 </div>
 
+<!-- ── Notification Opens Modal ── -->
+<div id="notif-opens-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeModal('notif-opens-modal')">
+  <div class="modal" style="max-width:480px">
+    <h3>Who opened this</h3>
+    <div id="notif-opens-list" style="max-height:360px;overflow-y:auto;margin-top:14px"><div class="spinner"></div></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('notif-opens-modal')">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Toast ── -->
 <div id="toast"></div>
 
@@ -1136,6 +1234,7 @@ function showSection(name) {
     revenue: loadRevenue, growth: loadGrowth, geographic: loadGeographic,
     verifstats: loadVerifStats, referrals: loadReferrals, practice: loadPracticeStats, utm: loadUtmStats, content: loadContent,
     messaging: loadMessaging, system: loadSystem,
+    notifications: loadNotifications,
     exports: () => {},
   };
   loaders[name]?.();
@@ -2149,6 +2248,187 @@ async function loadMessaging() {
     <div class="stat-card"><div class="stat-label">Last Message</div><div class="stat-value" style="font-size:14px">${d.lastMessageAt ? fmt(d.lastMessageAt) : '—'}</div></div>
     ${d.supabaseError ? `<div class="stat-card" style="border:1px solid #FEE2E2"><div class="stat-label" style="color:#991B1B">Supabase Error</div><div style="font-size:12px;color:#991B1B;margin-top:4px">${d.supabaseError}</div></div>` : ''}
   `;
+}
+
+// ── Push Notifications ──────────────────────────────────────────────────────────
+let notifTargetType   = 'segment';
+let notifPickedUser   = null;   // { id, label }
+let notifSegmentCache = [];
+
+function notifStatusBadge(s) {
+  const map = { sent: 'badge-green', scheduled: 'badge-blue', sending: 'badge-yellow', failed: 'badge-red', cancelled: 'badge-gray' };
+  return `<span class="badge ${map[s] || 'badge-gray'}">${s || '—'}</span>`;
+}
+
+function setNotifTargetType(type) {
+  notifTargetType = type;
+  ['user', 'segment', 'all'].forEach(t => {
+    document.getElementById(`notif-target-${t}-btn`).style.background = t === type ? '#E8610A' : '#F1F5F9';
+    document.getElementById(`notif-target-${t}-btn`).style.color      = t === type ? '#fff'    : '#374151';
+  });
+  document.getElementById('notif-target-user-picker').style.display = type === 'user'    ? '' : 'none';
+  document.getElementById('notif-segment-select').style.display     = type === 'segment' ? '' : 'none';
+  document.getElementById('notif-segment-desc').style.display       = 'none';
+  previewNotificationReach();
+}
+
+const onNotifUserSearch = debounce(async () => {
+  const q = document.getElementById('notif-user-search').value.trim();
+  const results = document.getElementById('notif-user-results');
+  if (q.length < 2) { results.style.display = 'none'; return; }
+  const r = await api('GET', `/api/admin/users?search=${encodeURIComponent(q)}&limit=8`);
+  const users = r?.body?.data || [];
+  if (!users.length) {
+    results.innerHTML = '<div style="padding:12px;color:#94A3B8;font-size:13px">No users found.</div>';
+    results.style.display = '';
+    return;
+  }
+  results.innerHTML = users.map(u => `
+    <div onclick='pickNotifUser(${JSON.stringify(u._id)}, ${JSON.stringify(u.name || u.email || 'Unnamed')}, ${JSON.stringify(u.email || '')}, ${!!(u.pushToken || u.webPushSubscription?.endpoint)})'
+      style="padding:10px 14px;cursor:pointer;border-bottom:1px solid #F1F5F9" onmouseover="this.style.background='#F8FAFC'" onmouseout="this.style.background='#fff'">
+      <div style="font-weight:600;font-size:13px">${u.name || 'Unnamed'}</div>
+      <div style="font-size:12px;color:#64748B">${u.email || ''} ${u.pushToken || u.webPushSubscription?.endpoint ? '' : '· <span style=\"color:#991B1B\">no push token</span>'}</div>
+    </div>`).join('');
+  results.style.display = '';
+}, 300);
+
+function pickNotifUser(id, name, email, reachable) {
+  notifPickedUser = { id, label: `${name}${email ? ` (${email})` : ''}` };
+  document.getElementById('notif-user-search').value = '';
+  document.getElementById('notif-user-results').style.display = 'none';
+  document.getElementById('notif-user-picked').innerHTML = `
+    <span class="badge badge-blue">${notifPickedUser.label}${reachable ? '' : ' · no push token'} <a href="#" onclick="notifPickedUser=null;document.getElementById('notif-user-picked').innerHTML='';previewNotificationReach();return false" style="margin-left:6px;color:#1E40AF">✕</a></span>`;
+  previewNotificationReach();
+}
+
+async function loadNotifSegments() {
+  const select = document.getElementById('notif-segment-select');
+  select.innerHTML = '<option value="">Loading…</option>';
+  const r = await api('GET', '/api/admin/notifications/segments');
+  notifSegmentCache = r?.body?.data || [];
+  select.innerHTML = notifSegmentCache.map(s =>
+    `<option value="${s.key}">${s.label} — ${s.matches ?? '?'} match${s.matches === 1 ? '' : 'es'}, ${s.reachable ?? '?'} reachable</option>`
+  ).join('');
+  if (notifTargetType === 'segment') previewNotificationReach();
+}
+
+async function previewNotificationReach() {
+  const el = document.getElementById('notif-reach-preview');
+  let params;
+  if (notifTargetType === 'user') {
+    if (!notifPickedUser) { el.textContent = ''; return; }
+    params = `targetType=user&targetUserId=${notifPickedUser.id}`;
+  } else if (notifTargetType === 'segment') {
+    const key = document.getElementById('notif-segment-select').value;
+    if (!key) { el.textContent = ''; return; }
+    const seg = notifSegmentCache.find(s => s.key === key);
+    document.getElementById('notif-segment-desc').textContent = seg?.description || '';
+    document.getElementById('notif-segment-desc').style.display = seg ? '' : 'none';
+    params = `targetType=segment&segmentKey=${key}`;
+  } else {
+    params = `targetType=all`;
+  }
+  el.textContent = 'Checking audience…';
+  const r = await api('GET', `/api/admin/notifications/preview-count?${params}`);
+  const d = r?.body?.data;
+  if (!d) { el.textContent = ''; return; }
+  const schedule = document.getElementById('notif-schedule').value;
+  el.innerHTML = `📊 <strong>${d.matches.toLocaleString()}</strong> ${d.matches === 1 ? 'person matches' : 'people match'} · <strong>${d.reachable.toLocaleString()}</strong> reachable by push` +
+    (schedule ? ` · scheduled for ${new Date(schedule).toLocaleString()}` : ' · sends immediately');
+}
+
+async function sendNotification() {
+  const title = document.getElementById('notif-title').value.trim();
+  const body  = document.getElementById('notif-body').value.trim();
+  const schedule = document.getElementById('notif-schedule').value;
+
+  if (!title || !body) return toast('Title and message are required.', 'error');
+  if (notifTargetType === 'user' && !notifPickedUser) return toast('Pick a person to send to.', 'error');
+  if (notifTargetType === 'segment' && !document.getElementById('notif-segment-select').value) return toast('Pick a segment to send to.', 'error');
+
+  const payload = { title, body, targetType: notifTargetType };
+  if (notifTargetType === 'user')    payload.targetUserId = notifPickedUser.id;
+  if (notifTargetType === 'segment') payload.segmentKey    = document.getElementById('notif-segment-select').value;
+  if (schedule) payload.scheduledFor = new Date(schedule).toISOString();
+
+  const btn = document.getElementById('notif-send-btn');
+  btn.disabled = true; btn.textContent = 'Sending…';
+  const r = await api('POST', '/api/admin/notifications', payload);
+  btn.disabled = false; btn.textContent = 'Send Notification';
+
+  if (!r?.ok) return toast(r?.body?.message || 'Failed to send notification.', 'error');
+
+  if (r.body.sentNow) {
+    const d = r.body.data;
+    toast(`Sent to ${d.sentCount} of ${d.recipientCount} people (${d.skippedCount} had no push token${d.failedCount ? `, ${d.failedCount} failed` : ''}).`);
+  } else {
+    toast('Notification scheduled.');
+  }
+
+  document.getElementById('notif-title').value = '';
+  document.getElementById('notif-body').value = '';
+  document.getElementById('notif-schedule').value = '';
+  notifPickedUser = null;
+  document.getElementById('notif-user-picked').innerHTML = '';
+  document.getElementById('notif-reach-preview').textContent = '';
+  loadNotifications();
+}
+
+function notifTargetLabel(n) {
+  if (n.targetType === 'user')    return n.targetUserId ? `${n.targetUserId.name || n.targetUserId.email || 'User'}` : 'User (deleted)';
+  if (n.targetType === 'segment') return notifSegmentCache.find(s => s.key === n.segmentKey)?.label || n.segmentKey;
+  return 'Everyone';
+}
+
+async function loadNotifications() {
+  setNotifTargetType(notifTargetType); // sync button/picker highlighting on section (re)load
+  loadNotifSegments(); // keep the compose picker's counts fresh too
+  const tbody = document.getElementById('notif-history-tbody');
+  tbody.innerHTML = '<tr><td colspan="10"><div class="spinner"></div></td></tr>';
+  const status = document.getElementById('notif-history-filter').value;
+  const r = await api('GET', `/api/admin/notifications${status ? `?status=${status}` : ''}`);
+  const data = r?.body?.data || [];
+  if (!data.length) {
+    tbody.innerHTML = '<tr><td colspan="10" class="no-data">No notifications sent yet.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.map(n => `
+    <tr>
+      <td style="max-width:220px"><div style="font-weight:600">${n.title}</div><div style="font-size:12px;color:#64748B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px">${n.body}</div></td>
+      <td>${notifTargetLabel(n)}</td>
+      <td>${notifStatusBadge(n.status)}</td>
+      <td>${n.recipientCount ?? '—'}</td>
+      <td>${n.sentCount ?? '—'}</td>
+      <td>${n.skippedCount ?? '—'}</td>
+      <td>${n.failedCount ?? '—'}</td>
+      <td>${n.openedCount ? `<a href="#" onclick="viewNotificationOpens('${n._id}');return false">${n.openedCount} 👆</a>` : '0'}</td>
+      <td style="white-space:nowrap;font-size:12px">${fmt(n.scheduledFor || n.sentAt || n.createdAt)}</td>
+      <td>${n.status === 'scheduled' ? `<button class="btn btn-ghost btn-sm" onclick="cancelNotification('${n._id}')">Cancel</button>` : ''}</td>
+    </tr>`).join('');
+}
+
+async function cancelNotification(id) {
+  const r = await api('PATCH', `/api/admin/notifications/${id}/cancel`);
+  if (!r?.ok) return toast(r?.body?.message || 'Failed to cancel.', 'error');
+  toast('Notification cancelled.');
+  loadNotifications();
+}
+
+async function viewNotificationOpens(id) {
+  document.getElementById('notif-opens-modal').style.display = 'flex';
+  const list = document.getElementById('notif-opens-list');
+  list.innerHTML = '<div class="spinner"></div>';
+  const r = await api('GET', `/api/admin/notifications/${id}/opens`);
+  const opens = r?.body?.data || [];
+  if (!opens.length) { list.innerHTML = '<p style="color:#94A3B8;font-size:13px">No opens recorded yet.</p>'; return; }
+  list.innerHTML = opens.map(o => `
+    <div style="padding:10px 0;border-bottom:1px solid #F1F5F9;display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-weight:600;font-size:13px">${o.user?.name || 'Unknown user'}</div>
+        <div style="font-size:12px;color:#64748B">${o.user?.email || ''}</div>
+      </div>
+      <div style="font-size:12px;color:#94A3B8">${fmt(o.openedAt)}</div>
+    </div>`).join('');
 }
 
 // ── System Health ─────────────────────────────────────────────────────────────
