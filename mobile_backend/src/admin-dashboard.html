@@ -2440,7 +2440,7 @@ async function loadNotifications() {
       <td>${n.recipientCount ?? '—'}</td>
       <td>${n.sentCount ?? '—'}</td>
       <td>${n.skippedCount ?? '—'}</td>
-      <td>${n.failedCount ?? '—'}</td>
+      <td>${n.failedCount ?? '—'}${n.failedCount && n.error ? ` <span title="${n.error.replace(/"/g, '&quot;')}" style="cursor:help;color:#EF4444">ⓘ</span>` : ''}</td>
       <td>${n.openedCount ? `<a href="#" onclick="viewNotificationOpens('${n._id}');return false">${n.openedCount} 👆</a>` : '0'}</td>
       <td style="white-space:nowrap;font-size:12px">${fmt(n.scheduledFor || n.sentAt || n.createdAt)}</td>
       <td>${n.status === 'scheduled' ? `<button class="btn btn-ghost btn-sm" onclick="cancelNotification('${n._id}')">Cancel</button>` : ''}</td>
