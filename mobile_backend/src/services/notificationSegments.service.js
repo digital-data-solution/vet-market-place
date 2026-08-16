@@ -15,6 +15,7 @@
 
 import User from '../models/User.js';
 import Professional from '../models/Professional.js';
+import Shop from '../models/Shop.js';
 import Listing from '../models/Listing.js';
 import Transaction from '../models/Transaction.js';
 
@@ -144,19 +145,67 @@ const SEGMENTS = [
     label: 'No Business Suite add-on',
     description: 'Shop/vet/kennel owners with no active Business Suite add-on.',
     marketing: false,
+    getFilter: async () => noBusinessAddonFilter(['shop_owner', 'vet', 'kennel_owner']),
+  },
+  {
+    key: 'business_addon_none_shop_kennel',
+    label: 'Shop/kennel owners — no Business Suite',
+    description: 'Shop and kennel owners specifically, no active Business Suite add-on — for a business-owner-flavored pitch.',
+    marketing: false,
+    getFilter: async () => noBusinessAddonFilter(['shop_owner', 'kennel_owner']),
+  },
+  {
+    key: 'business_addon_none_vet',
+    label: 'Vets — no Business Suite',
+    description: 'Vets specifically, no active Business Suite add-on — for a clinic/pharmacy-inventory-flavored pitch.',
+    marketing: false,
+    getFilter: async () => noBusinessAddonFilter(['vet']),
+  },
+  {
+    key: 'practice_addon_none',
+    label: 'Vets — no Practice Records',
+    description: 'Verified vets who have never activated the Practice Records add-on. Same targeting as the automatic weekly email.',
+    marketing: true,
     getFilter: async () => {
       const now = new Date();
-      return {
-        role: { $in: ['shop_owner', 'vet', 'kennel_owner'] },
+      const userIds = await Professional.distinct('userId', {
+        role: 'vet',
+        isVerified: true,
         $or: [
-          { 'businessAddon.activeUntil': null },
-          { 'businessAddon.activeUntil': { $exists: false } },
-          { 'businessAddon.activeUntil': { $lt: now } },
+          { 'practiceAddon.activeUntil': null },
+          { 'practiceAddon.activeUntil': { $exists: false } },
+          { 'practiceAddon.activeUntil': { $lt: now } },
         ],
-      };
+      });
+      return { _id: { $in: userIds } };
+    },
+  },
+  {
+    key: 'never_boosted',
+    label: 'Never boosted a listing',
+    description: 'Verified professionals and shops who have never purchased a Boost Listing. Same targeting as the automatic weekly email.',
+    marketing: true,
+    getFilter: async () => {
+      const [profUserIds, shopOwnerIds] = await Promise.all([
+        Professional.distinct('userId', { lastFeaturedReference: null, isVerified: true }),
+        Shop.distinct('owner', { lastFeaturedReference: null, isVerified: true }),
+      ]);
+      return { _id: { $in: [...profUserIds, ...shopOwnerIds] } };
     },
   },
 ];
+
+function noBusinessAddonFilter(roles) {
+  const now = new Date();
+  return {
+    role: { $in: roles },
+    $or: [
+      { 'businessAddon.activeUntil': null },
+      { 'businessAddon.activeUntil': { $exists: false } },
+      { 'businessAddon.activeUntil': { $lt: now } },
+    ],
+  };
+}
 
 const SEGMENT_MAP = new Map(SEGMENTS.map((s) => [s.key, s]));
 

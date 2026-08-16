@@ -1,11 +1,17 @@
 /**
  * Feature-adoption marketing campaigns — jobs/marketingCampaigns.js
  *
- * One-time-ever emails introducing the two revenue features (Boost Listing,
- * Wallet escrow) to users who haven't tried them yet. Each user gets each
- * campaign at most once (gated by a *PromoSentAt timestamp), respects
- * marketingOptOut, and runs weekly — deliberately low-frequency so this
- * stays "strategic," not spammy.
+ * One-time-ever emails (plus a push notification alongside each, best-effort
+ * — never gates the *PromoSentAt mark) introducing revenue features (Boost
+ * Listing, Wallet escrow, Practice Records, Business Suite, Xpress Market) to
+ * users who haven't tried them yet. Each user gets each campaign at most once
+ * (gated by a *PromoSentAt timestamp), respects marketingOptOut, and runs
+ * weekly — deliberately low-frequency so this stays "strategic," not spammy.
+ *
+ * The exact same targeting is also available for one-off/scheduled admin
+ * sends via services/notificationSegments.service.js (segments
+ * never_boosted, never_used_wallet, practice_addon_none, business_addon_none*,
+ * never_listed) — keep both in sync if this targeting ever changes.
  */
 
 import cron from 'node-cron';
@@ -16,6 +22,7 @@ import Transaction from '../models/Transaction.js';
 import Product from '../models/Product.js';
 import Listing from '../models/Listing.js';
 import { sendBoostListingPromo, sendWalletPromo, sendPracticeAddonPromo, sendBusinessSuitePromo, sendMarketLaunchPromo } from '../services/email.service.js';
+import { sendPushToUser } from '../services/pushNotification.service.js';
 import logger from '../lib/logger.js';
 
 const BATCH_SIZE = 50; // per campaign per run, matches other marketing jobs
@@ -57,6 +64,7 @@ async function runBoostPromo() {
     const label = prof.businessName || prof.name;
     try {
       await sendBoostListingPromo(account.name, account.email, account._id, label);
+      sendPushToUser(account._id, '🚀 Get seen first', `Boost "${label}" to the top of search results — from ₦1,500.`, { type: 'marketing', campaign: 'boost' }).catch(() => {});
       await Professional.findByIdAndUpdate(prof._id, { $set: { boostPromoSentAt: new Date() } });
       sent++;
     } catch (err) {
@@ -69,6 +77,7 @@ async function runBoostPromo() {
     if (!account?.email || account.marketingOptOut) continue;
     try {
       await sendBoostListingPromo(account.name, account.email, account._id, shop.name);
+      sendPushToUser(account._id, '🚀 Get seen first', `Boost "${shop.name}" to the top of search results — from ₦1,500.`, { type: 'marketing', campaign: 'boost' }).catch(() => {});
       await Shop.findByIdAndUpdate(shop._id, { $set: { boostPromoSentAt: new Date() } });
       sent++;
     } catch (err) {
@@ -105,6 +114,7 @@ async function runWalletPromo() {
     if (!user.email) continue;
     try {
       await sendWalletPromo(user.name, user.email, user._id);
+      sendPushToUser(user._id, '🔒 Pay safely with Wallet', 'Escrow-protected payments are live — set up your Wallet.', { type: 'marketing', campaign: 'wallet' }).catch(() => {});
       await User.findByIdAndUpdate(user._id, { $set: { walletPromoSentAt: new Date() } });
       sent++;
     } catch (err) {
@@ -144,6 +154,7 @@ async function runPracticePromo() {
     if (!account?.email || account.marketingOptOut) continue;
     try {
       await sendPracticeAddonPromo(account.name, account.email, account._id);
+      sendPushToUser(account._id, '📋 Track patients easily', 'Practice Records is free for your first 5 patients — try it now.', { type: 'marketing', campaign: 'practice' }).catch(() => {});
       await Professional.findByIdAndUpdate(vet._id, { $set: { practicePromoSentAt: new Date() } });
       sent++;
     } catch (err) {
@@ -185,6 +196,7 @@ async function runBusinessPromo() {
     if (!user.email) continue;
     try {
       await sendBusinessSuitePromo(user.name, user.email, user._id);
+      sendPushToUser(user._id, '🏪 Run your shop smarter', 'Business Suite: inventory, staff PINs, sales tracking — free to start.', { type: 'marketing', campaign: 'business' }).catch(() => {});
       await User.findByIdAndUpdate(user._id, { $set: { businessPromoSentAt: new Date() } });
       sent++;
     } catch (err) {
@@ -221,6 +233,7 @@ async function runMarketPromo() {
     if (!user.email) continue;
     try {
       await sendMarketLaunchPromo(user.name, user.email, user._id);
+      sendPushToUser(user._id, '🛒 Buy & sell on Xpress Market', "List pets & products for free — tap to start selling.", { type: 'marketing', campaign: 'market' }).catch(() => {});
       await User.findByIdAndUpdate(user._id, { $set: { marketPromoSentAt: new Date() } });
       sent++;
     } catch (err) {
