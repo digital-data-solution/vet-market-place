@@ -17,6 +17,7 @@ import { activateListingFeatured } from './market.controller.js';
 import { activateWalletFund, handleTransferEvent } from './wallet.controller.js';
 import { activatePracticeAddon } from './practice.controller.js';
 import { activateBusinessAddon, activateBusinessSeats } from './business.controller.js';
+import { activateJobBoost } from './jobBoard.controller.js';
 
 const PAYSTACK_BASE        = process.env.PAYSTACK_BASE        || 'https://api.paystack.co';
 const PAYSTACK_SECRET      = process.env.PAYSTACK_SECRET_KEY  || '';
@@ -306,6 +307,10 @@ export const handlePaystackWebhook = async (req, res) => {
         console.log('▶ Activating marketplace listing boost for', metadata.listingId);
         await activateListingFeatured(metadata, event.data.reference);
         console.log('✅ Listing boost activated');
+      } else if (metadata.type === 'job_boost') {
+        console.log('▶ Activating job posting boost for', metadata.postingId);
+        await activateJobBoost(metadata, event.data.reference);
+        console.log('✅ Job posting boost activated');
       } else if (metadata.type === 'wallet_fund') {
         console.log('▶ Crediting wallet fund for userId:', metadata.userId);
         await activateWalletFund(metadata, event.data.reference, event.data.amount);
@@ -1054,6 +1059,9 @@ export const verifyPayment = async (req, res) => {
     } else if (metadata.type === 'listing_featured') {
       result = await activateListingFeatured(metadata, reference);
       return res.json({ success: true, message: 'Payment verified and your listing is now boosted!', data: result });
+    } else if (metadata.type === 'job_boost') {
+      result = await activateJobBoost(metadata, reference);
+      return res.json({ success: true, message: 'Payment verified and your job posting is now boosted!', data: result });
     } else if (metadata.type === 'wallet_fund') {
       result = await activateWalletFund(metadata, reference, data.data.amount);
       return res.json({ success: true, message: 'Payment verified and wallet funded!', data: result });
