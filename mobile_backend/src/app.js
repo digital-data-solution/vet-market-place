@@ -36,6 +36,7 @@ import marketRoutes           from './routes/market.routes.js';
 import searchRoutes           from './routes/search.routes.js';
 import jobBoardRoutes         from './routes/jobBoard.routes.js';
 import adminMarketRoutes      from './routes/admin.market.routes.js';
+import adminJobBoardRoutes    from './routes/admin.jobBoard.routes.js';
 import adminNotificationsRoutes from './routes/admin.notifications.routes.js';
 import notificationsRoutes    from './routes/notifications.routes.js';
 
@@ -556,6 +557,7 @@ app.use('/api/v1/market',           listingLimiter, marketRoutes);
 app.use('/api/v1/search',           listingLimiter, searchRoutes);
 app.use('/api/v1/jobs',             listingLimiter, jobBoardRoutes);
 app.use('/api/admin/market',        adminMarketRoutes);
+app.use('/api/admin/jobs',          adminJobBoardRoutes);
 app.use('/api/admin/notifications', adminNotificationsRoutes);
 app.use('/api/notifications',       notificationsRoutes);
 

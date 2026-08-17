@@ -219,6 +219,9 @@
       <div class="nav-item" onclick="showSection('market')" id="nav-market">
         <span class="nav-icon">🛒</span> Marketplace <span id="market-badge" style="display:none;background:#DC2626;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700;margin-left:4px">!</span>
       </div>
+      <div class="nav-item" onclick="showSection('jobs')" id="nav-jobs">
+        <span class="nav-icon">💼</span> Job Board <span id="jobs-badge" style="display:none;background:#DC2626;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700;margin-left:4px">!</span>
+      </div>
       <div style="padding:8px 20px;font-size:10px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.6px;margin-top:8px;">Analytics</div>
       <div class="nav-item" onclick="showSection('activity')" id="nav-activity">
         <span class="nav-icon">⚡</span> Activity Feed
@@ -912,6 +915,26 @@
       </div>
     </div>
 
+    <!-- ── Job Board moderation ─────────────────────────── -->
+    <div id="section-jobs" class="section">
+      <div class="topbar">
+        <h2>Job Board</h2>
+        <button class="btn btn-ghost btn-sm" onclick="loadJobBoard()">↻ Refresh</button>
+      </div>
+      <div id="jobs-stats-grid" class="stats-grid"><div class="spinner"></div></div>
+      <div class="card">
+        <div class="card-head"><h3>Open Reports</h3></div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr>
+              <th>Posting</th><th>Poster</th><th>Reason</th><th>Note</th><th>Reported</th><th>Actions</th>
+            </tr></thead>
+            <tbody id="jobs-reports-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Activity Feed ────────────────────────────────── -->
     <div id="section-activity" class="section">
       <div class="topbar">
@@ -1268,7 +1291,7 @@ function showSection(name) {
   const loaders = {
     overview: loadOverview, pending: loadPending, professionals: loadProfessionals,
     users: loadUsers, shops: loadShops, subscriptions: loadSubscriptions,
-    support: loadSupport, disputes: loadDisputes, market: loadMarket,
+    support: loadSupport, disputes: loadDisputes, market: loadMarket, jobs: loadJobBoard,
     activity: loadActivity,
     revenue: loadRevenue, growth: loadGrowth, geographic: loadGeographic,
     verifstats: loadVerifStats, referrals: loadReferrals, practice: loadPracticeStats, utm: loadUtmStats, content: loadContent,
@@ -1707,6 +1730,56 @@ async function removeListing(id, title) {
 async function dismissReport(id) {
   const r = await api('POST', `/api/admin/market/reports/${id}/dismiss`);
   if (r?.ok) { toast(r.body?.message || 'Dismissed'); loadMarket(); } else toast(r?.body?.message || 'Failed', 'error');
+}
+
+// ── Job Board moderation ─────────────────────────────────────────────────────────
+async function loadJobBoard() {
+  const grid = document.getElementById('jobs-stats-grid');
+  grid.innerHTML = '<div class="spinner"></div>';
+  const s = await api('GET', '/api/admin/jobs/stats');
+  const d = s?.body?.data || {};
+  const badge = document.getElementById('jobs-badge');
+  if (badge) { badge.style.display = d.openReports ? '' : 'none'; badge.textContent = d.openReports || ''; }
+  grid.innerHTML = `
+    <div class="stat-card"><div class="stat-label">Open positions</div><div class="stat-value">${d.kind?.position||0}</div></div>
+    <div class="stat-card"><div class="stat-label">Seeking work</div><div class="stat-value">${d.kind?.seeking_work||0}</div></div>
+    <div class="stat-card"><div class="stat-label">Active total</div><div class="stat-value">${d.status?.active||0}</div></div>
+    <div class="stat-card"><div class="stat-label">Filled</div><div class="stat-value">${d.status?.filled||0}</div></div>
+    <div class="stat-card"><div class="stat-label">Open reports</div><div class="stat-value" style="color:${d.openReports?'#DC2626':'#111827'}">${d.openReports||0}</div></div>
+    <div class="stat-card"><div class="stat-label">Auto-flagged</div><div class="stat-value">${d.flagged||0}</div></div>`;
+
+  const tb = document.getElementById('jobs-reports-tbody');
+  tb.innerHTML = '<tr><td colspan="6"><div class="spinner"></div></td></tr>';
+  const r = await api('GET', '/api/admin/jobs/reports?status=open');
+  const rows = r?.body?.data || [];
+  if (!rows.length) { tb.innerHTML = '<tr><td colspan="6" class="no-data">No open reports. 🎉</td></tr>'; return; }
+  tb.innerHTML = rows.map(rep => {
+    const p = rep.jobPosting || {};
+    const title = (p.title || '(deleted)').replace(/</g,'&lt;');
+    return `<tr>
+      <td><strong>${title}</strong><br><small style="color:#64748B">${p.kind||''} · ${p.status||''} · ${p.reportCount||0} report(s)</small></td>
+      <td>${p.poster?.name||'—'}<br><small style="color:#64748B">${p.poster?.email||''}</small></td>
+      <td><small>${rep.reason||'other'}</small></td>
+      <td style="max-width:220px"><small>${(rep.note||'').replace(/</g,'&lt;')}</small></td>
+      <td>${fmt(rep.createdAt)}</td>
+      <td style="white-space:nowrap">
+        ${p._id ? `<button class="btn btn-danger btn-sm" onclick="removeJobPosting('${p._id}','${title.replace(/'/g,'')}')">Remove</button>` : ''}
+        <button class="btn btn-ghost btn-sm" onclick="dismissJobReport('${rep._id}')">Dismiss</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function removeJobPosting(id, title) {
+  if (!confirm(`Remove "${title}"? The poster is notified. This cannot be undone.`)) return;
+  const reason = prompt('Reason (shown to the poster):', 'Violates job board rules') || 'Removed by moderator';
+  const r = await api('POST', `/api/admin/jobs/postings/${id}/remove`, { reason });
+  if (r?.ok) { toast(r.body?.message || 'Removed'); loadJobBoard(); } else toast(r?.body?.message || 'Failed', 'error');
+}
+
+async function dismissJobReport(id) {
+  const r = await api('POST', `/api/admin/jobs/reports/${id}/dismiss`);
+  if (r?.ok) { toast(r.body?.message || 'Dismissed'); loadJobBoard(); } else toast(r?.body?.message || 'Failed', 'error');
 }
 
 // ── Subscriptions ──────────────────────────────────────────────────────────────
