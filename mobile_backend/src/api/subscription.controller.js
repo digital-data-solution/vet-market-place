@@ -63,7 +63,11 @@ function graceEndsAt(sub) {
     : null;
 }
 
-async function activateUserSubscription(userId, plan, reference) {
+// authorization = Paystack's `data.authorization` object, present on both
+// charge.success webhook payloads and /transaction/verify responses. Only
+// stored when Paystack marks it reusable (card channel only — bank transfer/
+// USSD/QR never qualify), which is what makes the auto-renew toggle available.
+async function activateUserSubscription(userId, plan, reference, authorization = null) {
   const user = await User.findById(userId);
   if (!user) throw new Error('User not found');
 
@@ -79,6 +83,8 @@ async function activateUserSubscription(userId, plan, reference) {
   const endDate   = new Date(startDate);
   endDate.setMonth(endDate.getMonth() + 1);
 
+  const reusable = authorization?.reusable && authorization?.authorization_code;
+
   user.subscription = {
     plan,
     status:             'active',
@@ -87,6 +93,13 @@ async function activateUserSubscription(userId, plan, reference) {
     paymentReference:   reference,
     paymentInitiatedAt: user.subscription?.paymentInitiatedAt ?? startDate,
     amount:             PLAN_PRICING[plan],
+    // Preserve any existing card-on-file / auto-renew choice if this payment
+    // didn't produce a reusable authorization (e.g. paid by bank transfer).
+    authorizationCode:  reusable ? authorization.authorization_code : (user.subscription?.authorizationCode ?? null),
+    cardLast4:          reusable ? authorization.last4     : (user.subscription?.cardLast4 ?? null),
+    cardBrand:          reusable ? authorization.card_type : (user.subscription?.cardBrand ?? null),
+    autoRenew:          user.subscription?.autoRenew ?? false,
+    autoRenewFailCount: 0,
   };
 
   await user.save();
@@ -99,7 +112,7 @@ async function activateUserSubscription(userId, plan, reference) {
   return { plan, status: 'active', expiresAt: endDate };
 }
 
-async function activateProfessionalSubscription(subscriptionId, reference) {
+async function activateProfessionalSubscription(subscriptionId, reference, authorization = null) {
   const subscription = await Subscription.findById(subscriptionId);
   if (!subscription) throw new Error('Subscription not found');
 
@@ -115,10 +128,18 @@ async function activateProfessionalSubscription(subscriptionId, reference) {
   const endDate   = new Date(startDate);
   endDate.setMonth(endDate.getMonth() + 1);
 
+  const reusable = authorization?.reusable && authorization?.authorization_code;
+
   subscription.status           = 'active';
   subscription.paymentReference = reference;
   subscription.startDate        = startDate;
   subscription.endDate          = endDate;
+  if (reusable) {
+    subscription.authorizationCode  = authorization.authorization_code;
+    subscription.cardLast4          = authorization.last4;
+    subscription.cardBrand          = authorization.card_type;
+  }
+  subscription.autoRenewFailCount = 0;
 
   await subscription.save();
   logger.info('Professional subscription activated', { subscriptionId, reference });
@@ -303,11 +324,11 @@ export const handlePaystackWebhook = async (req, res) => {
         console.log('✅ Business Suite seats added');
       } else if (metadata.subscriptionType === 'user') {
         console.log('▶ Activating user subscription for userId:', metadata.userId);
-        await activateUserSubscription(metadata.userId, metadata.plan, event.data.reference);
+        await activateUserSubscription(metadata.userId, metadata.plan, event.data.reference, event.data.authorization);
         console.log('✅ User subscription activated');
       } else if (metadata.subscriptionType === 'professional') {
         console.log('▶ Activating professional subscription for subscriptionId:', metadata.subscriptionId);
-        await activateProfessionalSubscription(metadata.subscriptionId, event.data.reference);
+        await activateProfessionalSubscription(metadata.subscriptionId, event.data.reference, event.data.authorization);
         console.log('✅ Professional subscription activated');
       } else {
         console.log('⚠ Unknown subscriptionType in metadata:', metadata.subscriptionType);
@@ -753,6 +774,8 @@ export const getUserSubscription = async (req, res) => {
         data: {
           plan: professionalSub.plan, status: professionalSub.status, amount: professionalSub.amount,
           expiresAt: professionalSub.endDate, daysRemaining, isActive, isPending: false, graceEndsAt: null,
+          autoRenew: !!professionalSub.autoRenew, canAutoRenew: !!professionalSub.authorizationCode,
+          cardLast4: professionalSub.cardLast4 || null, cardBrand: professionalSub.cardBrand || null,
         },
       });
     }
@@ -793,11 +816,84 @@ export const getUserSubscription = async (req, res) => {
       data: {
         plan: sub.plan, status: sub.status, amount: sub.amount ?? PLAN_PRICING[sub.plan],
         expiresAt: sub.endDate, daysRemaining, isActive, isPending: false, graceEndsAt: null,
+        autoRenew: !!sub.autoRenew, canAutoRenew: !!sub.authorizationCode,
+        cardLast4: sub.cardLast4 || null, cardBrand: sub.cardBrand || null,
       },
     });
   } catch (error) {
     logger.error('Get subscription error', { error: error.message, userId });
     return res.status(500).json({ success: false, message: 'Failed to fetch subscription.' });
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AUTO-RENEW TOGGLE
+// Only enable-able once a reusable card authorization exists on the active
+// subscription (see activateUserSubscription / activateProfessionalSubscription).
+// jobs/autoRenewSubscriptions.js is what actually charges the saved card.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const setAutoRenew = async (req, res) => {
+  const userId  = req.user._id || req.user.id;
+  const role    = req.user.role || 'pet_owner';
+  const enabled = req.body.enabled;
+
+  if (typeof enabled !== 'boolean') {
+    return res.status(400).json({ success: false, message: '"enabled" must be true or false.' });
+  }
+
+  try {
+    if (role === 'pet_owner') {
+      const user = await User.findById(userId);
+      if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
+
+      const sub = user.subscription;
+      if (enabled && !sub?.authorizationCode) {
+        return res.status(400).json({
+          success: false,
+          message: 'No saved card on file. Pay by card once to enable auto-renew.',
+        });
+      }
+      if (enabled && !(sub.status === 'active' && new Date() < new Date(sub.endDate))) {
+        return res.status(400).json({ success: false, message: 'You need an active subscription to enable auto-renew.' });
+      }
+
+      user.subscription.autoRenew = enabled;
+      if (enabled) user.subscription.autoRenewFailCount = 0;
+      await user.save();
+
+      logActivity(userId, user.role, enabled ? 'subscription.auto_renew_enabled' : 'subscription.auto_renew_disabled', { userType: 'user' }, req);
+      return res.json({ success: true, data: { autoRenew: enabled } });
+    }
+
+    const sub = await Subscription.findOne({
+      user:   userId,
+      plan:   { $ne: 'messaging' },
+      status: 'active',
+    }).sort({ createdAt: -1 });
+
+    if (enabled && !sub?.authorizationCode) {
+      return res.status(400).json({
+        success: false,
+        message: 'No saved card on file. Pay by card once to enable auto-renew.',
+      });
+    }
+    if (enabled && !(sub.status === 'active' && new Date() < new Date(sub.endDate))) {
+      return res.status(400).json({ success: false, message: 'You need an active subscription to enable auto-renew.' });
+    }
+    if (!sub && !enabled) {
+      return res.json({ success: true, data: { autoRenew: false } });
+    }
+
+    sub.autoRenew = enabled;
+    if (enabled) sub.autoRenewFailCount = 0;
+    await sub.save();
+
+    logActivity(userId, req.user.role, enabled ? 'subscription.auto_renew_enabled' : 'subscription.auto_renew_disabled', { userType: 'professional' }, req);
+    return res.json({ success: true, data: { autoRenew: enabled } });
+  } catch (error) {
+    logger.error('Set auto-renew error', { error: error.message, userId });
+    return res.status(500).json({ success: false, message: 'Failed to update auto-renew.' });
   }
 };
 
@@ -888,7 +984,8 @@ export const cancelSubscription = async (req, res) => {
     });
 
     if (professionalSub) {
-      professionalSub.status = 'cancelled';
+      professionalSub.status    = 'cancelled';
+      professionalSub.autoRenew = false;
       await professionalSub.save();
       logActivity(userId, user.role, 'subscription.cancelled', {
         plan:       professionalSub.plan,
@@ -903,7 +1000,8 @@ export const cancelSubscription = async (req, res) => {
     }
 
     if (user.subscription?.status === 'active') {
-      user.subscription.status = 'cancelled';
+      user.subscription.status    = 'cancelled';
+      user.subscription.autoRenew = false;
       await user.save();
       logActivity(userId, user.role, 'subscription.cancelled', {
         plan:        user.subscription.plan,
@@ -969,9 +1067,9 @@ export const verifyPayment = async (req, res) => {
       result = await activateBusinessSeats(metadata, reference);
       return res.json({ success: true, message: 'Payment verified and staff seats added!', data: result });
     } else if (metadata.subscriptionType === 'user') {
-      result = await activateUserSubscription(metadata.userId, metadata.plan, reference);
+      result = await activateUserSubscription(metadata.userId, metadata.plan, reference, data.data.authorization);
     } else if (metadata.subscriptionType === 'professional') {
-      result = await activateProfessionalSubscription(metadata.subscriptionId, reference);
+      result = await activateProfessionalSubscription(metadata.subscriptionId, reference, data.data.authorization);
     } else {
       return res.status(400).json({ success: false, message: 'Unknown subscription type in metadata.' });
     }

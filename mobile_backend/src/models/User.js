@@ -59,6 +59,14 @@ const userSchema = new mongoose.Schema({
 
     // Grace window anchor — must be declared or Mongoose silently drops it on save
     paymentInitiatedAt: Date,
+
+    // ── Auto-renew (opt-in) — same pattern as models/Subscription.js ────────
+    authorizationCode:      { type: String, default: null },
+    cardLast4:              { type: String, default: null },
+    cardBrand:              { type: String, default: null },
+    autoRenew:              { type: Boolean, default: false },
+    autoRenewFailCount:     { type: Number, default: 0 },
+    lastAutoRenewAttemptAt: { type: Date, default: null },
   },
   isVerified: { type: Boolean, default: false },
   vetDetails: {

@@ -45,6 +45,19 @@ const subscriptionSchema = new mongoose.Schema(
     // a new Subscription document, breaking the 30-minute grace window anchor.
     paymentInitiatedAt:      { type: Date },
     abandonedReminderSentAt: { type: Date, default: null },
+
+    // ── Auto-renew (opt-in) ──────────────────────────────────────────────────
+    // authorizationCode is only ever set when Paystack marks the card used to
+    // pay as `reusable: true` (card channel only — bank transfer/USSD/QR never
+    // qualify). autoRenew can only be toggled on when a code is present; see
+    // setAutoRenew in subscription.controller.js. jobs/autoRenewSubscriptions.js
+    // charges this code on the day the subscription is due to expire.
+    authorizationCode:      { type: String, default: null },
+    cardLast4:              { type: String, default: null },
+    cardBrand:              { type: String, default: null },
+    autoRenew:              { type: Boolean, default: false },
+    autoRenewFailCount:     { type: Number, default: 0 },
+    lastAutoRenewAttemptAt: { type: Date, default: null },
   },
   { timestamps: true },
 );

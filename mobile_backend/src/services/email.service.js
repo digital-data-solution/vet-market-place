@@ -316,6 +316,42 @@ export async function sendSubscriptionExpired(name, email, plan, isProfessional)
   await sendEmail(email, `Your Xpress Vet ${planLabel} plan has expired`, html);
 }
 
+/** Sent when auto-renew successfully charges the saved card */
+export async function sendAutoRenewSucceeded(name, email, plan, amount, expiryDate, isProfessional) {
+  const firstName = name?.split(' ')[0] || 'there';
+  const planLabel = isProfessional ? (plan === 'pro' ? 'Pro' : 'Starter') : (plan === 'user_plus' ? 'Premium Plus' : 'Premium');
+  const expiry    = new Date(expiryDate).toLocaleDateString('en-NG', { day: 'numeric', month: 'long', year: 'numeric' });
+  const html = layout('Subscription Auto-Renewed', `
+    <h1>You're covered for another month, ${firstName} 🔄</h1>
+    <p>Your <strong>${planLabel}</strong> subscription auto-renewed using your saved card — no action needed.</p>
+    <div class="highlight">
+      <p>Plan: ${planLabel} &nbsp;|&nbsp; ₦${Number(amount).toLocaleString()}/month<br/>
+      Next renewal: ${expiry}</p>
+    </div>
+    <p>To turn off auto-renew or update your card, open the app and go to <strong>Profile → Subscription</strong>.</p>
+    <p style="margin-top:24px;">Thank you for staying with us,<br/><strong>The Xpress Vet Team</strong> 🐾</p>
+  `);
+  await sendEmail(email, `Auto-renewed: your Xpress Vet ${planLabel} plan`, html);
+}
+
+/** Sent when an auto-renew charge attempt fails — auto-renew is switched off so it won't retry silently */
+export async function sendAutoRenewFailed(name, email, plan, isProfessional) {
+  const firstName  = name?.split(' ')[0] || 'there';
+  const planLabel  = isProfessional ? (plan === 'pro' ? 'Pro' : 'Starter') : (plan === 'user_plus' ? 'Premium Plus' : 'Premium');
+  const consequence = isProfessional
+    ? 'Your listing will be hidden from search results if you don\'t renew today.'
+    : 'You will lose access to contact details and GPS search if you don\'t renew today.';
+
+  const html = layout('Auto-Renewal Failed', `
+    <h1>We couldn't renew your ${planLabel} plan</h1>
+    <p>Hi ${firstName}, your saved card was declined, so your <strong>${planLabel}</strong> subscription did not auto-renew today. We've turned off auto-renew for now so it won't keep retrying.</p>
+    <div class="highlight"><p>⚠️ ${consequence}</p></div>
+    <p>Open the app and go to <strong>Profile → Subscription</strong> to renew manually — it takes less than a minute.</p>
+    <p style="margin-top:24px;">The Xpress Vet Team 🐾</p>
+  `);
+  await sendEmail(email, `Action needed: your Xpress Vet ${planLabel} plan didn't auto-renew`, html);
+}
+
 /**
  * Warns a lapsed member that their EXTRA gallery photos (beyond the free plan)
  * will be removed on `removalDate` unless they renew. Sent once by

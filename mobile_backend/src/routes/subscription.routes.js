@@ -9,6 +9,7 @@ import {
   verifyPayment,
   getSubscriptionStats,
   getPricing,
+  setAutoRenew,
 } from '../api/subscription.controller.js';
 import {
   enforceSubscription,
@@ -75,6 +76,9 @@ router.post('/cancel-pending', cancelPendingSubscription);
 
 // Cancel active subscription — soft cancel; access retained until billing period ends
 router.delete('/cancel', cancelSubscription);
+
+// Toggle auto-renew — only succeeds once a reusable card (paid via "card" channel) is on file
+router.post('/auto-renew', setAutoRenew);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ADMIN ROUTES
