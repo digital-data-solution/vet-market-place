@@ -26,7 +26,7 @@ import { logActivity } from '../lib/activityLogger.js';
 import { sendPushToUser } from '../services/pushNotification.service.js';
 import { sendEmail, sendListingLiveEmail, sendEscrowSellerEmail, sendEscrowBuyerEmail } from '../services/email.service.js';
 import { deleteFromCloudinary } from '../lib/cloudinaryUpload.js';
-import { PET_CATEGORIES, PRODUCT_CATEGORIES } from '../models/Listing.js';
+import { PET_CATEGORIES, PRODUCT_CATEGORIES, isAllowedVideoUrl } from '../models/Listing.js';
 
 const PAYSTACK_BASE   = process.env.PAYSTACK_BASE       || 'https://api.paystack.co';
 const PAYSTACK_SECRET = process.env.PAYSTACK_SECRET_KEY || '';
@@ -283,6 +283,14 @@ export const createListing = async (req, res) => {
       ? b.images.filter((i) => i && i.url).map((i) => ({ url: i.url, publicId: i.publicId || null })).slice(0, 8)
       : [];
 
+    const videoUrl = (b.videoUrl || '').toString().trim() || null;
+    if (videoUrl && !isAllowedVideoUrl(videoUrl)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Video link must be a YouTube, TikTok, Instagram, or Vimeo URL.',
+      });
+    }
+
     const doc = {
       seller: userId,
       kind,
@@ -293,6 +301,7 @@ export const createListing = async (req, res) => {
       negotiable:  !!b.negotiable,
       category:    (b.category || 'other').toString().trim().slice(0, 40),
       images,
+      videoUrl,
       contactPhone:    (b.contactPhone || req.user.phone || '').toString().trim().slice(0, 30) || null,
       contactWhatsapp: (b.contactWhatsapp || '').toString().trim().slice(0, 30) || null,
       address: (b.address || '').toString().trim().slice(0, 200) || null,
@@ -364,6 +373,16 @@ export const updateListing = async (req, res) => {
     }
     if (Array.isArray(b.images)) {
       listing.images = b.images.filter((i) => i && i.url).map((i) => ({ url: i.url, publicId: i.publicId || null })).slice(0, 8);
+    }
+    if (b.videoUrl !== undefined) {
+      const videoUrl = (b.videoUrl || '').toString().trim() || null;
+      if (videoUrl && !isAllowedVideoUrl(videoUrl)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Video link must be a YouTube, TikTok, Instagram, or Vimeo URL.',
+        });
+      }
+      listing.videoUrl = videoUrl;
     }
     const banned = containsBanned(`${listing.title} ${listing.description}`);
     if (banned) return res.status(400).json({ success: false, message: `Prohibited content not allowed (matched: "${banned}").` });

@@ -25,6 +25,26 @@ const listingImageSchema = new mongoose.Schema(
 export const PET_CATEGORIES     = ['dog', 'cat', 'bird', 'fish', 'reptile', 'rabbit', 'poultry', 'livestock', 'other'];
 export const PRODUCT_CATEGORIES = ['food', 'accessories', 'health', 'grooming', 'equipment', 'housing', 'other'];
 
+// Allowed video-link domains — exported so market.controller.js can give a
+// friendly 400 before ever hitting the Mongoose validator.
+const ALLOWED_VIDEO_HOSTS = [
+  'youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be',
+  'tiktok.com', 'www.tiktok.com', 'vm.tiktok.com',
+  'instagram.com', 'www.instagram.com',
+  'vimeo.com', 'www.vimeo.com',
+];
+
+export function isAllowedVideoUrl(value) {
+  if (!value || typeof value !== 'string') return false;
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol !== 'https:') return false;
+    return ALLOWED_VIDEO_HOSTS.includes(url.hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
 const listingSchema = new mongoose.Schema({
   seller: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
 
@@ -52,6 +72,24 @@ const listingSchema = new mongoose.Schema({
   quantity:  { type: Number, min: 0, default: 1 },
 
   images: { type: [listingImageSchema], default: [] },
+
+  // External video link (YouTube/TikTok/Instagram/Vimeo) — deliberately NOT a
+  // hosted upload. Video storage/transformation on Cloudinary costs far more
+  // than images per file, and this app's existing gallery-limit + cleanup-cron
+  // infrastructure (lib/mediaLimits.js, jobs/mediaCleanup.js) was sized for
+  // images only. Linking out is free and matches Xpress Vet's "connector, not
+  // host" role for the marketplace. Domain allowlist enforced in the schema
+  // validator so this field can't become an open redirect / arbitrary link.
+  videoUrl: {
+    type: String,
+    trim: true,
+    default: null,
+    maxlength: 500,
+    validate: {
+      validator: (v) => !v || isAllowedVideoUrl(v),
+      message: 'Video link must be a valid YouTube, TikTok, Instagram, or Vimeo URL.',
+    },
+  },
 
   // Contact snapshot — captured at create time so a shared listing always has
   // a way to reach the seller even if their profile changes.
