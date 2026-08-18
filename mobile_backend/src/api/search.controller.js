@@ -23,7 +23,13 @@ import { calculateDistanceKm } from '../lib/geoDistance.js';
 import { searchNearbyPlaces, isGoogleNearbyFallbackEnabled } from '../services/googlePlaces.service.js';
 
 // Below this many combined own-DB results, we supplement with Google (when enabled).
-const GOOGLE_FALLBACK_THRESHOLD = 3;
+// Raised from 3 to 6 (2026-08-18): a real search near Mile 2, Lagos returned 4
+// "nearby" own-DB matches that were actually 20km+ away in different areas
+// (Alapere, Surulere, Magboro, Ibadan) — likely inaccurate signup geocoding —
+// which silently blocked Google from filling in genuinely close options. A
+// higher threshold means a few weak/mismatched own-DB rows don't crowd out a
+// real supplement while the marketplace is still this sparse.
+const GOOGLE_FALLBACK_THRESHOLD = 6;
 
 const VALID_NEARBY_ROLES = [
   'vet', 'kennel', 'groomer', 'trainer', 'pet_sitter',
