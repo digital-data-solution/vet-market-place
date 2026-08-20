@@ -1,13 +1,32 @@
 /**
  * Email Service — supports Resend and Brevo (Sendinblue)
  *
- * Configure one provider via environment variables:
+ * Configure via environment variables:
  *   RESEND_API_KEY  → uses Resend (resend.com)
  *   BREVO_API_KEY   → uses Brevo (brevo.com)
  *   EMAIL_FROM      → sender address, e.g. "Xpress Vet <noreply@xpressvetmarketplace.com>"
  *
- * If neither key is set, all send calls are logged and skipped silently
- * so the app works correctly in dev without email credentials.
+ * Both can be set at once. sendEmail() doesn't send synchronously — it
+ * writes a row to EmailQueue (models/EmailQueue.js) and jobs/
+ * emailQueueWorker.js drains it every minute, trying every configured
+ * provider in order before giving up on that pass. That gives two things
+ * for free: (1) automatic failover — if Resend is down or rate-limited,
+ * Brevo picks up the send within the same minute, and vice versa; (2) a
+ * durable retry — a row survives a dyno restart mid-send, unlike an
+ * in-memory queue, because Mongo (not Redis, which has been unreliable on
+ * this project — see the known-gotchas memory note) backs it.
+ *
+ * A call-site can pin a preferred provider via the 4th-arg options:
+ * sendEmail(to, subject, html, text, { provider: 'brevo' }) — the worker
+ * still falls back to the other provider if the preferred one fails, this
+ * only sets *order*, not an exclusive choice. Xpress Market/Pet Mart
+ * listing mail is pinned to Brevo deliberately (2026-08-20) to keep that
+ * higher-volume traffic off the Resend domain the lower-volume
+ * cold-outreach work depends on for its sender reputation — see the
+ * Xpress Vet clinic outreach memory note for the full reasoning.
+ *
+ * If neither key is set, sends are logged as 'skipped' immediately (no
+ * queue row created) so the app works correctly in dev without credentials.
  *
  * Delivery/open/click tracking (Resend only) lives in routes/webhooks.routes.js
  * — it correlates back to EmailLog via the resendEmailId captured here.
@@ -17,6 +36,7 @@ import fetch from 'node-fetch';
 import crypto from 'crypto';
 import logger from '../lib/logger.js';
 import EmailLog from '../models/EmailLog.js';
+import EmailQueue from '../models/EmailQueue.js';
 
 const FROM    = process.env.EMAIL_FROM    || 'Xpress Vet <noreply@xpressvetmarketplace.com>';
 const RESEND  = process.env.RESEND_API_KEY;
@@ -66,49 +86,91 @@ export function verifyClientReminderSig(cid, sig) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CORE SEND
+// CORE SEND — enqueue here, jobs/emailQueueWorker.js does the actual sending.
+//
+// sendEmail() no longer calls a provider directly. It writes a row to
+// EmailQueue and returns immediately (still async/non-throwing, so every
+// existing call site — 60+ of them — keeps working unchanged). The worker
+// polls every minute, and for each due row tries EVERY configured provider
+// in preference order before giving up on that pass — so a Resend outage or
+// exhausted quota fails over to Brevo (and vice versa) automatically, within
+// the same minute, not after a human notices. Only once every configured
+// provider has failed on a pass does the row back off and wait for the next
+// one; it's marked permanently 'failed' only after maxAttempts full passes.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * sendEmail — provider-agnostic send function.
- * @param {string}   to      Recipient address
- * @param {string}   subject Email subject
- * @param {string}   html    HTML body
- * @param {string}   [text]  Plain-text fallback (auto-generated if omitted)
+ * sendEmail — provider-agnostic, queued send.
+ * @param {string}   to       Recipient address
+ * @param {string}   subject  Email subject
+ * @param {string}   html     HTML body
+ * @param {string}   [text]   Plain-text fallback (auto-generated if omitted)
+ * @param {object}   [opts]
+ * @param {string}   [opts.provider] 'resend' | 'brevo' — preferred provider;
+ *   the worker still falls back to the other one if this fails. Omit for no
+ *   preference (worker tries Resend first, matching the pre-queue default).
  */
-// Fire-and-forget logging — must never slow down or break the actual send.
-function logEmail(to, subject, status, error, resendEmailId) {
-  EmailLog.create({ to, subject, status, error, resendEmailId: resendEmailId || null }).catch(() => {});
-}
-
-export async function sendEmail(to, subject, html, text) {
+export async function sendEmail(to, subject, html, text, { provider } = {}) {
   if (!to || !subject || !html) {
     logger.warn('sendEmail called with missing args', { to, subject });
     return;
   }
 
   if (!RESEND && !BREVO) {
+    // Nothing could ever send this — log it as skipped now rather than
+    // queue a row that would just sit there forever.
     logger.info(`[EMAIL SKIP] To: ${to} | Subject: ${subject} (no provider key set)`);
-    logEmail(to, subject, 'skipped');
+    EmailLog.create({ to, subject, status: 'skipped' }).catch(() => {});
     return;
   }
 
   const plainText = text || html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 
   try {
-    let resendEmailId = null;
-    if (RESEND) {
-      resendEmailId = await sendViaResend(to, subject, html, plainText);
-    } else {
-      await sendViaBravo(to, subject, html, plainText);
-    }
-    logger.info('Email sent', { to, subject });
-    logEmail(to, subject, 'sent', null, resendEmailId);
+    await EmailQueue.create({ to, subject, html, text: plainText, preferredProvider: provider || null });
   } catch (err) {
-    logger.error('Email send failed', { to, subject, error: err.message });
-    logEmail(to, subject, 'failed', err.message);
-    // Never throw — email failure must not break API responses
+    // Enqueue failure (e.g. DB hiccup) — never throw into the caller.
+    logger.error('Email enqueue failed', { to, subject, error: err.message });
   }
+}
+
+// Backoff between full passes (each pass already tried every configured
+// provider) — attempt 1 fails → retry in 2 min, then 10 min, 30 min, 2 hr,
+// and the 5th failure (maxAttempts) marks the row permanently failed.
+const BACKOFF_MINUTES = [2, 10, 30, 120];
+
+// One row's worth of work: try every configured provider, in preference
+// order, until one succeeds. Exported for jobs/emailQueueWorker.js — kept
+// here rather than in the job file so the provider dispatch/error-shaping
+// logic lives next to sendViaResend/sendViaBrevo instead of being
+// duplicated or reached into from outside the module.
+export async function processQueuedEmail(doc) {
+  const order = (doc.preferredProvider === 'brevo' ? ['brevo', 'resend'] : ['resend', 'brevo'])
+    .filter((p) => (p === 'resend' ? RESEND : BREVO));
+
+  const attemptErrors = { resend: null, brevo: null };
+  for (const providerName of order) {
+    try {
+      const result = providerName === 'resend'
+        ? await sendViaResend(doc.to, doc.subject, doc.html, doc.text)
+        : await sendViaBrevo(doc.to, doc.subject, doc.html, doc.text);
+      logger.info('Email sent', { to: doc.to, subject: doc.subject, provider: providerName, afterFallback: providerName !== order[0] });
+      return { ok: true, providerUsed: providerName, resendEmailId: providerName === 'resend' ? result : null };
+    } catch (err) {
+      attemptErrors[providerName] = err.message;
+      logger.warn('Email provider attempt failed, trying next', {
+        to: doc.to, subject: doc.subject, provider: providerName,
+        status: err.status || null, error: err.message,
+      });
+    }
+  }
+
+  return { ok: false, attemptErrors };
+}
+
+export function nextBackoffAt(attempts) {
+  const minutes = BACKOFF_MINUTES[Math.min(attempts, BACKOFF_MINUTES.length) - 1] || BACKOFF_MINUTES.at(-1);
+  return new Date(Date.now() + minutes * 60 * 1000);
 }
 
 // Returns Resend's message id (used later to correlate delivery/open/click
@@ -124,13 +186,15 @@ async function sendViaResend(to, subject, html, text) {
   });
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`Resend error ${res.status}: ${body}`);
+    const err = new Error(`Resend error ${res.status}: ${body}`);
+    err.status = res.status; // 429 = rate-limited/quota-exhausted — worth telling apart from a hard failure
+    throw err;
   }
   const body = await res.json().catch(() => null);
   return body?.id || null;
 }
 
-async function sendViaBravo(to, subject, html, text) {
+async function sendViaBrevo(to, subject, html, text) {
   const res = await fetch('https://api.brevo.com/v3/smtp/email', {
     method:  'POST',
     headers: {
@@ -147,7 +211,9 @@ async function sendViaBravo(to, subject, html, text) {
   });
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`Brevo error ${res.status}: ${body}`);
+    const err = new Error(`Brevo error ${res.status}: ${body}`);
+    err.status = res.status;
+    throw err;
   }
 }
 
@@ -845,7 +911,7 @@ export async function sendListingLiveEmail(name, email, title) {
     <p>Tip: open it and tap <strong>Share</strong> to send it to WhatsApp — that's the fastest way to find a buyer. You can also boost it to the top for more views.</p>
     <p style="text-align:center;margin:24px 0"><a href="https://xpressvetmarketplace.com" class="btn">View my listings →</a></p>
   `);
-  await sendEmail(email, `Your listing "${title}" is live on Xpress Market`, html);
+  await sendEmail(email, `Your listing "${title}" is live on Xpress Market`, html, null, { provider: 'brevo' });
 }
 
 export async function sendEscrowSellerEmail(name, email, buyerName, title, amount) {
