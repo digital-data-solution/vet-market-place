@@ -25,6 +25,7 @@ import logger      from '../lib/logger.js';
 import { logActivity } from '../lib/activityLogger.js';
 import { sendPushToUser } from '../services/pushNotification.service.js';
 import { sendEmail, sendListingLiveEmail, sendEscrowSellerEmail, sendEscrowBuyerEmail } from '../services/email.service.js';
+import { postListingToTelegram } from '../services/telegram.service.js';
 import { deleteFromCloudinary } from '../lib/cloudinaryUpload.js';
 import { PET_CATEGORIES, PRODUCT_CATEGORIES, isAllowedVideoUrl } from '../models/Listing.js';
 
@@ -338,6 +339,7 @@ export const createListing = async (req, res) => {
 
     logActivity(userId, req.user.role, 'market.listing.created', { listingId: listing._id, kind, price }, req);
     if (req.user.email) sendListingLiveEmail(req.user.name, req.user.email, listing.title).catch(() => {});
+    postListingToTelegram(listing).catch(() => {}); // no-op until TELEGRAM_BOT_TOKEN/TELEGRAM_CHANNEL_ID are set
     return res.status(201).json({ success: true, message: 'Listing published.', data: publicListing(listing) });
   } catch (error) {
     logger.error('Create listing error', { error: error.message, userId });
