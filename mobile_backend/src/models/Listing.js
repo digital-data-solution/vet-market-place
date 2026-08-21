@@ -130,6 +130,11 @@ const listingSchema = new mongoose.Schema({
   isFlagged:   { type: Boolean, default: false, index: true },
   removedReason: { type: String, default: null },
 
+  // Set once a WhatsApp-ready draft of this listing has been pushed to the
+  // private Telegram drafts channel — guards against re-queueing the same
+  // draft on a later edit/re-save. See services/telegram.service.js.
+  whatsappDraftedAt: { type: Date, default: null },
+
   // Freshness — listing hidden from browse once past this; renew to extend.
   expiresAt: { type: Date, index: true },
 }, { timestamps: true });
