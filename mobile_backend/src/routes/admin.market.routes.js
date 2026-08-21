@@ -5,6 +5,7 @@ import {
   adminListListings,
   adminRemoveListing,
   dismissReport,
+  backfillTelegram,
 } from '../api/admin.market.controller.js';
 import { adminProtect } from '../middlewares/adminAuthMiddleware.js';
 
@@ -17,5 +18,6 @@ router.get('/reports',                  listReports);
 router.get('/listings',                 adminListListings);
 router.post('/listings/:id/remove',     adminRemoveListing);
 router.post('/reports/:id/dismiss',     dismissReport);
+router.post('/backfill-telegram',       backfillTelegram);
 
 export default router;

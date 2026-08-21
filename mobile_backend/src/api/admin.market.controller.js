@@ -7,6 +7,7 @@ import Listing from '../models/Listing.js';
 import Report  from '../models/Report.js';
 import { purgeListingImages } from './market.controller.js';
 import { sendPushToUser } from '../services/pushNotification.service.js';
+import { postListingToTelegram } from '../services/telegram.service.js';
 import logger  from '../lib/logger.js';
 
 // GET /api/admin/market/stats — headline numbers for the dashboard.
@@ -91,6 +92,45 @@ export const adminRemoveListing = async (req, res) => {
     logger.error('Admin remove listing error', { error: error.message });
     return res.status(500).json({ success: false, message: 'Failed to remove listing.' });
   }
+};
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// POST /api/admin/market/backfill-telegram — one-time catch-up: post every
+// currently-active listing to the Telegram channel, oldest first. Only
+// needed because the auto-post hook only fires on *new* listing creation —
+// anything listed before that went live never got a post. Safe to re-run
+// (it just re-posts active listings again, no dedupe/state tracked), but
+// normally only needed once, right after TELEGRAM_BOT_TOKEN/CHANNEL_ID are
+// first configured. Runs synchronously with a delay between sends to stay
+// well under Telegram's flood limits — fine at this project's current
+// listing volume; would need to move to a background job if that grows
+// into the thousands.
+export const backfillTelegram = async (req, res) => {
+  const limit = Math.min(500, Math.max(1, parseInt(req.body?.limit, 10) || 200));
+  let listings;
+  try {
+    listings = await Listing.find({ status: 'active' }).sort({ createdAt: 1 }).limit(limit).lean();
+  } catch (error) {
+    logger.error('Admin Telegram backfill lookup error', { error: error.message });
+    return res.status(500).json({ success: false, message: 'Failed to load listings to backfill.' });
+  }
+
+  // Respond immediately — with the artificial delay below this can take
+  // well over a minute for more than a handful of listings, longer than
+  // it's reasonable to hold a browser request open for. The admin can just
+  // watch the channel fill in; each post is also logged server-side.
+  res.json({ success: true, message: `Backfill started for ${listings.length} active listing(s) — check the Telegram channel in a moment.`, data: { total: listings.length } });
+
+  (async () => {
+    let posted = 0;
+    for (const listing of listings) {
+      await postListingToTelegram(listing);
+      posted++;
+      await sleep(1500); // ~40/min, well under Telegram's per-chat flood limit
+    }
+    logger.info('Admin Telegram backfill complete', { posted, total: listings.length });
+  })().catch((error) => logger.error('Admin Telegram backfill error', { error: error.message }));
 };
 
 // POST /api/admin/market/reports/:id/dismiss — clear a report, un-hide the listing.
