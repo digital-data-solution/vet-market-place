@@ -92,11 +92,12 @@ export async function postListingToTelegram(listing) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Builds a WhatsApp-ready caption: raw *bold*/📍 formatting (no HTML/Markdown
- * escaping — this is never sent through Telegram's own parse_mode, see the
- * critical note in postListingToWhatsAppDrafts). Telegram's media-caption
- * limit is 1024 chars; only the description is ever trimmed to fit — the
- * heading and the trailing link block are never truncated.
+ * Builds a WhatsApp-ready caption: raw *bold* and pin-emoji formatting, no
+ * HTML/Markdown escaping — this is never sent through Telegram's own
+ * parse_mode, see the critical note in postListingToWhatsAppDrafts.
+ * Telegram's media-caption limit is 1024 chars; only the description is
+ * ever trimmed to fit — the heading and the trailing link block are never
+ * truncated.
  */
 function buildWhatsAppCaption(listing) {
   const price = formatPrice(listing.price, listing.currency);
