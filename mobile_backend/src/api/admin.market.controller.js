@@ -7,7 +7,7 @@ import Listing from '../models/Listing.js';
 import Report  from '../models/Report.js';
 import { purgeListingImages } from './market.controller.js';
 import { sendPushToUser } from '../services/pushNotification.service.js';
-import { postListingToTelegram } from '../services/telegram.service.js';
+import { postListingToTelegram, postListingToWhatsAppDrafts } from '../services/telegram.service.js';
 import logger  from '../lib/logger.js';
 
 // GET /api/admin/market/stats — headline numbers for the dashboard.
@@ -131,6 +131,40 @@ export const backfillTelegram = async (req, res) => {
     }
     logger.info('Admin Telegram backfill complete', { posted, total: listings.length });
   })().catch((error) => logger.error('Admin Telegram backfill error', { error: error.message }));
+};
+
+// POST /api/admin/market/backfill-whatsapp-drafts — same idea as the Telegram
+// backfill above, but for the private WhatsApp-drafts channel. Only picks up
+// active listings that (a) have a photo (drafts are photo-first) and (b)
+// don't already have whatsappDraftedAt set — so this is naturally safe to
+// re-run any time (e.g. after adding TELEGRAM_WA_DRAFTS_CHAT_ID for the
+// first time, or periodically to catch anything the create-time hook missed)
+// without re-drafting anything already sent.
+export const backfillWhatsAppDrafts = async (req, res) => {
+  const limit = Math.min(500, Math.max(1, parseInt(req.body?.limit, 10) || 200));
+  let listings;
+  try {
+    listings = await Listing.find({
+      status: 'active',
+      whatsappDraftedAt: null,
+      'images.0': { $exists: true },
+    }).sort({ createdAt: 1 }).limit(limit).lean();
+  } catch (error) {
+    logger.error('Admin WhatsApp-draft backfill lookup error', { error: error.message });
+    return res.status(500).json({ success: false, message: 'Failed to load listings to backfill.' });
+  }
+
+  res.json({ success: true, message: `Drafting ${listings.length} listing(s) to the WhatsApp-drafts channel — check it in a moment.`, data: { total: listings.length } });
+
+  (async () => {
+    let drafted = 0;
+    for (const listing of listings) {
+      await postListingToWhatsAppDrafts(listing);
+      drafted++;
+      await sleep(1500);
+    }
+    logger.info('Admin WhatsApp-draft backfill complete', { drafted, total: listings.length });
+  })().catch((error) => logger.error('Admin WhatsApp-draft backfill error', { error: error.message }));
 };
 
 // POST /api/admin/market/reports/:id/dismiss — clear a report, un-hide the listing.

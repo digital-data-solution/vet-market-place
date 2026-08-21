@@ -900,6 +900,7 @@
       <div class="topbar">
         <h2>Marketplace</h2>
         <button class="btn btn-sm" onclick="backfillTelegram()" title="Post every currently-active listing to the Telegram channel — only needed once, for listings created before the Telegram integration went live">📢 Backfill to Telegram</button>
+        <button class="btn btn-sm" onclick="backfillWhatsAppDrafts()" title="Draft every active, photoed listing that hasn't been drafted yet into the private WhatsApp-drafts channel">💬 Backfill to WhatsApp Drafts</button>
         <button class="btn btn-ghost btn-sm" onclick="loadMarket()">↻ Refresh</button>
       </div>
       <div id="market-stats-grid" class="stats-grid"><div class="spinner"></div></div>
@@ -1688,6 +1689,12 @@ async function backfillTelegram() {
   if (!confirm('Post every active listing to the Telegram channel? Only run this once — running it again re-posts everything.')) return;
   toast('Starting backfill…');
   const r = await api('POST', '/api/admin/market/backfill-telegram', {});
+  if (r?.ok) toast(r.body.message); else toast(r?.body?.message || 'Backfill failed.', 'error');
+}
+
+async function backfillWhatsAppDrafts() {
+  toast('Drafting to WhatsApp channel…');
+  const r = await api('POST', '/api/admin/market/backfill-whatsapp-drafts', {});
   if (r?.ok) toast(r.body.message); else toast(r?.body?.message || 'Backfill failed.', 'error');
 }
 
