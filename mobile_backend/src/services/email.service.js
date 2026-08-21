@@ -907,9 +907,10 @@ export async function sendListingLiveEmail(name, email, title) {
   const firstName = name?.split(' ')[0] || 'there';
   const html = layout('Your listing is live', `
     <h1>Your listing is live, ${firstName} ✅</h1>
-    <p><strong>${title}</strong> is now showing on Xpress Market.</p>
+    <p><strong>${title}</strong> is now showing on Xpress Market — we've also posted it straight to our Telegram channel, so it's already in front of everyone following new listings there.</p>
     <p>Tip: open it and tap <strong>Share</strong> to send it to WhatsApp — that's the fastest way to find a buyer. You can also boost it to the top for more views.</p>
     <p style="text-align:center;margin:24px 0"><a href="https://xpressvetmarketplace.com" class="btn">View my listings →</a></p>
+    <p style="color:#94A3B8;font-size:13px">📢 Want to see every new listing yourself, the moment it goes live? Join our Telegram channel: <a href="https://t.me/XpressVetListings">t.me/XpressVetListings</a></p>
   `);
   await sendEmail(email, `Your listing "${title}" is live on Xpress Market`, html, null, { provider: 'brevo' });
 }
