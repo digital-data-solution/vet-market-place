@@ -88,16 +88,15 @@ const professionalSchema = new mongoose.Schema(
       match: [/^\S+@\S+\.\S+$/, 'Please provide a valid email address'],
     },
 
-    // Geolocation
+    // Geolocation — GeoJSON point for nearby search.
+    // NOTE: no `default: 'Point'` on `type` — a default would make Mongoose
+    // materialise `location: { type: 'Point' }` with NO coordinates whenever
+    // geocoding fails. A 2dsphere index rejects that malformed point, so the
+    // whole profile would fail to save. Leaving it undefined means the whole
+    // `location` object is simply absent (index skips it). See Listing.js.
     location: {
-      type: {
-        type: String,
-        enum: ['Point'],
-        default: 'Point',
-      },
-      coordinates: {
-        type: [Number],
-      },
+      type:        { type: String, enum: ['Point'] },
+      coordinates: { type: [Number], default: undefined },
     },
 
     // Verification status

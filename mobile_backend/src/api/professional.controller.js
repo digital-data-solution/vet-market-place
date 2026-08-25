@@ -244,19 +244,14 @@ export const onboardProfessional = async (req, res) => {
 
     logger.info(`Onboarding professional: ${name} (${role})`, { userId });
 
-    // ── Geocoding (blocking) ────────────────────────────────────────────────
-    // Address must resolve to real coordinates — every professional needs a
-    // physical location so they appear in nearby searches.
+    // ── Geocoding (best-effort, non-blocking) ───────────────────────────────
+    // Try to resolve the address to real coordinates so the profile shows up
+    // in nearby searches. LocationIQ's free-tier Nigerian coverage is sparse
+    // outside major cities, so a failed geocode must NOT block registration —
+    // the profile is created with location: null instead, and the frontend
+    // (ProfessionalOnboardingScreen) already prompts to set location manually
+    // or skip for now when `data.location` comes back empty.
     const location = await geocodeAddress(address);
-    if (!location) {
-      return res.status(400).json({
-        success: false,
-        message:
-          'We could not find that address on the map. Please include your area and state — ' +
-          'for example: "Alapere, Lagos" or "Bodija, Ibadan, Oyo State". ' +
-          'This is needed so pet owners can find you in nearby searches.',
-      });
-    }
 
     // ── Create professional profile ─────────────────────────────────────────
     // FIX: Do NOT pass `isVerified` here. The pre('save') hook in Professional.js
@@ -273,7 +268,7 @@ export const onboardProfessional = async (req, res) => {
       specialization: specialization?.trim(),
       phone: phone?.trim(),
       email: email?.trim(),
-      location, // null if geocoding failed — that's fine
+      ...(location && { location }), // key omitted entirely if geocoding failed — see Professional.js schema note
       ...(verificationDocuments && typeof verificationDocuments === 'object' && { verificationDocuments }),
     });
 
