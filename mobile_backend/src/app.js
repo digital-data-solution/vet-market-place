@@ -39,6 +39,8 @@ import adminMarketRoutes      from './routes/admin.market.routes.js';
 import adminJobBoardRoutes    from './routes/admin.jobBoard.routes.js';
 import adminNotificationsRoutes from './routes/admin.notifications.routes.js';
 import notificationsRoutes    from './routes/notifications.routes.js';
+import academyWebhookRoutes   from './routes/academyWebhook.routes.js';
+import adminAcademyRoutes     from './routes/admin.academy.routes.js';
 
 // Webhook handler — imported directly so it can receive raw body
 import { handlePaystackWebhook } from './api/subscription.controller.js';
@@ -560,6 +562,8 @@ app.use('/api/admin/market',        adminMarketRoutes);
 app.use('/api/admin/jobs',          adminJobBoardRoutes);
 app.use('/api/admin/notifications', adminNotificationsRoutes);
 app.use('/api/notifications',       notificationsRoutes);
+app.use('/api/webhooks/academy',    academyWebhookRoutes);
+app.use('/api/admin/academy',       adminAcademyRoutes);
 
 // ─── Client-side error reporting ─────────────────────────────────────────────
 // No auth required — errors may fire before the user is authenticated.

@@ -256,6 +256,9 @@
       <div class="nav-item" onclick="showSection('notifications')" id="nav-notifications">
         <span class="nav-icon">🔔</span> Push Notifications
       </div>
+      <div class="nav-item" onclick="showSection('academy')" id="nav-academy">
+        <span class="nav-icon">🎓</span> Academy Courses
+      </div>
       <div class="nav-item" onclick="showSection('emailstats')" id="nav-emailstats">
         <span class="nav-icon">📧</span> Email Analytics
       </div>
@@ -804,6 +807,30 @@
       </div>
     </div>
 
+    <!-- ── Academy Courses ─────────────────────────────── -->
+    <div id="section-academy" class="section">
+      <div class="topbar">
+        <h2>Academy Courses</h2>
+        <button class="btn btn-ghost btn-sm" onclick="loadAcademyDrafts()">↻ Refresh</button>
+      </div>
+      <p style="font-size:13px;color:#64748B;margin:-10px 0 18px">
+        Courses reported live by Xpress Digital Academy's webhook. Nothing here is ever sent to anyone automatically —
+        review a course below and click <strong>Draft Notification</strong> to prefill the Push Notifications composer,
+        where you review, edit and send it yourself.
+      </p>
+      <div class="card">
+        <div class="card-head"><h3>New course drafts</h3></div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr>
+              <th>Course</th><th>Line</th><th>Price</th><th>Category</th><th>Published</th><th></th>
+            </tr></thead>
+            <tbody id="academy-drafts-tbody"><tr><td colspan="6"><div class="spinner"></div></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Email Analytics ─────────────────────────────── -->
     <div id="section-emailstats" class="section">
       <div class="topbar">
@@ -1299,6 +1326,7 @@ function showSection(name) {
     verifstats: loadVerifStats, referrals: loadReferrals, practice: loadPracticeStats, utm: loadUtmStats, content: loadContent,
     messaging: loadMessaging, system: loadSystem,
     notifications: loadNotifications,
+    academy: loadAcademyDrafts,
     emailstats: loadEmailStats,
     exports: () => {},
   };
@@ -2557,6 +2585,58 @@ async function viewNotificationOpens(id) {
       </div>
       <div style="font-size:12px;color:#94A3B8">${fmt(o.openedAt)}</div>
     </div>`).join('');
+}
+
+// ── Academy Courses ──────────────────────────────────────────────────────────────
+// Review queue for CoursePublishDraft records created by the Academy's
+// course-publish webhook. Nothing here ever sends anything — "Draft
+// Notification" only prefills the existing Push Notifications composer above,
+// which still requires the admin to review and hit Send themselves.
+async function loadAcademyDrafts() {
+  const tbody = document.getElementById('academy-drafts-tbody');
+  tbody.innerHTML = '<tr><td colspan="6"><div class="spinner"></div></td></tr>';
+  const r = await api('GET', '/api/admin/academy/course-drafts?status=draft');
+  const drafts = r?.body?.data || [];
+  if (!drafts.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="no-data">No new course drafts yet.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = drafts.map(d => `
+    <tr>
+      <td style="max-width:260px">
+        <a href="${d.courseUrl}" target="_blank" rel="noopener"><strong>${d.courseName}</strong></a>
+        ${d.shortDescription ? `<div style="font-size:12px;color:#64748B">${d.shortDescription}</div>` : ''}
+      </td>
+      <td>${d.line || '—'}</td>
+      <td>${d.pricingModel === 'FREE' || !d.priceNgn ? 'Free' : `₦${Number(d.priceNgn).toLocaleString()}`}</td>
+      <td>${d.category || '—'}</td>
+      <td style="white-space:nowrap;font-size:12px">${fmt(d.publishedAt || d.createdAt)}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-primary btn-sm" onclick='draftNotificationFromCourse(${JSON.stringify(d).replace(/'/g, '&#39;')})'>Draft Notification</button>
+        <button class="btn btn-ghost btn-sm" onclick="dismissAcademyDraft('${d._id}')">Dismiss</button>
+      </td>
+    </tr>`).join('');
+}
+
+async function dismissAcademyDraft(id) {
+  const r = await api('POST', `/api/admin/academy/course-drafts/${id}/dismiss`);
+  if (!r?.ok) return toast(r?.body?.message || 'Failed to dismiss.', 'error');
+  toast('Dismissed.');
+  loadAcademyDrafts();
+}
+
+async function draftNotificationFromCourse(draft) {
+  showSection('notifications');
+  const priceLine = draft.pricingModel === 'FREE' || !draft.priceNgn ? 'Free' : `₦${Number(draft.priceNgn).toLocaleString()}`;
+  document.getElementById('notif-title').value = `New course: ${draft.courseName}`;
+  document.getElementById('notif-body').value =
+    `${draft.shortDescription ? draft.shortDescription + ' — ' : ''}${priceLine}. Enroll: ${draft.courseUrl}`;
+  setNotifTargetType('segment');
+  await loadNotifSegments();
+  const select = document.getElementById('notif-segment-select');
+  if ([...select.options].some(o => o.value === 'role_vet')) select.value = 'role_vet';
+  previewNotificationReach();
+  toast(`Prefilled from "${draft.courseName}" — review before sending.`);
 }
 
 // ── Email Analytics ─────────────────────────────────────────────────────────────
