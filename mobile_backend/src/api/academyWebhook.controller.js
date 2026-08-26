@@ -63,22 +63,44 @@ export const handleVetCoursePublished = async (req, res) => {
     });
   }
 
-  try {
-    const draft = await CoursePublishDraft.create({
-      event,
-      line: line || null,
-      courseName: courseName.trim(),
-      slug: slug || null,
-      priceNgn: typeof priceNgn === 'number' ? priceNgn : null,
-      pricingModel: pricingModel || null,
-      shortDescription: shortDescription || null,
-      category: category || null,
-      courseUrl,
-      publishedAt: publishedAt ? new Date(publishedAt) : new Date(),
-      rawPayload: body,
-    });
+  const fields = {
+    event,
+    line: line || null,
+    courseName: courseName.trim(),
+    slug: slug || null,
+    priceNgn: typeof priceNgn === 'number' ? priceNgn : null,
+    pricingModel: pricingModel || null,
+    shortDescription: shortDescription || null,
+    category: category || null,
+    courseUrl,
+    publishedAt: publishedAt ? new Date(publishedAt) : new Date(),
+    rawPayload: body,
+  };
 
-    logger.info('Academy course-publish draft recorded', { draftId: draft._id, courseName, line });
+  try {
+    // Idempotent by slug: a retried/duplicate delivery for a course that's
+    // still sitting as an unreviewed draft updates that same row instead of
+    // filing a second one — a retry storm during setup created 65 rows for
+    // 9 real courses before this guard existed (cleaned up 2026-08-26). Once
+    // an admin dismisses a draft or turns it into a notification, a later
+    // re-publish of the same slug is treated as new (files a fresh draft).
+    let draft;
+    let isNew = true;
+    if (slug) {
+      const existing = await CoursePublishDraft.findOne({ slug, status: 'draft' });
+      if (existing) {
+        isNew = false;
+        Object.assign(existing, fields);
+        draft = await existing.save();
+      }
+    }
+    if (!draft) {
+      draft = await CoursePublishDraft.create(fields);
+    }
+
+    logger.info(isNew ? 'Academy course-publish draft recorded' : 'Academy course-publish draft updated (duplicate slug)', {
+      draftId: draft._id, courseName, line,
+    });
 
     return res.status(201).json({
       success: true,
