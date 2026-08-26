@@ -784,6 +784,28 @@ export async function sendReferralRewardEmail(name, email, bonusDays) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Sent once to a professional/shop who has never bought a listing boost. */
+/**
+ * Admin-composed one-off campaign email — the email counterpart to
+ * AdminNotification's push composer (see admin.emailCampaigns.controller.js
+ * / services/adminEmailCampaign.service.js). `bodyText` is plain text typed
+ * into the dashboard's textarea: HTML-escaped then split into paragraphs so
+ * a stray "<" or "&" (e.g. in a course title) can't break the template,
+ * then wrapped in the same branded layout()/unsubscribe footer as every
+ * other marketing email in this file.
+ */
+export async function sendAdminCampaignEmail(name, email, userId, subject, bodyText) {
+  const firstName = name?.split(' ')[0] || 'there';
+  const unsub = unsubscribeUrl(userId);
+  const escaped = String(bodyText || '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const paragraphs = escaped
+    .split(/\n{2,}/)
+    .map((p) => `<p>${p.replace(/\n/g, '<br/>')}</p>`)
+    .join('');
+  const html = layout(subject, `<h1>Hey ${firstName},</h1>${paragraphs}`, unsub);
+  await sendEmail(email, subject, html);
+}
+
 export async function sendBoostListingPromo(name, email, userId, listingLabel) {
   const firstName = name?.split(' ')[0] || 'there';
   const unsub = unsubscribeUrl(userId);

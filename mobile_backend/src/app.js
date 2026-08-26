@@ -41,6 +41,7 @@ import adminNotificationsRoutes from './routes/admin.notifications.routes.js';
 import notificationsRoutes    from './routes/notifications.routes.js';
 import academyWebhookRoutes   from './routes/academyWebhook.routes.js';
 import adminAcademyRoutes     from './routes/admin.academy.routes.js';
+import adminEmailCampaignsRoutes from './routes/admin.emailCampaigns.routes.js';
 
 // Webhook handler — imported directly so it can receive raw body
 import { handlePaystackWebhook } from './api/subscription.controller.js';
@@ -564,6 +565,7 @@ app.use('/api/admin/notifications', adminNotificationsRoutes);
 app.use('/api/notifications',       notificationsRoutes);
 app.use('/api/webhooks/academy',    academyWebhookRoutes);
 app.use('/api/admin/academy',       adminAcademyRoutes);
+app.use('/api/admin/email-campaigns', adminEmailCampaignsRoutes);
 
 // ─── Client-side error reporting ─────────────────────────────────────────────
 // No auth required — errors may fire before the user is authenticated.

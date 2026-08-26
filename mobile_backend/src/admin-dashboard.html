@@ -256,6 +256,9 @@
       <div class="nav-item" onclick="showSection('notifications')" id="nav-notifications">
         <span class="nav-icon">🔔</span> Push Notifications
       </div>
+      <div class="nav-item" onclick="showSection('emailcampaigns')" id="nav-emailcampaigns">
+        <span class="nav-icon">📧</span> Email Campaigns
+      </div>
       <div class="nav-item" onclick="showSection('academy')" id="nav-academy">
         <span class="nav-icon">🎓</span> Academy Courses
       </div>
@@ -807,6 +810,73 @@
       </div>
     </div>
 
+    <!-- ── Email Campaigns ─────────────────────────────── -->
+    <div id="section-emailcampaigns" class="section">
+      <div class="topbar">
+        <h2>Email Campaigns</h2>
+        <button class="btn btn-ghost btn-sm" onclick="loadEmailCampaigns()">↻ Refresh</button>
+      </div>
+
+      <!-- Compose -->
+      <div class="card">
+        <div class="card-head"><h3>Send an email</h3></div>
+        <div style="padding:20px">
+          <div class="field">
+            <label>Subject</label>
+            <input type="text" id="ec-subject" maxlength="150" placeholder="e.g. New course: Canine Reproduction for Practitioners" />
+          </div>
+          <div class="field">
+            <label>Message</label>
+            <textarea id="ec-body" maxlength="5000" rows="6"
+              style="width:100%;padding:10px 14px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:14px;outline:none;resize:vertical;font-family:inherit"
+              placeholder="Plain text — it's automatically wrapped in the Xpress Vet email template with an unsubscribe link. Leave a blank line between paragraphs."></textarea>
+          </div>
+
+          <div class="field">
+            <label>Send to</label>
+            <div style="display:flex;gap:8px;margin-bottom:10px">
+              <button class="btn btn-sm" id="ec-target-user-btn"    onclick="setEcTargetType('user')"    style="background:#F1F5F9">A specific person</button>
+              <button class="btn btn-sm" id="ec-target-segment-btn" onclick="setEcTargetType('segment')" style="background:#F1F5F9">A smart segment</button>
+              <button class="btn btn-sm" id="ec-target-all-btn"     onclick="setEcTargetType('all')"     style="background:#F1F5F9">Everyone</button>
+            </div>
+
+            <!-- Pick a person -->
+            <div id="ec-target-user-picker" style="display:none;position:relative">
+              <input type="text" id="ec-user-search" placeholder="Search by name or email…"
+                oninput="onEcUserSearch()" autocomplete="off"
+                style="width:100%;padding:10px 14px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:14px;outline:none" />
+              <div id="ec-user-results" style="display:none;position:absolute;z-index:5;top:44px;left:0;right:0;background:#fff;border:1px solid #E2E8F0;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.1);max-height:260px;overflow-y:auto"></div>
+              <div id="ec-user-picked" style="margin-top:8px"></div>
+            </div>
+
+            <!-- Pick a segment -->
+            <select id="ec-segment-select" style="display:none;width:100%;padding:10px 14px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:14px" onchange="previewEcReach()">
+              <option value="">Loading segments…</option>
+            </select>
+            <p id="ec-segment-desc" style="display:none;font-size:12px;color:#64748B;margin-top:6px"></p>
+          </div>
+
+          <div id="ec-reach-preview" style="font-size:13px;color:#64748B;margin:14px 0;min-height:18px"></div>
+
+          <button class="btn btn-primary" id="ec-send-btn" onclick="sendEmailCampaign()">Send Email</button>
+        </div>
+      </div>
+
+      <!-- History -->
+      <div class="card">
+        <div class="card-head"><h3>Send history</h3></div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr>
+              <th>Subject</th><th>Target</th><th>Status</th>
+              <th>Recipients</th><th>Queued</th><th>Skipped</th><th>When</th>
+            </tr></thead>
+            <tbody id="ec-history-tbody"><tr><td colspan="7"><div class="spinner"></div></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Academy Courses ─────────────────────────────── -->
     <div id="section-academy" class="section">
       <div class="topbar">
@@ -815,8 +885,8 @@
       </div>
       <p style="font-size:13px;color:#64748B;margin:-10px 0 18px">
         Courses reported live by Xpress Digital Academy's webhook. Nothing here is ever sent to anyone automatically —
-        review a course below and click <strong>Draft Notification</strong> to prefill the Push Notifications composer,
-        where you review, edit and send it yourself.
+        review a course below and click <strong>Draft Notification</strong> or <strong>Draft Email</strong> to prefill
+        the Push Notifications or Email Campaigns composer, where you review, edit and send it yourself.
       </p>
       <div class="card">
         <div class="card-head"><h3>New course drafts</h3></div>
@@ -1326,6 +1396,7 @@ function showSection(name) {
     verifstats: loadVerifStats, referrals: loadReferrals, practice: loadPracticeStats, utm: loadUtmStats, content: loadContent,
     messaging: loadMessaging, system: loadSystem,
     notifications: loadNotifications,
+    emailcampaigns: loadEmailCampaigns,
     academy: loadAcademyDrafts,
     emailstats: loadEmailStats,
     exports: () => {},
@@ -2587,6 +2658,150 @@ async function viewNotificationOpens(id) {
     </div>`).join('');
 }
 
+// ── Email Campaigns ──────────────────────────────────────────────────────────────
+// Admin-composed one-off marketing email — mirrors the Push Notifications
+// composer above but posts to /api/admin/email-campaigns and always sends
+// immediately (no scheduling). Segment definitions are shared with push
+// (same /api/admin/notifications/segments endpoint).
+let ecTargetType   = 'segment';
+let ecPickedUser   = null; // { id, label }
+let ecSegmentCache = [];
+
+function ecStatusBadge(s) {
+  const map = { sent: 'badge-green', sending: 'badge-yellow', failed: 'badge-red' };
+  return `<span class="badge ${map[s] || 'badge-gray'}">${s || '—'}</span>`;
+}
+
+function ecTargetLabel(c) {
+  if (c.targetType === 'user')    return c.targetUserId ? `${c.targetUserId.name || c.targetUserId.email || 'User'}` : 'User (deleted)';
+  if (c.targetType === 'segment') return ecSegmentCache.find(s => s.key === c.segmentKey)?.label || c.segmentKey;
+  return 'Everyone';
+}
+
+function setEcTargetType(type) {
+  ecTargetType = type;
+  ['user', 'segment', 'all'].forEach(t => {
+    document.getElementById(`ec-target-${t}-btn`).style.background = t === type ? '#E8610A' : '#F1F5F9';
+    document.getElementById(`ec-target-${t}-btn`).style.color      = t === type ? '#fff'    : '#374151';
+  });
+  document.getElementById('ec-target-user-picker').style.display = type === 'user'    ? '' : 'none';
+  document.getElementById('ec-segment-select').style.display     = type === 'segment' ? '' : 'none';
+  document.getElementById('ec-segment-desc').style.display       = 'none';
+  previewEcReach();
+}
+
+const onEcUserSearch = debounce(async () => {
+  const q = document.getElementById('ec-user-search').value.trim();
+  const results = document.getElementById('ec-user-results');
+  if (q.length < 2) { results.style.display = 'none'; return; }
+  const r = await api('GET', `/api/admin/users?search=${encodeURIComponent(q)}&limit=8`);
+  const users = r?.body?.data || [];
+  if (!users.length) {
+    results.innerHTML = '<div style="padding:12px;color:#94A3B8;font-size:13px">No users found.</div>';
+    results.style.display = '';
+    return;
+  }
+  results.innerHTML = users.map(u => `
+    <div onclick='pickEcUser(${JSON.stringify(u._id)}, ${JSON.stringify(u.name || u.email || 'Unnamed')}, ${JSON.stringify(u.email || '')})'
+      style="padding:10px 14px;cursor:pointer;border-bottom:1px solid #F1F5F9" onmouseover="this.style.background='#F8FAFC'" onmouseout="this.style.background='#fff'">
+      <div style="font-weight:600;font-size:13px">${u.name || 'Unnamed'}</div>
+      <div style="font-size:12px;color:#64748B">${u.email || '<span style=\"color:#991B1B\">no email</span>'}</div>
+    </div>`).join('');
+  results.style.display = '';
+}, 300);
+
+function pickEcUser(id, name, email) {
+  ecPickedUser = { id, label: `${name}${email ? ` (${email})` : ''}` };
+  document.getElementById('ec-user-search').value = '';
+  document.getElementById('ec-user-results').style.display = 'none';
+  document.getElementById('ec-user-picked').innerHTML = `
+    <span class="badge badge-blue">${ecPickedUser.label}${email ? '' : ' · no email'} <a href="#" onclick="ecPickedUser=null;document.getElementById('ec-user-picked').innerHTML='';previewEcReach();return false" style="margin-left:6px;color:#1E40AF">✕</a></span>`;
+  previewEcReach();
+}
+
+async function loadEcSegments() {
+  const select = document.getElementById('ec-segment-select');
+  select.innerHTML = '<option value="">Loading…</option>';
+  const r = await api('GET', '/api/admin/notifications/segments');
+  ecSegmentCache = r?.body?.data || [];
+  select.innerHTML = ecSegmentCache.map(s => `<option value="${s.key}">${s.label}</option>`).join('');
+  if (ecTargetType === 'segment') previewEcReach();
+}
+
+async function previewEcReach() {
+  const el = document.getElementById('ec-reach-preview');
+  let params;
+  if (ecTargetType === 'user') {
+    if (!ecPickedUser) { el.textContent = ''; return; }
+    params = `targetType=user&targetUserId=${ecPickedUser.id}`;
+  } else if (ecTargetType === 'segment') {
+    const key = document.getElementById('ec-segment-select').value;
+    if (!key) { el.textContent = ''; return; }
+    const seg = ecSegmentCache.find(s => s.key === key);
+    document.getElementById('ec-segment-desc').textContent = seg?.description || '';
+    document.getElementById('ec-segment-desc').style.display = seg?.description ? '' : 'none';
+    params = `targetType=segment&segmentKey=${key}`;
+  } else {
+    params = 'targetType=all';
+  }
+  const r = await api('GET', `/api/admin/email-campaigns/preview-count?${params}`);
+  if (!r?.ok) { el.textContent = ''; return; }
+  el.textContent = `📧 Will email ${r.body.data.count} ${r.body.data.count === 1 ? 'person' : 'people'}.`;
+}
+
+async function sendEmailCampaign() {
+  const subject = document.getElementById('ec-subject').value.trim();
+  const body    = document.getElementById('ec-body').value.trim();
+
+  if (!subject || !body) return toast('Subject and message are required.', 'error');
+  if (ecTargetType === 'user' && !ecPickedUser) return toast('Pick a person to send to.', 'error');
+  if (ecTargetType === 'segment' && !document.getElementById('ec-segment-select').value) return toast('Pick a segment to send to.', 'error');
+
+  const payload = { subject, body, targetType: ecTargetType };
+  if (ecTargetType === 'user')    payload.targetUserId = ecPickedUser.id;
+  if (ecTargetType === 'segment') payload.segmentKey    = document.getElementById('ec-segment-select').value;
+
+  const btn = document.getElementById('ec-send-btn');
+  btn.disabled = true; btn.textContent = 'Sending…';
+  const r = await api('POST', '/api/admin/email-campaigns', payload);
+  btn.disabled = false; btn.textContent = 'Send Email';
+
+  if (!r?.ok) return toast(r?.body?.message || 'Failed to send email campaign.', 'error');
+
+  const d = r.body.data;
+  toast(`Queued for ${d.recipientCount - d.skippedCount} of ${d.recipientCount} people${d.skippedCount ? ` (${d.skippedCount} had no email)` : ''}.`);
+
+  document.getElementById('ec-subject').value = '';
+  document.getElementById('ec-body').value = '';
+  ecPickedUser = null;
+  document.getElementById('ec-user-picked').innerHTML = '';
+  document.getElementById('ec-reach-preview').textContent = '';
+  loadEmailCampaigns();
+}
+
+async function loadEmailCampaigns() {
+  setEcTargetType(ecTargetType); // sync button/picker highlighting on section (re)load
+  loadEcSegments();
+  const tbody = document.getElementById('ec-history-tbody');
+  tbody.innerHTML = '<tr><td colspan="7"><div class="spinner"></div></td></tr>';
+  const r = await api('GET', '/api/admin/email-campaigns');
+  const data = r?.body?.data || [];
+  if (!data.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="no-data">No email campaigns sent yet.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.map(c => `
+    <tr>
+      <td style="max-width:220px"><div style="font-weight:600">${c.subject}</div><div style="font-size:12px;color:#64748B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px">${c.body}</div></td>
+      <td>${ecTargetLabel(c)}</td>
+      <td>${ecStatusBadge(c.status)}${c.status === 'failed' && c.error ? ` <span title="${c.error.replace(/"/g, '&quot;')}" style="cursor:help;color:#EF4444">ⓘ</span>` : ''}</td>
+      <td>${c.recipientCount ?? '—'}</td>
+      <td>${(c.recipientCount ?? 0) - (c.skippedCount ?? 0)}</td>
+      <td>${c.skippedCount ?? '—'}</td>
+      <td style="white-space:nowrap;font-size:12px">${fmt(c.sentAt || c.createdAt)}</td>
+    </tr>`).join('');
+}
+
 // ── Academy Courses ──────────────────────────────────────────────────────────────
 // Review queue for CoursePublishDraft records created by the Academy's
 // course-publish webhook. Nothing here ever sends anything — "Draft
@@ -2613,6 +2828,7 @@ async function loadAcademyDrafts() {
       <td style="white-space:nowrap;font-size:12px">${fmt(d.publishedAt || d.createdAt)}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-primary btn-sm" onclick='draftNotificationFromCourse(${JSON.stringify(d).replace(/'/g, '&#39;')})'>Draft Notification</button>
+        <button class="btn btn-sm" onclick='draftEmailFromCourse(${JSON.stringify(d).replace(/'/g, '&#39;')})' style="background:#F1F5F9">Draft Email</button>
         <button class="btn btn-ghost btn-sm" onclick="dismissAcademyDraft('${d._id}')">Dismiss</button>
       </td>
     </tr>`).join('');
@@ -2636,6 +2852,24 @@ async function draftNotificationFromCourse(draft) {
   const select = document.getElementById('notif-segment-select');
   if ([...select.options].some(o => o.value === 'role_vet')) select.value = 'role_vet';
   previewNotificationReach();
+  toast(`Prefilled from "${draft.courseName}" — review before sending.`);
+}
+
+async function draftEmailFromCourse(draft) {
+  showSection('emailcampaigns');
+  const priceLine = draft.pricingModel === 'FREE' || !draft.priceNgn ? 'Free' : `₦${Number(draft.priceNgn).toLocaleString()}`;
+  document.getElementById('ec-subject').value = `New course: ${draft.courseName}`;
+  document.getElementById('ec-body').value =
+    `We just published a new course on Xpress Digital Academy:\n\n` +
+    `${draft.courseName}\n` +
+    `${draft.shortDescription ? draft.shortDescription + '\n' : ''}` +
+    `${priceLine}${draft.category ? ' · ' + draft.category : ''}\n\n` +
+    `Enroll here: ${draft.courseUrl}`;
+  setEcTargetType('segment');
+  await loadEcSegments();
+  const select = document.getElementById('ec-segment-select');
+  if ([...select.options].some(o => o.value === 'role_vet')) select.value = 'role_vet';
+  previewEcReach();
   toast(`Prefilled from "${draft.courseName}" — review before sending.`);
 }
 
