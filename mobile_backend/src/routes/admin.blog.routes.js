@@ -27,7 +27,12 @@ router.put('/:id',                 requireModule('blog'), updatePost);
 router.delete('/:id',              requireModule('blog'), deletePost);
 router.post('/:id/publish',        requireModule('blog'), publishPost);
 router.post('/:id/unpublish',      requireModule('blog'), unpublishPost);
-router.get('/:id/preview-count',   requireModuleRead('blog'), previewBlogEmailReach);
-router.post('/:id/send-email',     requireModule('blog'), sendPostEmail);
+// Emailing a post out is gated to 'blog_broadcast', deliberately separate
+// from 'blog' (content) — a materially bigger trust ask (reaches real users,
+// touches the person-search picker's PII) than editorial publishing. See
+// config/adminModules.js. A 'blog'-only account (e.g. an external editor)
+// can write/publish freely but never trigger a send.
+router.get('/:id/preview-count',   requireModuleRead('blog_broadcast'), previewBlogEmailReach);
+router.post('/:id/send-email',     requireModule('blog_broadcast'), sendPostEmail);
 
 export default router;

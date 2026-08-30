@@ -19,7 +19,8 @@ export const MODULES = [
   { key: 'notifications',  label: 'Push Notifications',          description: 'Compose and send push notifications to users.' },
   { key: 'emailcampaigns', label: 'Email Campaigns',             description: 'Compose and send marketing emails to users.' },
   { key: 'academy',        label: 'Academy Courses',             description: 'Review Xpress Digital Academy course-publish drafts.' },
-  { key: 'blog',           label: 'Blog',                        description: 'Write, publish and email out blog posts.' },
+  { key: 'blog',           label: 'Blog',                        description: 'Write, edit, publish and unpublish blog posts, manage covers/tags. Does NOT include emailing posts out or any user search/PII — see Blog Broadcast.' },
+  { key: 'blog_broadcast', label: 'Blog Broadcast',              description: 'Email a published blog post to users (a person, a segment, or everyone) — a materially bigger trust ask than editorial content, kept as its own grant on purpose. Split out for the external blog-editor role.' },
   { key: 'exports',        label: 'Data Exports',                description: 'Download raw CSV exports of users/subscriptions/professionals — contains PII, kept separate from Analytics deliberately.' },
 ];
 

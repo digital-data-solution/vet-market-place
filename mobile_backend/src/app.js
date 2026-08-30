@@ -299,8 +299,11 @@ app.get('/api/admin/stats/subscriptions', adminProtect, requireModuleRead('analy
 
 // Users
 // Also backs the "send to a specific person" picker in the Notifications /
-// Email Campaigns / Blog composers — see requireAnyModule's doc comment.
-app.get('/api/admin/users', adminProtect, requireAnyModule('users', 'notifications', 'emailcampaigns', 'blog'), async (req, res) => {
+// Email Campaigns / Blog Broadcast composers — see requireAnyModule's doc
+// comment. Deliberately 'blog_broadcast', NOT plain 'blog' — a content-only
+// blog editor (e.g. an external contributor) must never reach real user
+// names/emails through this, even indirectly.
+app.get('/api/admin/users', adminProtect, requireAnyModule('users', 'notifications', 'emailcampaigns', 'blog_broadcast'), async (req, res) => {
   try {
     const { page = 1, limit = 30, role, search } = req.query;
     const filter = {};

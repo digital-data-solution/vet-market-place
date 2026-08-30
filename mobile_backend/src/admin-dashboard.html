@@ -3154,6 +3154,14 @@ let blogSlugTouched = false;
 let blogCover       = { url: null, publicId: null };
 let blogPreviewOn   = false;
 
+// True for the owner, or a staff account holding 'blog_broadcast' — kept
+// separate from plain 'blog' (content) on purpose, see config/
+// adminModules.js. Hides the Send Email button client-side; the real
+// enforcement is server-side on the route itself either way.
+function canBroadcastBlog() {
+  return !!adminUser?.isOwner || !!adminUser?.modules?.includes('blog_broadcast');
+}
+
 function blogStatusBadge(s) {
   return `<span class="badge ${s === 'published' ? 'badge-green' : 'badge-gray'}">${s}</span>`;
 }
@@ -3304,7 +3312,7 @@ async function loadBlogPosts() {
         <button class="btn btn-sm" onclick='openBlogEditor(${JSON.stringify(p).replace(/'/g, '&#39;')})' style="background:#F1F5F9">Edit</button>
         ${p.status === 'published'
           ? `<button class="btn btn-sm" onclick="toggleBlogPublish('${p._id}', false)" style="background:#F1F5F9">Unpublish</button>
-             <button class="btn btn-primary btn-sm" onclick="openBlogEmailModal('${p._id}', ${JSON.stringify(p.title)})">Send Email</button>`
+             ${canBroadcastBlog() ? `<button class="btn btn-primary btn-sm" onclick="openBlogEmailModal('${p._id}', ${JSON.stringify(p.title)})">Send Email</button>` : ''}`
           : `<button class="btn btn-success btn-sm" onclick="toggleBlogPublish('${p._id}', true)">Publish</button>`}
         <button class="btn btn-ghost btn-sm" onclick="deleteBlogPost('${p._id}', ${JSON.stringify(p.title)})">Delete</button>
       </td>
