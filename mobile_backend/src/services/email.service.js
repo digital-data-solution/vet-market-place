@@ -1315,3 +1315,28 @@ export async function sendUnansweredSupportAlert(adminEmail, threads) {
 
   await sendEmail(adminEmail, `⚠️ ${threads.length} unanswered support message(s) — please reply`, html);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BLOG — sent when an admin explicitly dispatches a published post as a
+// campaign (services/blogEmail.service.js, admin.blog.controller.js). Same
+// teaser + CTA button shape as every other promo template in this file
+// (sendMarketLaunchPromo etc.) rather than the full article — keeps the send
+// light and drives real traffic to the post instead of duplicating it inline.
+// ─────────────────────────────────────────────────────────────────────────────
+export async function sendBlogPostEmail(name, email, userId, post) {
+  const firstName = name?.split(' ')[0] || 'there';
+  const unsub = unsubscribeUrl(userId);
+  const postUrl = `https://xpressvetmarketplace.com/Blog/${post.slug}`;
+  const cover = post.coverImageUrl
+    ? `<img src="${post.coverImageUrl}" alt="" style="width:100%;border-radius:12px;margin-bottom:20px;display:block" />`
+    : '';
+  const html = layout(post.title, `
+    ${cover}
+    <h1>${post.title}</h1>
+    <p>Hey ${firstName}, we just published a new article on Xpress Vet:</p>
+    <div class="highlight"><p>${post.excerpt}</p></div>
+    <p style="text-align:center;margin:24px 0"><a href="${postUrl}" class="btn">Read the full article →</a></p>
+    <p style="color:#94A3B8;font-size:13px">By ${post.authorName || 'Xpress Vet Team'} · Xpress Vet Blog</p>
+  `, unsub);
+  await sendEmail(email, `New on Xpress Vet: ${post.title}`, html);
+}

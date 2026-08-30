@@ -164,6 +164,7 @@
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
 </head>
 <body>
 
@@ -261,6 +262,9 @@
       </div>
       <div class="nav-item" onclick="showSection('academy')" id="nav-academy">
         <span class="nav-icon">🎓</span> Academy Courses
+      </div>
+      <div class="nav-item" onclick="showSection('blog')" id="nav-blog">
+        <span class="nav-icon">📰</span> Blog
       </div>
       <div class="nav-item" onclick="showSection('emailstats')" id="nav-emailstats">
         <span class="nav-icon">📧</span> Email Analytics
@@ -901,6 +905,31 @@
       </div>
     </div>
 
+    <!-- ── Blog ─────────────────────────────────────────── -->
+    <div id="section-blog" class="section">
+      <div class="topbar">
+        <h2>Blog</h2>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm" onclick="loadBlogPosts()">↻ Refresh</button>
+          <button class="btn btn-primary btn-sm" onclick="openBlogEditor()">+ New Post</button>
+        </div>
+      </div>
+      <p style="font-size:13px;color:#64748B;margin:-10px 0 18px">
+        Posts save as a <strong>draft</strong> until you publish them — publishing puts them on the public site/app
+        immediately. Emailing a post out to users is a separate step, always done explicitly from this page.
+      </p>
+      <div class="card">
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr>
+              <th>Title</th><th>Status</th><th>Published</th><th>Views</th><th>Emailed</th><th></th>
+            </tr></thead>
+            <tbody id="blog-tbody"><tr><td colspan="6"><div class="spinner"></div></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Email Analytics ─────────────────────────────── -->
     <div id="section-emailstats" class="section">
       <div class="topbar">
@@ -1236,6 +1265,98 @@
   </div>
 </div>
 
+<!-- ── Blog Post Editor Modal ── -->
+<div id="blog-editor-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeModal('blog-editor-modal')">
+  <div class="modal" style="max-width:720px;max-height:90vh;overflow-y:auto">
+    <h3 id="blog-editor-title">New Post</h3>
+    <input type="hidden" id="blog-edit-id" />
+
+    <div class="field">
+      <label>Title</label>
+      <input type="text" id="blog-title" maxlength="160" oninput="onBlogTitleInput()" placeholder="e.g. 5 Signs Your Dog Needs a Vet Visit" />
+    </div>
+    <div class="field">
+      <label>URL slug</label>
+      <input type="text" id="blog-slug" maxlength="180" oninput="blogSlugTouched=true" placeholder="auto-generated-from-title" />
+      <p style="font-size:12px;color:#94A3B8;margin-top:-8px">xpressvetmarketplace.com/Blog/<span id="blog-slug-preview">…</span></p>
+    </div>
+    <div class="field">
+      <label>Excerpt <span style="font-weight:400;color:#94A3B8">— short teaser shown on the post list and in the email send</span></label>
+      <textarea id="blog-excerpt" maxlength="300" rows="2" placeholder="One or two sentences that make someone want to read the full post…"></textarea>
+    </div>
+    <div class="field">
+      <label>Cover image <span style="font-weight:400;color:#94A3B8">(optional)</span></label>
+      <input type="file" id="blog-cover-file" accept="image/*" onchange="uploadBlogCoverFile(this)" />
+      <div id="blog-cover-preview" style="margin-top:8px"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div class="field">
+        <label>Tags <span style="font-weight:400;color:#94A3B8">(comma-separated)</span></label>
+        <input type="text" id="blog-tags" placeholder="nutrition, dogs, tips" />
+      </div>
+      <div class="field">
+        <label>Author</label>
+        <input type="text" id="blog-author" placeholder="Xpress Vet Team" />
+      </div>
+    </div>
+    <div class="field">
+      <label style="display:flex;justify-content:space-between;align-items:center">
+        <span>Content <span style="font-weight:400;color:#94A3B8">(Markdown)</span></span>
+        <a href="#" onclick="toggleBlogPreview();return false" id="blog-preview-toggle" style="font-size:12px;font-weight:600;color:#2563EB">Preview →</a>
+      </label>
+      <textarea id="blog-content" rows="14" style="font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px"
+        placeholder="## A heading&#10;&#10;Regular paragraph text. **Bold**, *italic*, [links](https://example.com).&#10;&#10;- bullet&#10;- points"></textarea>
+      <div id="blog-content-preview" style="display:none;border:1.5px solid #E2E8F0;border-radius:8px;padding:14px 16px;max-height:400px;overflow-y:auto;font-size:14px;line-height:1.6"></div>
+    </div>
+
+    <div class="modal-actions" style="justify-content:space-between">
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:#374151" id="blog-publish-now-wrap">
+        <input type="checkbox" id="blog-publish-now" style="width:auto;margin:0" /> Publish immediately
+      </label>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-ghost" onclick="closeModal('blog-editor-modal')">Cancel</button>
+        <button class="btn btn-primary" id="blog-save-btn" onclick="saveBlogPost()">Save Post</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Blog Email-Send Modal ── -->
+<div id="blog-email-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeModal('blog-email-modal')">
+  <div class="modal" style="max-width:480px">
+    <h3>Email this post</h3>
+    <p style="font-size:13px;color:#64748B;margin-bottom:14px" id="blog-email-post-title"></p>
+    <input type="hidden" id="blog-email-post-id" />
+
+    <div class="field">
+      <label>Send to</label>
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <button class="btn btn-sm" id="bg-target-user-btn"    onclick="setBgTargetType('user')"    style="background:#F1F5F9">A specific person</button>
+        <button class="btn btn-sm" id="bg-target-segment-btn" onclick="setBgTargetType('segment')" style="background:#F1F5F9">A smart segment</button>
+        <button class="btn btn-sm" id="bg-target-all-btn"     onclick="setBgTargetType('all')"     style="background:#F1F5F9">Everyone</button>
+      </div>
+
+      <div id="bg-target-user-picker" style="display:none;position:relative">
+        <input type="text" id="bg-user-search" placeholder="Search by name or email…" oninput="onBgUserSearch()" autocomplete="off" />
+        <div id="bg-user-results" style="display:none;position:absolute;z-index:5;top:44px;left:0;right:0;background:#fff;border:1px solid #E2E8F0;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.1);max-height:260px;overflow-y:auto"></div>
+        <div id="bg-user-picked" style="margin-top:8px"></div>
+      </div>
+
+      <select id="bg-segment-select" style="display:none" onchange="previewBgReach()">
+        <option value="">Loading segments…</option>
+      </select>
+      <p id="bg-segment-desc" style="display:none;font-size:12px;color:#64748B;margin-top:-8px"></p>
+    </div>
+
+    <div id="bg-reach-preview" style="font-size:13px;color:#64748B;margin:6px 0 14px;min-height:18px"></div>
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('blog-email-modal')">Cancel</button>
+      <button class="btn btn-primary" id="bg-send-btn" onclick="sendBlogEmail()">Send Email</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Toast ── -->
 <div id="toast"></div>
 
@@ -1398,6 +1519,7 @@ function showSection(name) {
     notifications: loadNotifications,
     emailcampaigns: loadEmailCampaigns,
     academy: loadAcademyDrafts,
+    blog: loadBlogPosts,
     emailstats: loadEmailStats,
     exports: () => {},
   };
@@ -2871,6 +2993,286 @@ async function draftEmailFromCourse(draft) {
   if ([...select.options].some(o => o.value === 'role_vet')) select.value = 'role_vet';
   previewEcReach();
   toast(`Prefilled from "${draft.courseName}" — review before sending.`);
+}
+
+// ── Blog ──────────────────────────────────────────────────────────────────────
+// Admin-authored posts (Markdown content). A post is a draft until an admin
+// explicitly hits Publish, and — separately — emailing it out to users is
+// always its own deliberate click (blog-email-modal, mirrors the Email
+// Campaigns composer's target picker). Nothing here ever reaches a reader
+// automatically.
+let blogPostsCache  = [];
+let blogSlugTouched = false;
+let blogCover       = { url: null, publicId: null };
+let blogPreviewOn   = false;
+
+function blogStatusBadge(s) {
+  return `<span class="badge ${s === 'published' ? 'badge-green' : 'badge-gray'}">${s}</span>`;
+}
+
+function slugifyClient(text) {
+  return String(text || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 180);
+}
+
+function onBlogTitleInput() {
+  if (!blogSlugTouched) {
+    document.getElementById('blog-slug').value = slugifyClient(document.getElementById('blog-title').value);
+  }
+  document.getElementById('blog-slug-preview').textContent = document.getElementById('blog-slug').value || '…';
+}
+
+function toggleBlogPreview() {
+  blogPreviewOn = !blogPreviewOn;
+  document.getElementById('blog-content').style.display = blogPreviewOn ? 'none' : '';
+  const preview = document.getElementById('blog-content-preview');
+  preview.style.display = blogPreviewOn ? '' : 'none';
+  document.getElementById('blog-preview-toggle').textContent = blogPreviewOn ? '← Edit' : 'Preview →';
+  if (blogPreviewOn) {
+    preview.innerHTML = typeof marked !== 'undefined'
+      ? marked.parse(document.getElementById('blog-content').value || '*Nothing written yet.*')
+      : '<p style="color:#94A3B8">Preview unavailable — marked.js failed to load.</p>';
+  }
+}
+
+async function uploadBlogCoverFile(input) {
+  const file = input.files?.[0];
+  if (!file) return;
+  const preview = document.getElementById('blog-cover-preview');
+  preview.innerHTML = '<div class="spinner" style="margin:8px 0"></div>';
+  const fd = new FormData();
+  fd.append('image', file);
+  try {
+    const r = await fetch(BASE + '/api/admin/blog/upload-cover', {
+      method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: fd,
+    });
+    const json = await r.json().catch(() => ({}));
+    if (!r.ok || !json.success) throw new Error(json.message || 'Upload failed.');
+    blogCover = { url: json.url, publicId: json.publicId };
+    preview.innerHTML = `<img src="${json.url}" style="max-width:220px;border-radius:8px;display:block" />`;
+  } catch (err) {
+    preview.innerHTML = '';
+    toast(err.message || 'Failed to upload cover image.', 'error');
+  }
+}
+
+function openBlogEditor(post) {
+  blogSlugTouched = !!post;
+  blogPreviewOn = false;
+  blogCover = post ? { url: post.coverImageUrl || null, publicId: post.coverImagePublicId || null } : { url: null, publicId: null };
+
+  document.getElementById('blog-editor-title').textContent = post ? 'Edit Post' : 'New Post';
+  document.getElementById('blog-edit-id').value  = post?._id || '';
+  document.getElementById('blog-title').value    = post?.title || '';
+  document.getElementById('blog-slug').value     = post?.slug || '';
+  document.getElementById('blog-slug-preview').textContent = post?.slug || '…';
+  document.getElementById('blog-excerpt').value  = post?.excerpt || '';
+  document.getElementById('blog-tags').value     = (post?.tags || []).join(', ');
+  document.getElementById('blog-author').value   = post?.authorName || '';
+  document.getElementById('blog-content').value  = post?.contentMarkdown || '';
+  document.getElementById('blog-content').style.display = '';
+  document.getElementById('blog-content-preview').style.display = 'none';
+  document.getElementById('blog-preview-toggle').textContent = 'Preview →';
+  document.getElementById('blog-cover-file').value = '';
+  document.getElementById('blog-cover-preview').innerHTML = post?.coverImageUrl
+    ? `<img src="${post.coverImageUrl}" style="max-width:220px;border-radius:8px;display:block" />` : '';
+  // Publish-now checkbox only makes sense for a brand-new draft — an existing
+  // post's publish state is toggled from the table row instead, so it stays
+  // separate from "save my edits".
+  document.getElementById('blog-publish-now-wrap').style.display = post ? 'none' : '';
+  document.getElementById('blog-publish-now').checked = false;
+
+  document.getElementById('blog-editor-modal').style.display = 'flex';
+}
+
+async function saveBlogPost() {
+  const id      = document.getElementById('blog-edit-id').value;
+  const title   = document.getElementById('blog-title').value.trim();
+  const excerpt = document.getElementById('blog-excerpt').value.trim();
+  const content = document.getElementById('blog-content').value.trim();
+  if (!title || !excerpt || !content) return toast('Title, excerpt and content are all required.', 'error');
+
+  const payload = {
+    title, excerpt, contentMarkdown: content,
+    slug: document.getElementById('blog-slug').value.trim(),
+    tags: document.getElementById('blog-tags').value.split(',').map(t => t.trim()).filter(Boolean),
+    authorName: document.getElementById('blog-author').value.trim() || 'Xpress Vet Team',
+    coverImageUrl: blogCover.url,
+    coverImagePublicId: blogCover.publicId,
+  };
+
+  const btn = document.getElementById('blog-save-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  const r = id
+    ? await api('PUT', `/api/admin/blog/${id}`, payload)
+    : await api('POST', '/api/admin/blog', payload);
+  btn.disabled = false; btn.textContent = 'Save Post';
+
+  if (!r?.ok) return toast(r?.body?.message || 'Failed to save post.', 'error');
+
+  const saved = r.body.data;
+  if (!id && document.getElementById('blog-publish-now').checked) {
+    await api('POST', `/api/admin/blog/${saved._id}/publish`);
+    toast('Post created and published.');
+  } else {
+    toast(id ? 'Post updated.' : 'Draft saved.');
+  }
+
+  closeModal('blog-editor-modal');
+  loadBlogPosts();
+}
+
+async function toggleBlogPublish(id, publish) {
+  const r = await api('POST', `/api/admin/blog/${id}/${publish ? 'publish' : 'unpublish'}`);
+  if (!r?.ok) return toast(r?.body?.message || 'Failed to update post.', 'error');
+  toast(publish ? 'Post published — now live.' : 'Post unpublished — pulled back to draft.');
+  loadBlogPosts();
+}
+
+async function deleteBlogPost(id, title) {
+  if (!confirm(`Delete "${title}"? This is irreversible.`)) return;
+  const r = await api('DELETE', `/api/admin/blog/${id}`);
+  if (!r?.ok) return toast(r?.body?.message || 'Failed to delete post.', 'error');
+  toast('Post deleted.');
+  loadBlogPosts();
+}
+
+async function loadBlogPosts() {
+  const tbody = document.getElementById('blog-tbody');
+  tbody.innerHTML = '<tr><td colspan="6"><div class="spinner"></div></td></tr>';
+  const r = await api('GET', '/api/admin/blog');
+  blogPostsCache = r?.body?.data || [];
+  if (!blogPostsCache.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="no-data">No posts yet — click "+ New Post" to write the first one.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = blogPostsCache.map(p => `
+    <tr>
+      <td style="max-width:280px"><div style="font-weight:600">${p.title}</div><div style="font-size:12px;color:#64748B">${p.excerpt}</div></td>
+      <td>${blogStatusBadge(p.status)}</td>
+      <td style="white-space:nowrap;font-size:12px">${fmt(p.publishedAt)}</td>
+      <td>${p.viewCount ?? 0}</td>
+      <td style="font-size:12px">${p.emailStatus === 'sent' ? `✅ ${p.emailRecipientCount || 0}` : p.emailStatus === 'sending' ? '⏳' : p.emailStatus === 'failed' ? '⚠️' : '—'}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-sm" onclick='openBlogEditor(${JSON.stringify(p).replace(/'/g, '&#39;')})' style="background:#F1F5F9">Edit</button>
+        ${p.status === 'published'
+          ? `<button class="btn btn-sm" onclick="toggleBlogPublish('${p._id}', false)" style="background:#F1F5F9">Unpublish</button>
+             <button class="btn btn-primary btn-sm" onclick="openBlogEmailModal('${p._id}', ${JSON.stringify(p.title)})">Send Email</button>`
+          : `<button class="btn btn-success btn-sm" onclick="toggleBlogPublish('${p._id}', true)">Publish</button>`}
+        <button class="btn btn-ghost btn-sm" onclick="deleteBlogPost('${p._id}', ${JSON.stringify(p.title)})">Delete</button>
+      </td>
+    </tr>`).join('');
+}
+
+// ── Blog email-send modal — same target-picker shape as Email Campaigns
+// (bg = "blog"), posting to /api/admin/blog/:id/send-email instead of a
+// subject+body composer, since the email content is derived from the post.
+let bgTargetType   = 'segment';
+let bgPickedUser   = null;
+let bgSegmentCache = [];
+let bgPostId       = null;
+
+function setBgTargetType(type) {
+  bgTargetType = type;
+  ['user', 'segment', 'all'].forEach(t => {
+    document.getElementById(`bg-target-${t}-btn`).style.background = t === type ? '#E8610A' : '#F1F5F9';
+    document.getElementById(`bg-target-${t}-btn`).style.color      = t === type ? '#fff'    : '#374151';
+  });
+  document.getElementById('bg-target-user-picker').style.display = type === 'user'    ? '' : 'none';
+  document.getElementById('bg-segment-select').style.display     = type === 'segment' ? '' : 'none';
+  document.getElementById('bg-segment-desc').style.display       = 'none';
+  previewBgReach();
+}
+
+const onBgUserSearch = debounce(async () => {
+  const q = document.getElementById('bg-user-search').value.trim();
+  const results = document.getElementById('bg-user-results');
+  if (q.length < 2) { results.style.display = 'none'; return; }
+  const r = await api('GET', `/api/admin/users?search=${encodeURIComponent(q)}&limit=8`);
+  const users = r?.body?.data || [];
+  if (!users.length) {
+    results.innerHTML = '<div style="padding:12px;color:#94A3B8;font-size:13px">No users found.</div>';
+    results.style.display = '';
+    return;
+  }
+  results.innerHTML = users.map(u => `
+    <div onclick='pickBgUser(${JSON.stringify(u._id)}, ${JSON.stringify(u.name || u.email || 'Unnamed')}, ${JSON.stringify(u.email || '')})'
+      style="padding:10px 14px;cursor:pointer;border-bottom:1px solid #F1F5F9" onmouseover="this.style.background='#F8FAFC'" onmouseout="this.style.background='#fff'">
+      <div style="font-weight:600;font-size:13px">${u.name || 'Unnamed'}</div>
+      <div style="font-size:12px;color:#64748B">${u.email || '<span style=\"color:#991B1B\">no email</span>'}</div>
+    </div>`).join('');
+  results.style.display = '';
+}, 300);
+
+function pickBgUser(id, name, email) {
+  bgPickedUser = { id, label: `${name}${email ? ` (${email})` : ''}` };
+  document.getElementById('bg-user-search').value = '';
+  document.getElementById('bg-user-results').style.display = 'none';
+  document.getElementById('bg-user-picked').innerHTML = `
+    <span class="badge badge-blue">${bgPickedUser.label} <a href="#" onclick="bgPickedUser=null;document.getElementById('bg-user-picked').innerHTML='';previewBgReach();return false" style="margin-left:6px;color:#1E40AF">✕</a></span>`;
+  previewBgReach();
+}
+
+async function loadBgSegments() {
+  const select = document.getElementById('bg-segment-select');
+  select.innerHTML = '<option value="">Loading…</option>';
+  const r = await api('GET', '/api/admin/notifications/segments');
+  bgSegmentCache = r?.body?.data || [];
+  select.innerHTML = bgSegmentCache.map(s => `<option value="${s.key}">${s.label}</option>`).join('');
+  if (bgTargetType === 'segment') previewBgReach();
+}
+
+async function previewBgReach() {
+  const el = document.getElementById('bg-reach-preview');
+  let params;
+  if (bgTargetType === 'user') {
+    if (!bgPickedUser) { el.textContent = ''; return; }
+    params = `targetType=user&targetUserId=${bgPickedUser.id}`;
+  } else if (bgTargetType === 'segment') {
+    const key = document.getElementById('bg-segment-select').value;
+    if (!key) { el.textContent = ''; return; }
+    const seg = bgSegmentCache.find(s => s.key === key);
+    document.getElementById('bg-segment-desc').textContent = seg?.description || '';
+    document.getElementById('bg-segment-desc').style.display = seg?.description ? '' : 'none';
+    params = `targetType=segment&segmentKey=${key}`;
+  } else {
+    params = 'targetType=all';
+  }
+  const r = await api('GET', `/api/admin/blog/${bgPostId}/preview-count?${params}`);
+  if (!r?.ok) { el.textContent = ''; return; }
+  el.textContent = `📧 Will email ${r.body.data.count} ${r.body.data.count === 1 ? 'person' : 'people'}.`;
+}
+
+function openBlogEmailModal(postId, title) {
+  bgPostId = postId;
+  bgPickedUser = null;
+  document.getElementById('blog-email-post-id').value = postId;
+  document.getElementById('blog-email-post-title').textContent = title;
+  document.getElementById('bg-user-picked').innerHTML = '';
+  document.getElementById('bg-user-search').value = '';
+  setBgTargetType(bgTargetType);
+  loadBgSegments();
+  document.getElementById('blog-email-modal').style.display = 'flex';
+}
+
+async function sendBlogEmail() {
+  if (bgTargetType === 'user' && !bgPickedUser) return toast('Pick a person to send to.', 'error');
+  if (bgTargetType === 'segment' && !document.getElementById('bg-segment-select').value) return toast('Pick a segment to send to.', 'error');
+
+  const payload = { targetType: bgTargetType };
+  if (bgTargetType === 'user')    payload.targetUserId = bgPickedUser.id;
+  if (bgTargetType === 'segment') payload.segmentKey    = document.getElementById('bg-segment-select').value;
+
+  const btn = document.getElementById('bg-send-btn');
+  btn.disabled = true; btn.textContent = 'Sending…';
+  const r = await api('POST', `/api/admin/blog/${bgPostId}/send-email`, payload);
+  btn.disabled = false; btn.textContent = 'Send Email';
+
+  if (!r?.ok) return toast(r?.body?.message || 'Failed to send email.', 'error');
+
+  const d = r.body.data;
+  toast(`Queued for ${d.emailRecipientCount - d.emailSkippedCount} of ${d.emailRecipientCount} people${d.emailSkippedCount ? ` (${d.emailSkippedCount} had no email)` : ''}.`);
+  closeModal('blog-email-modal');
+  loadBlogPosts();
 }
 
 // ── Email Analytics ─────────────────────────────────────────────────────────────
