@@ -275,6 +275,9 @@
       <div class="nav-item" onclick="showSection('system')" id="nav-system">
         <span class="nav-icon">⚙️</span> System Health
       </div>
+      <div class="nav-item owner-only" onclick="showSection('staff')" id="nav-staff" style="display:none">
+        <span class="nav-icon">👥</span> Staff Access
+      </div>
     </nav>
     <div class="sidebar-footer">
       <div id="admin-name"></div>
@@ -1162,6 +1165,32 @@
       </div>
     </div>
 
+    <!-- ── Staff Access (owner only) ─────────────────────── -->
+    <div id="section-staff" class="section">
+      <div class="topbar">
+        <h2>Staff Access</h2>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm" onclick="loadStaffAccounts()">↻ Refresh</button>
+          <button class="btn btn-primary btn-sm" onclick="openStaffEditor()">+ Add Staff</button>
+        </div>
+      </div>
+      <p style="font-size:13px;color:#64748B;margin:-10px 0 18px">
+        Each staff account only sees and can act on the modules you grant it here — everything else
+        stays invisible to them, enforced on every request server-side (not just hidden in the UI).
+        A staff account can never grant itself or anyone else more access — only you can, from this page.
+      </p>
+      <div class="card">
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr>
+              <th>Name</th><th>Email</th><th>Job title</th><th>Modules</th><th>Status</th><th>Last login</th><th></th>
+            </tr></thead>
+            <tbody id="staff-tbody"><tr><td colspan="7"><div class="spinner"></div></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
   </main>
 </div>
 
@@ -1170,6 +1199,9 @@
   <div class="modal">
     <h3>Change Password</h3>
     <p style="font-size:13px;color:#64748B;margin-bottom:14px">Applies to your admin login (<span id="password-modal-email"></span>).</p>
+    <p id="pw-forced-notice" style="display:none;font-size:13px;color:#92400E;background:#FFFBEB;border:1px solid #FCD34D;border-radius:8px;padding:10px 12px;margin-bottom:14px">
+      🔒 You're using a temporary password — set your own before continuing. Use the temporary password you were given as "Current Password".
+    </p>
     <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Current Password</label>
     <input type="password" id="pw-current" style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:12px" />
     <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">New Password (min 8 characters)</label>
@@ -1178,7 +1210,7 @@
     <input type="password" id="pw-confirm" style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;font-size:14px;box-sizing:border-box" onkeydown="if(event.key==='Enter')submitChangePassword()" />
     <div id="pw-error" style="display:none;color:#DC2626;font-size:13px;margin-top:10px"></div>
     <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeModal('password-modal')">Cancel</button>
+      <button class="btn btn-ghost" id="pw-cancel-btn" onclick="closeModal('password-modal')">Cancel</button>
       <button class="btn btn-primary" id="pw-save-btn" onclick="submitChangePassword()">Save Password</button>
     </div>
   </div>
@@ -1357,6 +1389,56 @@
   </div>
 </div>
 
+<!-- ── Staff Editor Modal ── -->
+<div id="staff-editor-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeModal('staff-editor-modal')">
+  <div class="modal" style="max-width:520px">
+    <h3 id="staff-editor-title">Add Staff</h3>
+    <input type="hidden" id="staff-edit-id" />
+
+    <div class="field">
+      <label>Full name</label>
+      <input type="text" id="staff-name" placeholder="e.g. Amaka Obi" />
+    </div>
+    <div class="field">
+      <label>Email <span style="font-weight:400;color:#94A3B8" id="staff-email-note"></span></label>
+      <input type="email" id="staff-email" placeholder="amaka@example.com" />
+    </div>
+    <div class="field">
+      <label>Job title <span style="font-weight:400;color:#94A3B8">(display only — doesn't affect access)</span></label>
+      <input type="text" id="staff-role" placeholder="e.g. Support Agent" />
+    </div>
+    <div class="field" id="staff-active-field" style="display:none">
+      <label style="display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="staff-active" style="width:auto;margin:0" /> Active — unchecking blocks their login immediately
+      </label>
+    </div>
+    <div class="field">
+      <label>Modules — full access to whatever is checked, nothing outside it</label>
+      <div id="staff-modules-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px"><div class="spinner"></div></div>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('staff-editor-modal')">Cancel</button>
+      <button class="btn btn-primary" id="staff-save-btn" onclick="saveStaffAccount()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Temp Password Reveal Modal ── -->
+<div id="staff-temp-pw-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeModal('staff-temp-pw-modal')">
+  <div class="modal" style="max-width:440px">
+    <h3>Temporary password</h3>
+    <p style="font-size:13px;color:#64748B;margin-bottom:14px">
+      Shown once — send this to <span id="staff-temp-pw-name"></span> yourself (WhatsApp, email, in person).
+      They'll be forced to set their own password on first login.
+    </p>
+    <div style="background:#F8FAFC;border:1.5px solid #E2E8F0;border-radius:10px;padding:14px;text-align:center;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:18px;font-weight:700;letter-spacing:1px" id="staff-temp-pw-value"></div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="closeModal('staff-temp-pw-modal')">Done</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Toast ── -->
 <div id="toast"></div>
 
@@ -1411,14 +1493,21 @@ function statusBadge(s) {
   return `<span class="badge ${map[s] || 'badge-gray'}">${s || '—'}</span>`;
 }
 
-function closeModal(id) { document.getElementById(id).style.display = 'none'; }
+let forcePasswordChange = false;
+function closeModal(id) {
+  if (id === 'password-modal' && forcePasswordChange) return; // must change password first — see showApp()
+  document.getElementById(id).style.display = 'none';
+}
 
 // ── Change Password ─────────────────────────────────────────────────────────
-function openChangePassword() {
+function openChangePassword(forced) {
+  forcePasswordChange = !!forced;
   document.getElementById('pw-current').value = '';
   document.getElementById('pw-new').value = '';
   document.getElementById('pw-confirm').value = '';
   document.getElementById('pw-error').style.display = 'none';
+  document.getElementById('pw-forced-notice').style.display = forcePasswordChange ? '' : 'none';
+  document.getElementById('pw-cancel-btn').style.display = forcePasswordChange ? 'none' : '';
   document.getElementById('password-modal-email').textContent = adminUser?.email || '';
   document.getElementById('password-modal').style.display = 'flex';
 }
@@ -1440,8 +1529,16 @@ async function submitChangePassword() {
   btn.disabled = false; btn.textContent = 'Save Password';
 
   if (r?.ok) {
-    closeModal('password-modal');
+    const wasForced = forcePasswordChange;
+    forcePasswordChange = false;
+    document.getElementById('password-modal').style.display = 'none';
     toast('Password changed.');
+    if (wasForced) {
+      if (adminUser) adminUser.mustChangePassword = false;
+      applyModuleVisibility();
+      const target = firstAccessibleSection();
+      if (target) showSection(target);
+    }
   } else {
     err.textContent = r?.body?.message || 'Could not change password.';
     err.style.display = 'block';
@@ -1495,11 +1592,61 @@ async function boot() {
   showApp();
 }
 
+// Maps every nav-<section> id to the module key that gates it server-side —
+// keep in sync with app.js / each admin.*.routes.js's requireModule(Read)
+// calls. Used only for hiding nav items a staff account can't use; the real
+// enforcement is always server-side (see adminAuthMiddleware.js) — this is
+// just so a staff member never sees a tab that would 403 on click.
+const NAV_MODULE_MAP = {
+  overview: 'analytics', pending: 'verifications', professionals: 'verifications',
+  users: 'users', shops: 'shops', subscriptions: 'subscriptions', support: 'support',
+  disputes: 'wallet', market: 'marketplace', jobs: 'jobs', activity: 'analytics',
+  revenue: 'analytics', growth: 'analytics', geographic: 'analytics', verifstats: 'analytics',
+  referrals: 'analytics', practice: 'analytics', utm: 'analytics', content: 'analytics',
+  messaging: 'analytics', notifications: 'notifications', emailcampaigns: 'emailcampaigns',
+  academy: 'academy', blog: 'blog', emailstats: 'analytics', exports: 'exports', system: 'analytics',
+};
+
+function applyModuleVisibility() {
+  const isOwner = !!adminUser?.isOwner;
+  const modules = adminUser?.modules || [];
+  const staffEl = document.getElementById('nav-staff');
+  if (staffEl) staffEl.style.display = isOwner ? '' : 'none';
+  Object.entries(NAV_MODULE_MAP).forEach(([section, mod]) => {
+    const el = document.getElementById('nav-' + section);
+    if (!el) return;
+    el.style.display = (isOwner || modules.includes(mod)) ? '' : 'none';
+  });
+}
+
+function firstAccessibleSection() {
+  if (adminUser?.isOwner) return 'overview';
+  const modules = adminUser?.modules || [];
+  for (const [section, mod] of Object.entries(NAV_MODULE_MAP)) {
+    if (modules.includes(mod)) return section;
+  }
+  return null; // no modules granted at all yet
+}
+
 function showApp() {
   document.getElementById('login').style.display = 'none';
   document.getElementById('app').style.display   = 'block';
   document.getElementById('admin-name').textContent = adminUser?.name || adminUser?.email || 'Admin';
-  showSection('overview');
+  applyModuleVisibility();
+
+  if (adminUser?.mustChangePassword) {
+    openChangePassword(true);
+    toast('Set a new password before continuing.', 'error');
+    return; // don't load a section yet — every module route 403s until they do
+  }
+
+  const target = firstAccessibleSection();
+  if (target) {
+    showSection(target);
+  } else {
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    toast('Your account has no modules granted yet — ask the site owner to assign some under Staff Access.', 'error');
+  }
 }
 
 // ── Navigation ────────────────────────────────────────────────────────────────
@@ -1522,6 +1669,7 @@ function showSection(name) {
     blog: loadBlogPosts,
     emailstats: loadEmailStats,
     exports: () => {},
+    staff: loadStaffAccounts,
   };
   loaders[name]?.();
 }
@@ -3273,6 +3421,133 @@ async function sendBlogEmail() {
   toast(`Queued for ${d.emailRecipientCount - d.emailSkippedCount} of ${d.emailRecipientCount} people${d.emailSkippedCount ? ` (${d.emailSkippedCount} had no email)` : ''}.`);
   closeModal('blog-email-modal');
   loadBlogPosts();
+}
+
+// ── Staff Access (owner only) ────────────────────────────────────────────────
+// A staff account's `role` (job title) is display-only; `modules` is what
+// actually governs access, re-checked server-side on every request — this
+// UI is just a convenient checkbox grid over that, nothing more.
+let staffModulesCache = [];
+let staffAccountsCache = [];
+
+function staffModuleBadges(modules) {
+  if (!modules?.length) return '<span style="color:#94A3B8;font-size:12px">none granted</span>';
+  return modules.map(m => {
+    const label = staffModulesCache.find(x => x.key === m)?.label || m;
+    return `<span class="badge badge-blue" style="margin:2px">${label}</span>`;
+  }).join(' ');
+}
+
+async function loadStaffModulesIfNeeded() {
+  if (staffModulesCache.length) return;
+  const r = await api('GET', '/api/admin/staff/modules');
+  staffModulesCache = r?.body?.data || [];
+}
+
+async function loadStaffAccounts() {
+  await loadStaffModulesIfNeeded();
+  const tbody = document.getElementById('staff-tbody');
+  tbody.innerHTML = '<tr><td colspan="7"><div class="spinner"></div></td></tr>';
+  const r = await api('GET', '/api/admin/staff');
+  if (!r?.ok) {
+    tbody.innerHTML = `<tr><td colspan="7" class="no-data">${r?.body?.message || 'Failed to load staff accounts.'}</td></tr>`;
+    return;
+  }
+  staffAccountsCache = r.body.data || [];
+  if (!staffAccountsCache.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="no-data">No staff accounts yet — click "+ Add Staff" to create one.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = staffAccountsCache.map(s => `
+    <tr>
+      <td style="font-weight:600">${s.name}</td>
+      <td>${s.email}</td>
+      <td>${s.role || '—'}</td>
+      <td style="max-width:320px">${staffModuleBadges(s.modules)}</td>
+      <td>${s.isActive ? '<span class="badge badge-green">active</span>' : '<span class="badge badge-red">deactivated</span>'}${s.mustChangePassword ? ' <span class="badge badge-yellow" title="Still using the temp password">temp pw</span>' : ''}</td>
+      <td style="white-space:nowrap;font-size:12px">${s.lastLoginAt ? fmt(s.lastLoginAt) : 'never'}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-sm" onclick='openStaffEditor(${JSON.stringify(s).replace(/'/g, '&#39;')})' style="background:#F1F5F9">Edit</button>
+        <button class="btn btn-sm" onclick="resetStaffPassword('${s._id}', ${JSON.stringify(s.name)})" style="background:#F1F5F9">Reset Password</button>
+        <button class="btn btn-ghost btn-sm" onclick="deleteStaffAccount('${s._id}', ${JSON.stringify(s.name)})">Delete</button>
+      </td>
+    </tr>`).join('');
+}
+
+async function openStaffEditor(staff) {
+  await loadStaffModulesIfNeeded();
+  document.getElementById('staff-editor-title').textContent = staff ? 'Edit Staff' : 'Add Staff';
+  document.getElementById('staff-edit-id').value = staff?._id || '';
+  document.getElementById('staff-name').value = staff?.name || '';
+  document.getElementById('staff-email').value = staff?.email || '';
+  document.getElementById('staff-email').disabled = !!staff;
+  document.getElementById('staff-email-note').textContent = staff ? "(can't be changed after creation)" : '';
+  document.getElementById('staff-role').value = staff?.role || '';
+  document.getElementById('staff-active-field').style.display = staff ? '' : 'none';
+  document.getElementById('staff-active').checked = staff ? staff.isActive !== false : true;
+
+  const grid = document.getElementById('staff-modules-grid');
+  const granted = new Set(staff?.modules || []);
+  grid.innerHTML = staffModulesCache.map(m => `
+    <label style="display:flex;align-items:flex-start;gap:6px;font-size:13px;font-weight:500;color:#374151;cursor:pointer" title="${m.description || ''}">
+      <input type="checkbox" class="staff-module-cb" value="${m.key}" ${granted.has(m.key) ? 'checked' : ''} style="width:auto;margin-top:2px" />
+      ${m.label}
+    </label>`).join('');
+
+  document.getElementById('staff-editor-modal').style.display = 'flex';
+}
+
+async function saveStaffAccount() {
+  const id = document.getElementById('staff-edit-id').value;
+  const name = document.getElementById('staff-name').value.trim();
+  const email = document.getElementById('staff-email').value.trim();
+  const role = document.getElementById('staff-role').value.trim();
+  const modules = [...document.querySelectorAll('.staff-module-cb:checked')].map(cb => cb.value);
+
+  if (!name || (!id && !email)) return toast('Name and email are required.', 'error');
+
+  const btn = document.getElementById('staff-save-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  let r;
+  if (id) {
+    const isActive = document.getElementById('staff-active').checked;
+    r = await api('PUT', `/api/admin/staff/${id}`, { name, role, modules, isActive });
+  } else {
+    r = await api('POST', '/api/admin/staff', { name, email, role, modules });
+  }
+  btn.disabled = false; btn.textContent = 'Save';
+
+  if (!r?.ok) return toast(r?.body?.message || 'Failed to save staff account.', 'error');
+
+  closeModal('staff-editor-modal');
+  loadStaffAccounts();
+
+  if (!id && r.body.data.tempPassword) {
+    document.getElementById('staff-temp-pw-name').textContent = r.body.data.name;
+    document.getElementById('staff-temp-pw-value').textContent = r.body.data.tempPassword;
+    document.getElementById('staff-temp-pw-modal').style.display = 'flex';
+  } else {
+    toast('Staff account updated.');
+  }
+}
+
+async function resetStaffPassword(id, name) {
+  if (!confirm(`Reset ${name}'s password? Their current password stops working immediately.`)) return;
+  const r = await api('POST', `/api/admin/staff/${id}/reset-password`);
+  if (!r?.ok) return toast(r?.body?.message || 'Failed to reset password.', 'error');
+  document.getElementById('staff-temp-pw-name').textContent = name;
+  document.getElementById('staff-temp-pw-value').textContent = r.body.data.tempPassword;
+  document.getElementById('staff-temp-pw-modal').style.display = 'flex';
+  loadStaffAccounts();
+}
+
+async function deleteStaffAccount(id, name) {
+  if (!confirm(`Delete staff account "${name}"? This is irreversible — they'll lose dashboard access immediately.`)) return;
+  const r = await api('DELETE', `/api/admin/staff/${id}`);
+  if (!r?.ok) return toast(r?.body?.message || 'Failed to delete staff account.', 'error');
+  toast('Staff account deleted.');
+  loadStaffAccounts();
 }
 
 // ── Email Analytics ─────────────────────────────────────────────────────────────

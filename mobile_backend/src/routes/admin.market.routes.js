@@ -8,18 +8,18 @@ import {
   backfillTelegram,
   backfillWhatsAppDrafts,
 } from '../api/admin.market.controller.js';
-import { adminProtect } from '../middlewares/adminAuthMiddleware.js';
+import { adminProtect, requireModule, requireModuleRead } from '../middlewares/adminAuthMiddleware.js';
 
 const router = express.Router();
 
 router.use(adminProtect);
 
-router.get('/stats',                    getMarketStats);
-router.get('/reports',                  listReports);
-router.get('/listings',                 adminListListings);
-router.post('/listings/:id/remove',     adminRemoveListing);
-router.post('/reports/:id/dismiss',     dismissReport);
-router.post('/backfill-telegram',       backfillTelegram);
-router.post('/backfill-whatsapp-drafts', backfillWhatsAppDrafts);
+router.get('/stats',                    requireModuleRead('marketplace'), getMarketStats);
+router.get('/reports',                  requireModuleRead('marketplace'), listReports);
+router.get('/listings',                 requireModuleRead('marketplace'), adminListListings);
+router.post('/listings/:id/remove',     requireModule('marketplace'), adminRemoveListing);
+router.post('/reports/:id/dismiss',     requireModule('marketplace'), dismissReport);
+router.post('/backfill-telegram',       requireModule('marketplace'), backfillTelegram);
+router.post('/backfill-whatsapp-drafts', requireModule('marketplace'), backfillWhatsAppDrafts);
 
 export default router;

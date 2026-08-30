@@ -4,14 +4,14 @@ import {
   adminReleaseDispute,
   adminRefundDispute,
 } from '../api/admin.wallet.controller.js';
-import { adminProtect } from '../middlewares/adminAuthMiddleware.js';
+import { adminProtect, requireModule, requireModuleRead } from '../middlewares/adminAuthMiddleware.js';
 
 const router = express.Router();
 
 router.use(adminProtect);
 
-router.get('/disputes',                  listDisputes);
-router.post('/disputes/:id/release',     adminReleaseDispute);
-router.post('/disputes/:id/refund',      adminRefundDispute);
+router.get('/disputes',                  requireModuleRead('wallet'), listDisputes);
+router.post('/disputes/:id/release',     requireModule('wallet'), adminReleaseDispute);
+router.post('/disputes/:id/refund',      requireModule('wallet'), adminRefundDispute);
 
 export default router;

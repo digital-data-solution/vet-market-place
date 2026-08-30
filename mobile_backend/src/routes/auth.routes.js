@@ -16,7 +16,7 @@ import {
 } from '../api/admin.auth.controller.js';
 
 import { protect } from '../middlewares/authMiddleware.js';
-import { adminProtect } from '../middlewares/adminAuthMiddleware.js';
+import { adminProtect, requireOwner } from '../middlewares/adminAuthMiddleware.js';
 
 const router = express.Router();
 
@@ -44,7 +44,10 @@ router.post('/push-token',             protect, savePushToken);
 router.post('/web-push-subscription',  protect, saveWebPushSubscription);
 
 // ─── Admin JWT routes ─────────────────────────────────────────────────────────
-router.post('/admin/register',        adminProtect, adminRegister);
+// Owner only — grants full (unscoped) owner-tier admin access to an
+// account, a different and much bigger thing than granting a staff account
+// specific modules (see admin.staff.routes.js for that).
+router.post('/admin/register',        adminProtect, requireOwner, adminRegister);
 router.post('/admin/login',           credentialLimiter, adminLogin); // previously had no rate limit at all
 router.post('/admin/logout',          adminLogout);
 router.post('/admin/refresh',         adminRefreshToken);

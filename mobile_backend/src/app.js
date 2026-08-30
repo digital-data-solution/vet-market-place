@@ -44,12 +44,13 @@ import adminAcademyRoutes     from './routes/admin.academy.routes.js';
 import adminEmailCampaignsRoutes from './routes/admin.emailCampaigns.routes.js';
 import blogRoutes              from './routes/blog.routes.js';
 import adminBlogRoutes         from './routes/admin.blog.routes.js';
+import adminStaffRoutes        from './routes/admin.staff.routes.js';
 
 // Webhook handler — imported directly so it can receive raw body
 import { handlePaystackWebhook } from './api/subscription.controller.js';
 import { handleResendWebhook }  from './api/resendWebhook.controller.js';
 import { regeocodeAll }          from './api/professional.controller.js';
-import { adminProtect }          from './middlewares/adminAuthMiddleware.js';
+import { adminProtect, requireModule, requireModuleRead, requireAnyModule } from './middlewares/adminAuthMiddleware.js';
 import { supabaseAdmin }         from './lib/supabase.js';
 import {
   getRevenueStats,
@@ -249,7 +250,7 @@ app.get('/admin', (_req, res) => res.sendFile(path.join(__dirname, 'admin-dashbo
 // ─── Admin-only routes ────────────────────────────────────────────────────────
 
 // Stats
-app.get('/api/admin/stats/professionals', adminProtect, async (req, res) => {
+app.get('/api/admin/stats/professionals', adminProtect, requireModuleRead('analytics'), async (req, res) => {
   try {
     const [roleBreakdown, pendingVets, pendingInsurance] = await Promise.all([
       Professional.aggregate([
@@ -277,7 +278,7 @@ app.get('/api/admin/stats/professionals', adminProtect, async (req, res) => {
   }
 });
 
-app.get('/api/admin/stats/subscriptions', adminProtect, async (req, res) => {
+app.get('/api/admin/stats/subscriptions', adminProtect, requireModuleRead('analytics'), async (req, res) => {
   try {
     const now = new Date();
     const [totalUsers, activeSubscriptions, shops] = await Promise.all([
@@ -297,7 +298,9 @@ app.get('/api/admin/stats/subscriptions', adminProtect, async (req, res) => {
 });
 
 // Users
-app.get('/api/admin/users', adminProtect, async (req, res) => {
+// Also backs the "send to a specific person" picker in the Notifications /
+// Email Campaigns / Blog composers — see requireAnyModule's doc comment.
+app.get('/api/admin/users', adminProtect, requireAnyModule('users', 'notifications', 'emailcampaigns', 'blog'), async (req, res) => {
   try {
     const { page = 1, limit = 30, role, search } = req.query;
     const filter = {};
@@ -317,7 +320,7 @@ app.get('/api/admin/users', adminProtect, async (req, res) => {
   }
 });
 
-app.put('/api/admin/users/:id/role', adminProtect, async (req, res) => {
+app.put('/api/admin/users/:id/role', adminProtect, requireModule('users'), async (req, res) => {
   try {
     const { role } = req.body;
     const allowed = ['pet_owner', 'vet', 'kennel_owner', 'shop_owner', 'admin'];
@@ -330,7 +333,7 @@ app.put('/api/admin/users/:id/role', adminProtect, async (req, res) => {
   }
 });
 
-app.delete('/api/admin/users/:id', adminProtect, async (req, res) => {
+app.delete('/api/admin/users/:id', adminProtect, requireModule('users'), async (req, res) => {
   try {
     await User.findByIdAndDelete(req.params.id);
     return res.json({ success: true, message: 'User deleted.' });
@@ -345,7 +348,7 @@ app.delete('/api/admin/users/:id', adminProtect, async (req, res) => {
 // syncUser saw didn't carry the confirmation, and they never logged in again).
 // This ONLY ever flips false -> true where Supabase confirms it — never the
 // reverse — so nobody is un-verified by running it.
-app.post('/api/admin/users/resync-verification', adminProtect, async (req, res) => {
+app.post('/api/admin/users/resync-verification', adminProtect, requireModule('users'), async (req, res) => {
   try {
     const users = await User.find({ isVerified: { $ne: true }, supabaseId: { $ne: null } })
       .select('_id supabaseId email').limit(1000).lean();
@@ -369,7 +372,7 @@ app.post('/api/admin/users/resync-verification', adminProtect, async (req, res) 
 });
 
 // Grant / extend subscription manually
-app.post('/api/admin/users/:id/grant-subscription', adminProtect, async (req, res) => {
+app.post('/api/admin/users/:id/grant-subscription', adminProtect, requireModule('users'), async (req, res) => {
   try {
     const { days = 30, plan = 'user_premium' } = req.body;
     const d = Math.max(1, Math.min(365, parseInt(days, 10)));
@@ -396,7 +399,13 @@ app.post('/api/admin/users/:id/grant-subscription', adminProtect, async (req, re
 });
 
 // Export users to CSV
-app.get('/api/admin/export/users', adminProtect, async (req, res) => {
+// NOTE (pre-existing, unrelated to this pass): this path is registered a
+// second time below at the "Admin BI stats routes" block via the imported
+// `exportUsers` handler — Express runs handlers for a duplicate route in
+// registration order, so THIS one always wins and that later one is dead
+// code. Not fixing it here (out of scope for staff/module access), just
+// gating both so neither is a bypass regardless of which ever actually runs.
+app.get('/api/admin/export/users', adminProtect, requireModuleRead('exports'), async (req, res) => {
   try {
     const { role } = req.query;
     const filter = role ? { role } : {};
@@ -421,7 +430,7 @@ app.get('/api/admin/export/users', adminProtect, async (req, res) => {
 });
 
 // Shops
-app.get('/api/admin/shops', adminProtect, async (req, res) => {
+app.get('/api/admin/shops', adminProtect, requireModuleRead('shops'), async (req, res) => {
   try {
     const data = await Shop.find().populate('owner', 'name email').sort({ createdAt: -1 }).limit(200).lean();
     return res.json({ success: true, data });
@@ -430,7 +439,7 @@ app.get('/api/admin/shops', adminProtect, async (req, res) => {
   }
 });
 
-app.delete('/api/admin/shops/:id', adminProtect, async (req, res) => {
+app.delete('/api/admin/shops/:id', adminProtect, requireModule('shops'), async (req, res) => {
   try {
     const shop = await Shop.findByIdAndDelete(req.params.id);
     if (shop?.owner) await User.findByIdAndUpdate(shop.owner, { $set: { role: 'pet_owner' } });
@@ -441,7 +450,7 @@ app.delete('/api/admin/shops/:id', adminProtect, async (req, res) => {
 });
 
 // Subscriptions
-app.get('/api/admin/subscriptions', adminProtect, async (req, res) => {
+app.get('/api/admin/subscriptions', adminProtect, requireModuleRead('subscriptions'), async (req, res) => {
   try {
     const data = await Subscription.find().populate('user', 'name email role').sort({ createdAt: -1 }).limit(200).lean();
     return res.json({ success: true, data });
@@ -450,7 +459,7 @@ app.get('/api/admin/subscriptions', adminProtect, async (req, res) => {
   }
 });
 
-app.delete('/api/admin/subscriptions/:id', adminProtect, async (req, res) => {
+app.delete('/api/admin/subscriptions/:id', adminProtect, requireModule('subscriptions'), async (req, res) => {
   try {
     const sub = await Subscription.findByIdAndUpdate(req.params.id, { $set: { status: 'cancelled' } }, { returnDocument: 'after' });
     if (!sub) return res.status(404).json({ success: false, message: 'Subscription not found.' });
@@ -463,7 +472,7 @@ app.delete('/api/admin/subscriptions/:id', adminProtect, async (req, res) => {
 // ─── Admin support routes ─────────────────────────────────────────────────────
 
 // List all support threads (sorted by latest message)
-app.get('/api/admin/support', adminProtect, async (req, res) => {
+app.get('/api/admin/support', adminProtect, requireModuleRead('support'), async (req, res) => {
   try {
     const { status, limit = 50, page = 1 } = req.query;
     const filter = {};
@@ -480,7 +489,7 @@ app.get('/api/admin/support', adminProtect, async (req, res) => {
 });
 
 // Admin replies to a thread
-app.post('/api/admin/support/:threadId/reply', adminProtect, async (req, res) => {
+app.post('/api/admin/support/:threadId/reply', adminProtect, requireModule('support'), async (req, res) => {
   try {
     const { text } = req.body;
     if (!text?.trim()) return res.status(400).json({ success: false, message: 'Reply text required.' });
@@ -502,7 +511,7 @@ app.post('/api/admin/support/:threadId/reply', adminProtect, async (req, res) =>
 });
 
 // Admin marks thread as resolved
-app.patch('/api/admin/support/:threadId/resolve', adminProtect, async (req, res) => {
+app.patch('/api/admin/support/:threadId/resolve', adminProtect, requireModule('support'), async (req, res) => {
   try {
     const thread = await SupportThread.findByIdAndUpdate(
       req.params.threadId,
@@ -517,24 +526,28 @@ app.patch('/api/admin/support/:threadId/resolve', adminProtect, async (req, res)
 });
 
 // ─── Admin BI stats routes ────────────────────────────────────────────────────
-app.get('/api/admin/stats/revenue',      adminProtect, getRevenueStats);
-app.get('/api/admin/stats/growth',       adminProtect, getGrowthStats);
-app.get('/api/admin/stats/verification', adminProtect, getVerificationStats);
-app.get('/api/admin/stats/referrals',    adminProtect, getReferralStats);
-app.get('/api/admin/stats/practice',     adminProtect, getPracticeStats);
-app.get('/api/admin/stats/business',     adminProtect, getBusinessStats);
-app.get('/api/admin/stats/content',      adminProtect, getContentStats);
-app.get('/api/admin/stats/geographic',   adminProtect, getGeographicStats);
-app.get('/api/admin/stats/messaging',    adminProtect, getMessagingStats);
-app.get('/api/admin/stats/email',        adminProtect, getEmailStats);
-app.get('/api/admin/email-logs',         adminProtect, listEmailLogs);
-app.get('/api/admin/stats/system',       adminProtect, getSystemHealth);
-app.get('/api/admin/stats/activity',     adminProtect, getActivityStats);
-app.get('/api/admin/stats/utm',          adminProtect, getUtmStats);
-app.post('/api/admin/regeocode',         adminProtect, regeocodeAll);
-app.get('/api/admin/export/users',          adminProtect, exportUsers);
-app.get('/api/admin/export/subscriptions',  adminProtect, exportSubscriptions);
-app.get('/api/admin/export/professionals',  adminProtect, exportProfessionals);
+app.get('/api/admin/stats/revenue',      adminProtect, requireModuleRead('analytics'), getRevenueStats);
+app.get('/api/admin/stats/growth',       adminProtect, requireModuleRead('analytics'), getGrowthStats);
+app.get('/api/admin/stats/verification', adminProtect, requireModuleRead('analytics'), getVerificationStats);
+app.get('/api/admin/stats/referrals',    adminProtect, requireModuleRead('analytics'), getReferralStats);
+app.get('/api/admin/stats/practice',     adminProtect, requireModuleRead('analytics'), getPracticeStats);
+app.get('/api/admin/stats/business',     adminProtect, requireModuleRead('analytics'), getBusinessStats);
+app.get('/api/admin/stats/content',      adminProtect, requireModuleRead('analytics'), getContentStats);
+app.get('/api/admin/stats/geographic',   adminProtect, requireModuleRead('analytics'), getGeographicStats);
+app.get('/api/admin/stats/messaging',    adminProtect, requireModuleRead('analytics'), getMessagingStats);
+app.get('/api/admin/stats/email',        adminProtect, requireModuleRead('analytics'), getEmailStats);
+app.get('/api/admin/email-logs',         adminProtect, requireModuleRead('analytics'), listEmailLogs);
+app.get('/api/admin/stats/system',       adminProtect, requireModuleRead('analytics'), getSystemHealth);
+app.get('/api/admin/stats/activity',     adminProtect, requireModuleRead('analytics'), getActivityStats);
+app.get('/api/admin/stats/utm',          adminProtect, requireModuleRead('analytics'), getUtmStats);
+app.post('/api/admin/regeocode',         adminProtect, requireModule('verifications'), regeocodeAll);
+// NOTE: these three export/* paths are route-shadowed by the identically-
+// named handlers registered earlier for export/users (search "route-shadowed"
+// above) — export/subscriptions and export/professionals are NOT shadowed
+// (no earlier duplicate), only export/users is. Gating all three regardless.
+app.get('/api/admin/export/users',          adminProtect, requireModuleRead('exports'), exportUsers);
+app.get('/api/admin/export/subscriptions',  adminProtect, requireModuleRead('exports'), exportSubscriptions);
+app.get('/api/admin/export/professionals',  adminProtect, requireModuleRead('exports'), exportProfessionals);
 
 // ─── API routes ───────────────────────────────────────────────────────────────
 app.use('/api/admin/professionals', adminProfessionalRoutes);
@@ -570,6 +583,7 @@ app.use('/api/admin/academy',       adminAcademyRoutes);
 app.use('/api/admin/email-campaigns', adminEmailCampaignsRoutes);
 app.use('/api/v1/blog',             listingLimiter, blogRoutes);
 app.use('/api/admin/blog',          adminBlogRoutes);
+app.use('/api/admin/staff',         adminStaffRoutes);
 
 // ─── Client-side error reporting ─────────────────────────────────────────────
 // No auth required — errors may fire before the user is authenticated.

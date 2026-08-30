@@ -1,4 +1,5 @@
 import User from '../models/User.js';
+import AdminStaffAccount from '../models/AdminStaffAccount.js';
 import logger from '../lib/logger.js';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
@@ -18,6 +19,27 @@ function generateToken(user) {
       role:    user.role,
       isAdmin: user.isAdmin === true,
       name:    user.name,
+    },
+    JWT_SECRET,
+    { expiresIn: JWT_EXPIRE }
+  );
+}
+
+// Staff token — deliberately shaped differently from the owner token above
+// (isStaff:true, staffId instead of userId, no isAdmin). `modules` IS
+// embedded here for the dashboard's convenience (render nav without an
+// extra round-trip) but adminProtect NEVER trusts it for the actual gating
+// decision — every module-gated request re-reads AdminStaffAccount fresh.
+function generateStaffToken(staff) {
+  return jwt.sign(
+    {
+      staffId: staff._id.toString(),
+      email:   staff.email,
+      name:    staff.name,
+      role:    staff.role,
+      isAdmin: false,
+      isStaff: true,
+      modules: staff.modules,
     },
     JWT_SECRET,
     { expiresIn: JWT_EXPIRE }
@@ -128,27 +150,71 @@ export const login = async (req, res) => {
     }
 
     const user = await User.findOne({ email: email.toLowerCase() });
-    if (!user) {
-      logger.warn('Admin login failed: user not found', { email });
+
+    // Owner tier — unchanged behaviour when a matching User with isAdmin
+    // exists. Falls through to the staff-account check below only when
+    // there's no such owner account, so an email that's simultaneously a
+    // (non-admin) User and a staff account still logs in as staff correctly.
+    if (user?.isAdmin) {
+      const isPasswordValid = await comparePassword(password, user.password);
+      if (!isPasswordValid) {
+        logger.warn('Admin login failed: invalid password', { userId: user._id });
+        return res.status(401).json({ success: false, message: 'Invalid email or password.' });
+      }
+
+      const token = generateToken(user);
+      res.cookie('adminAuthToken', token, {
+        httpOnly: true,
+        secure:   process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge:   24 * 60 * 60 * 1000,
+        path:     '/',
+      });
+
+      logger.info('Admin login successful (owner)', { userId: user._id, email: user.email });
+
+      return res.status(200).json({
+        success: true,
+        message: 'Login successful.',
+        data: {
+          token,
+          user: {
+            id:         user._id,
+            email:      user.email,
+            name:       user.name,
+            role:       user.role,
+            isVerified: user.isVerified,
+            isOwner:    true,
+            modules:    null, // null = every module, dashboard treats this as "all"
+          },
+        },
+      });
+    }
+
+    // Staff tier — AdminStaffAccount, module-scoped. See middlewares/
+    // adminAuthMiddleware.js for how `modules`/`isActive` are re-checked
+    // fresh on every subsequent request rather than trusted from this token.
+    const staff = await AdminStaffAccount.findOne({ email: email.toLowerCase() });
+    if (!staff) {
+      logger.warn('Admin login failed: no matching owner or staff account', { email });
+      return res.status(401).json({ success: false, message: 'Invalid email or password.' });
+    }
+    if (!staff.isActive) {
+      logger.warn('Admin login failed: staff account deactivated', { staffId: staff._id });
+      return res.status(403).json({ success: false, message: 'This staff account has been deactivated. Contact the site owner.' });
+    }
+
+    const staffPasswordValid = await staff.comparePassword(password);
+    if (!staffPasswordValid) {
+      logger.warn('Admin login failed: invalid staff password', { staffId: staff._id });
       return res.status(401).json({ success: false, message: 'Invalid email or password.' });
     }
 
-    // ✅ Admin-only gate — independent of the app-facing `role` field, so an
-    // account can be e.g. both a `vet` in the marketplace and a dashboard admin.
-    if (!user.isAdmin) {
-      logger.warn('Admin login failed: no admin access', { userId: user._id });
-      return res.status(403).json({ success: false, message: 'Admin access required.' });
-    }
+    staff.lastLoginAt = new Date();
+    await staff.save();
 
-    const isPasswordValid = await comparePassword(password, user.password);
-    if (!isPasswordValid) {
-      logger.warn('Admin login failed: invalid password', { userId: user._id });
-      return res.status(401).json({ success: false, message: 'Invalid email or password.' });
-    }
-
-    const token = generateToken(user);
-
-    res.cookie('adminAuthToken', token, {
+    const staffToken = generateStaffToken(staff);
+    res.cookie('adminAuthToken', staffToken, {
       httpOnly: true,
       secure:   process.env.NODE_ENV === 'production',
       sameSite: 'strict',
@@ -156,19 +222,21 @@ export const login = async (req, res) => {
       path:     '/',
     });
 
-    logger.info('Admin login successful', { userId: user._id, email: user.email });
+    logger.info('Admin login successful (staff)', { staffId: staff._id, email: staff.email });
 
     return res.status(200).json({
       success: true,
       message: 'Login successful.',
       data: {
-        token,
+        token: staffToken,
         user: {
-          id:         user._id,
-          email:      user.email,
-          name:       user.name,
-          role:       user.role,
-          isVerified: user.isVerified,
+          id:                 staff._id,
+          email:              staff.email,
+          name:               staff.name,
+          role:               staff.role,
+          isOwner:            false,
+          modules:            staff.modules,
+          mustChangePassword: staff.mustChangePassword,
         },
       },
     });
@@ -276,6 +344,19 @@ export const getCurrentUser = async (req, res) => {
     const decoded = verifyToken(token);
     if (!decoded) return res.status(401).json({ success: false, message: 'Invalid or expired token.' });
 
+    if (decoded.isStaff && decoded.staffId) {
+      const staff = await AdminStaffAccount.findById(decoded.staffId).select('-password');
+      if (!staff || !staff.isActive) return res.status(401).json({ success: false, message: 'Staff account not found or deactivated.' });
+      return res.status(200).json({
+        success: true,
+        data: {
+          id: staff._id, email: staff.email, name: staff.name, role: staff.role,
+          isOwner: false, modules: staff.modules, mustChangePassword: staff.mustChangePassword,
+          createdAt: staff.createdAt,
+        },
+      });
+    }
+
     const user = await User.findById(decoded.userId).select('-password');
     if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
 
@@ -287,6 +368,8 @@ export const getCurrentUser = async (req, res) => {
         name:       user.name,
         role:       user.role,
         isVerified: user.isVerified,
+        isOwner:    true,
+        modules:    null,
         createdAt:  user.createdAt,
       },
     });
@@ -318,6 +401,24 @@ export const changePassword = async (req, res) => {
 
     const decoded = verifyToken(token);
     if (!decoded) return res.status(401).json({ success: false, message: 'Invalid or expired token.' });
+
+    if (decoded.isStaff && decoded.staffId) {
+      const staff = await AdminStaffAccount.findById(decoded.staffId);
+      if (!staff) return res.status(404).json({ success: false, message: 'Staff account not found.' });
+
+      const staffCurrentValid = await staff.comparePassword(currentPassword);
+      if (!staffCurrentValid) {
+        logger.warn('Staff password change failed: invalid current password', { staffId: staff._id });
+        return res.status(401).json({ success: false, message: 'Current password is incorrect.' });
+      }
+
+      staff.password = newPassword;
+      staff.mustChangePassword = false;
+      await staff.save();
+
+      logger.info('Staff password changed successfully', { staffId: staff._id });
+      return res.status(200).json({ success: true, message: 'Password changed successfully.' });
+    }
 
     const user = await User.findById(decoded.userId);
     if (!user) return res.status(404).json({ success: false, message: 'User not found.' });

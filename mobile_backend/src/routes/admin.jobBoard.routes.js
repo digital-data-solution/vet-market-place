@@ -6,16 +6,16 @@ import {
   adminRemoveJobPosting,
   dismissJobReport,
 } from '../api/admin.jobBoard.controller.js';
-import { adminProtect } from '../middlewares/adminAuthMiddleware.js';
+import { adminProtect, requireModule, requireModuleRead } from '../middlewares/adminAuthMiddleware.js';
 
 const router = express.Router();
 
 router.use(adminProtect);
 
-router.get('/stats',                getJobBoardStats);
-router.get('/reports',              listJobReports);
-router.get('/postings',             adminListJobPostings);
-router.post('/postings/:id/remove', adminRemoveJobPosting);
-router.post('/reports/:id/dismiss', dismissJobReport);
+router.get('/stats',                requireModuleRead('jobs'), getJobBoardStats);
+router.get('/reports',              requireModuleRead('jobs'), listJobReports);
+router.get('/postings',             requireModuleRead('jobs'), adminListJobPostings);
+router.post('/postings/:id/remove', requireModule('jobs'), adminRemoveJobPosting);
+router.post('/reports/:id/dismiss', requireModule('jobs'), dismissJobReport);
 
 export default router;
