@@ -7,6 +7,7 @@
 import crypto from 'crypto';
 import AdminStaffAccount from '../models/AdminStaffAccount.js';
 import { MODULES, MODULE_KEYS } from '../config/adminModules.js';
+import { disable as disableTwoFactorOn } from '../services/twoFactor.service.js';
 import logger from '../lib/logger.js';
 
 /**
@@ -132,6 +133,31 @@ export const resetStaffPassword = async (req, res) => {
   } catch (error) {
     logger.error('resetStaffPassword error', { error: error.message });
     return res.status(500).json({ success: false, message: 'Failed to reset password.' });
+  }
+};
+
+/**
+ * POST /api/admin/staff/:id/reset-2fa — owner only.
+ * Recovery path for a staff member who's lost their authenticator device AND
+ * exhausted their 8 backup codes — the one real gap flagged when 2FA shipped
+ * (see memory: no recovery route existed at all). This just turns 2FA back
+ * off for them (clears the secret + any remaining backup codes) — it does
+ * NOT re-enable it. They log in with just their password afterward and can
+ * re-enroll 2FA from scratch via the normal self-service setup/confirm flow
+ * whenever they're ready. Does not touch their password or module grants.
+ */
+export const resetStaffTwoFactor = async (req, res) => {
+  try {
+    const staff = await AdminStaffAccount.findById(req.params.id);
+    if (!staff) return res.status(404).json({ success: false, message: 'Staff account not found.' });
+
+    await disableTwoFactorOn(staff);
+
+    logger.info('Staff 2FA reset by owner', { staffId: staff._id, by: req.user?.email });
+    return res.json({ success: true, message: '2FA has been turned off for this account. They can log in with just their password and re-enroll whenever ready.' });
+  } catch (error) {
+    logger.error('resetStaffTwoFactor error', { error: error.message });
+    return res.status(500).json({ success: false, message: 'Failed to reset 2FA.' });
   }
 };
 

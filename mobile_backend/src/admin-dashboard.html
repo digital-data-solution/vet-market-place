@@ -3673,11 +3673,12 @@ async function loadStaffAccounts() {
       <td>${s.email}</td>
       <td>${s.role || '—'}</td>
       <td style="max-width:320px">${staffModuleBadges(s.modules)}</td>
-      <td>${s.isActive ? '<span class="badge badge-green">active</span>' : '<span class="badge badge-red">deactivated</span>'}${s.mustChangePassword ? ' <span class="badge badge-yellow" title="Still using the temp password">temp pw</span>' : ''}</td>
+      <td>${s.isActive ? '<span class="badge badge-green">active</span>' : '<span class="badge badge-red">deactivated</span>'}${s.mustChangePassword ? ' <span class="badge badge-yellow" title="Still using the temp password">temp pw</span>' : ''}${s.twoFactorEnabled ? ' <span class="badge badge-blue" title="2FA enabled">🔐</span>' : ''}</td>
       <td style="white-space:nowrap;font-size:12px">${s.lastLoginAt ? fmt(s.lastLoginAt) : 'never'}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-sm" onclick='openStaffEditor(${JSON.stringify(s).replace(/'/g, '&#39;')})' style="background:#F1F5F9">Edit</button>
         <button class="btn btn-sm" onclick="resetStaffPassword('${s._id}', ${JSON.stringify(s.name)})" style="background:#F1F5F9">Reset Password</button>
+        ${s.twoFactorEnabled ? `<button class="btn btn-sm" onclick="resetStaffTwoFactor('${s._id}', ${JSON.stringify(s.name)})" style="background:#F1F5F9" title="If they've lost their authenticator device and used up their backup codes">Reset 2FA</button>` : ''}
         <button class="btn btn-ghost btn-sm" onclick="deleteStaffAccount('${s._id}', ${JSON.stringify(s.name)})">Delete</button>
       </td>
     </tr>`).join('');
@@ -3748,6 +3749,14 @@ async function resetStaffPassword(id, name) {
   document.getElementById('staff-temp-pw-name').textContent = name;
   document.getElementById('staff-temp-pw-value').textContent = r.body.data.tempPassword;
   document.getElementById('staff-temp-pw-modal').style.display = 'flex';
+  loadStaffAccounts();
+}
+
+async function resetStaffTwoFactor(id, name) {
+  if (!confirm(`Turn off 2FA for ${name}? Use this if they've lost their authenticator device and used up their backup codes — they'll be able to log in with just their password afterward and can re-enroll 2FA whenever they're ready.`)) return;
+  const r = await api('POST', `/api/admin/staff/${id}/reset-2fa`);
+  if (!r?.ok) return toast(r?.body?.message || 'Failed to reset 2FA.', 'error');
+  toast(`2FA turned off for ${name}.`);
   loadStaffAccounts();
 }
 
