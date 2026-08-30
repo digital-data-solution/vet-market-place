@@ -34,6 +34,14 @@ const adminStaffAccountSchema = new mongoose.Schema({
   lastLoginAt: { type: Date, default: null },
 
   createdByEmail: { type: String, default: null }, // owner's email, audit trail
+
+  // TOTP 2FA — same shape/fields as User.js's owner-tier ones, kept
+  // identical on purpose so services/twoFactor.service.js works against
+  // either document type without caring which tier it's touching.
+  twoFactorEnabled:       { type: Boolean, default: false },
+  twoFactorSecret:        { type: String, default: null, select: false },
+  twoFactorPendingSecret: { type: String, default: null, select: false },
+  twoFactorBackupCodes:   { type: [String], default: [], select: false },
 }, { timestamps: true });
 
 adminStaffAccountSchema.pre('save', async function () {

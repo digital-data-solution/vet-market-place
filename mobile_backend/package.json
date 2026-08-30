@@ -27,7 +27,9 @@
     "multer": "^2.0.2",
     "node-cron": "^4.2.1",
     "node-fetch": "^3.3.2",
+    "qrcode": "^1.5.4",
     "redis": "^5.10.0",
+    "speakeasy": "^2.0.0",
     "svix": "^1.99.1",
     "web-push": "^3.6.7",
     "winston": "^3.19.0"

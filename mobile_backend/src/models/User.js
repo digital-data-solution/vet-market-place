@@ -23,6 +23,17 @@ const userSchema = new mongoose.Schema({
   // both a `vet` in the marketplace app and an admin of the dashboard.
   isAdmin: { type: Boolean, default: false },
 
+  // Admin-dashboard TOTP 2FA — only ever meaningful when isAdmin is true,
+  // but lives here (not a separate collection) for the same reason isAdmin
+  // itself does: one owner account, one place for its admin-facing fields.
+  // See services/twoFactor.service.js. select:false on the secret/backup
+  // codes — never returned by a normal .find()/.findById(), only when
+  // explicitly .select('+twoFactorSecret') for an actual verify.
+  twoFactorEnabled:       { type: Boolean, default: false },
+  twoFactorSecret:        { type: String, default: null, select: false },
+  twoFactorPendingSecret: { type: String, default: null, select: false }, // set during setup, promoted to twoFactorSecret only on confirm
+  twoFactorBackupCodes:   { type: [String], default: [], select: false }, // bcrypt-hashed, one-time use each
+
   // Contact + bio. Must be declared or Mongoose (strict mode) silently drops
   // them on $set — the reason phone edits never persisted before.
   phone: { type: String, default: null },

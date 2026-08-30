@@ -170,7 +170,7 @@
 
 <!-- ══ LOGIN ══════════════════════════════════════════════════════════════════ -->
 <div id="login">
-  <div class="login-card">
+  <div class="login-card" id="login-step-password">
     <div style="font-size:48px;margin-bottom:12px;">🐾</div>
     <h1>Xpress Vet Admin</h1>
     <p>Sign in with your admin credentials</p>
@@ -184,6 +184,22 @@
     </div>
     <button class="btn btn-primary" style="width:100%" onclick="doLogin()" id="login-btn">Sign In</button>
     <div id="login-error"></div>
+  </div>
+
+  <!-- 2FA step — shown instead of the password card when the account has
+       2FA enabled and the password check already succeeded. -->
+  <div class="login-card" id="login-step-2fa" style="display:none">
+    <div style="font-size:48px;margin-bottom:12px;">🔐</div>
+    <h1>Enter your code</h1>
+    <p>Open your authenticator app, or use a backup code if you've lost access to it.</p>
+    <div class="field">
+      <label>6-digit code (or backup code)</label>
+      <input type="text" id="login-2fa-code" placeholder="123456" autocomplete="one-time-code" inputmode="numeric"
+        onkeydown="if(event.key==='Enter')submitLoginTwoFactor()" />
+    </div>
+    <button class="btn btn-primary" style="width:100%" onclick="submitLoginTwoFactor()" id="login-2fa-btn">Verify</button>
+    <button class="btn btn-ghost btn-sm" style="width:100%;margin-top:8px" onclick="cancelLoginTwoFactor()">← Back</button>
+    <div id="login-2fa-error"></div>
   </div>
 </div>
 
@@ -282,6 +298,7 @@
     <div class="sidebar-footer">
       <div id="admin-name"></div>
       <button class="btn btn-ghost btn-sm" style="width:100%;margin-bottom:6px" onclick="openChangePassword()">Change Password</button>
+      <button class="btn btn-ghost btn-sm" style="width:100%;margin-bottom:6px" onclick="openTwoFactorSettings()">🔐 Two-Factor Auth <span id="twofa-status-pill"></span></button>
       <button class="btn btn-ghost btn-sm" style="width:100%" onclick="doLogout()">Sign Out</button>
     </div>
   </aside>
@@ -1439,6 +1456,59 @@
   </div>
 </div>
 
+<!-- ── Two-Factor Auth Modal ── -->
+<div id="twofa-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeModal('twofa-modal')">
+  <div class="modal" style="max-width:440px">
+    <h3>Two-Factor Authentication</h3>
+
+    <!-- State: disabled — offer to enable -->
+    <div id="twofa-state-disabled">
+      <p style="font-size:13px;color:#64748B;margin-bottom:16px">
+        Not enabled. Adding 2FA means signing in needs your password AND a code from an authenticator
+        app (Google Authenticator, Authy, etc.) — protects your account even if your password leaks.
+      </p>
+      <button class="btn btn-primary" style="width:100%" onclick="startTwoFactorSetup()" id="twofa-start-btn">Enable Two-Factor Auth</button>
+    </div>
+
+    <!-- State: setup in progress — QR + confirm code -->
+    <div id="twofa-state-setup" style="display:none">
+      <p style="font-size:13px;color:#64748B;margin-bottom:12px">Scan this with your authenticator app, then enter the 6-digit code it shows.</p>
+      <div style="text-align:center;margin-bottom:12px"><img id="twofa-qr" style="width:180px;height:180px;border:1px solid #E2E8F0;border-radius:8px" /></div>
+      <p style="font-size:11px;color:#94A3B8;text-align:center;margin-bottom:16px">Can't scan? Enter manually: <code id="twofa-manual-key" style="user-select:all"></code></p>
+      <div class="field">
+        <label>6-digit code</label>
+        <input type="text" id="twofa-confirm-code" placeholder="123456" autocomplete="one-time-code" inputmode="numeric" onkeydown="if(event.key==='Enter')confirmTwoFactorSetup()" />
+      </div>
+      <div id="twofa-setup-error" style="display:none;color:#DC2626;font-size:13px;margin-bottom:10px"></div>
+      <button class="btn btn-primary" style="width:100%" onclick="confirmTwoFactorSetup()" id="twofa-confirm-btn">Confirm & Enable</button>
+    </div>
+
+    <!-- State: backup codes reveal — shown once, right after enabling -->
+    <div id="twofa-state-backup" style="display:none">
+      <p style="font-size:13px;color:#92400E;background:#FFFBEB;border:1px solid #FCD34D;border-radius:8px;padding:10px 12px;margin-bottom:14px">
+        🔒 Save these 8 backup codes somewhere safe — each works once, if you ever lose your authenticator device. Shown only this one time.
+      </p>
+      <div id="twofa-backup-codes" style="background:#F8FAFC;border:1.5px solid #E2E8F0;border-radius:10px;padding:14px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:14px;line-height:2;text-align:center"></div>
+      <button class="btn btn-primary" style="width:100%;margin-top:16px" onclick="closeTwoFactorAfterBackup()">I've saved these — Done</button>
+    </div>
+
+    <!-- State: enabled — offer to disable -->
+    <div id="twofa-state-enabled" style="display:none">
+      <p style="font-size:13px;color:#059669;background:#ECFDF3;border:1px solid #86EFAC;border-radius:8px;padding:10px 12px;margin-bottom:16px">
+        ✅ Two-factor authentication is enabled on your account.
+      </p>
+      <label style="font-size:13px;font-weight:600;color:#374151;display:block;margin-bottom:6px">Current password (to disable)</label>
+      <input type="password" id="twofa-disable-pass" style="width:100%;padding:10px;border:1px solid #E2E8F0;border-radius:8px;font-size:14px;box-sizing:border-box;margin-bottom:10px" />
+      <div id="twofa-disable-error" style="display:none;color:#DC2626;font-size:13px;margin-bottom:10px"></div>
+      <button class="btn btn-danger" style="width:100%" onclick="submitDisableTwoFactor()" id="twofa-disable-btn">Disable Two-Factor Auth</button>
+    </div>
+
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal('twofa-modal')">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Toast ── -->
 <div id="toast"></div>
 
@@ -1491,6 +1561,84 @@ function roleBadge(role) {
 function statusBadge(s) {
   const map = { approved: 'badge-green', pending: 'badge-yellow', rejected: 'badge-red', active: 'badge-green', cancelled: 'badge-red', inactive: 'badge-gray' };
   return `<span class="badge ${map[s] || 'badge-gray'}">${s || '—'}</span>`;
+}
+
+// ── Two-Factor Auth (self-service, own account) ─────────────────────────────
+function twoFactorSetState(state) {
+  ['disabled', 'setup', 'backup', 'enabled'].forEach(s => {
+    document.getElementById('twofa-state-' + s).style.display = s === state ? '' : 'none';
+  });
+}
+
+function openTwoFactorSettings() {
+  document.getElementById('twofa-setup-error').style.display = 'none';
+  document.getElementById('twofa-disable-error').style.display = 'none';
+  document.getElementById('twofa-disable-pass').value = '';
+  document.getElementById('twofa-confirm-code').value = '';
+  twoFactorSetState(adminUser?.twoFactorEnabled ? 'enabled' : 'disabled');
+  document.getElementById('twofa-modal').style.display = 'flex';
+}
+
+async function startTwoFactorSetup() {
+  const btn = document.getElementById('twofa-start-btn');
+  btn.disabled = true; btn.textContent = 'Starting…';
+  const r = await api('POST', '/api/auth/admin/2fa/setup');
+  btn.disabled = false; btn.textContent = 'Enable Two-Factor Auth';
+  if (!r?.ok) return toast(r?.body?.message || 'Failed to start 2FA setup.', 'error');
+
+  document.getElementById('twofa-qr').src = r.body.data.qrDataUrl;
+  document.getElementById('twofa-manual-key').textContent = r.body.data.manualKey;
+  document.getElementById('twofa-confirm-code').value = '';
+  twoFactorSetState('setup');
+}
+
+async function confirmTwoFactorSetup() {
+  const code = document.getElementById('twofa-confirm-code').value.trim();
+  const err  = document.getElementById('twofa-setup-error');
+  const btn  = document.getElementById('twofa-confirm-btn');
+  if (!code) { err.textContent = 'Enter the code from your authenticator app.'; err.style.display = 'block'; return; }
+
+  err.style.display = 'none';
+  btn.disabled = true; btn.textContent = 'Confirming…';
+  const r = await api('POST', '/api/auth/admin/2fa/confirm', { code });
+  btn.disabled = false; btn.textContent = 'Confirm & Enable';
+  if (!r?.ok) {
+    err.textContent = r?.body?.message || 'Incorrect code.';
+    err.style.display = 'block';
+    return;
+  }
+
+  if (adminUser) adminUser.twoFactorEnabled = true;
+  document.getElementById('twofa-backup-codes').innerHTML = (r.body.data.backupCodes || []).map(c => `<div>${c}</div>`).join('');
+  document.getElementById('twofa-status-pill').textContent = ' ✅';
+  twoFactorSetState('backup');
+}
+
+function closeTwoFactorAfterBackup() {
+  closeModal('twofa-modal');
+  toast('Two-factor authentication enabled.');
+}
+
+async function submitDisableTwoFactor() {
+  const pass = document.getElementById('twofa-disable-pass').value;
+  const err  = document.getElementById('twofa-disable-error');
+  const btn  = document.getElementById('twofa-disable-btn');
+  if (!pass) { err.textContent = 'Enter your current password.'; err.style.display = 'block'; return; }
+
+  err.style.display = 'none';
+  btn.disabled = true; btn.textContent = 'Disabling…';
+  const r = await api('POST', '/api/auth/admin/2fa/disable', { password: pass });
+  btn.disabled = false; btn.textContent = 'Disable Two-Factor Auth';
+  if (!r?.ok) {
+    err.textContent = r?.body?.message || 'Failed to disable 2FA.';
+    err.style.display = 'block';
+    return;
+  }
+
+  if (adminUser) adminUser.twoFactorEnabled = false;
+  document.getElementById('twofa-status-pill').textContent = '';
+  closeModal('twofa-modal');
+  toast('Two-factor authentication disabled.');
 }
 
 let forcePasswordChange = false;
@@ -1549,6 +1697,8 @@ let _debounceTimer;
 function debounce(fn, ms) { return (...args) => { clearTimeout(_debounceTimer); _debounceTimer = setTimeout(() => fn(...args), ms); }; }
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
+let pendingLoginToken = null;
+
 async function doLogin() {
   const email = document.getElementById('login-email').value.trim();
   const pass  = document.getElementById('login-pass').value;
@@ -1568,18 +1718,68 @@ async function doLogin() {
     err.style.display = 'block';
     return;
   }
+
+  if (json.requiresTwoFactor) {
+    pendingLoginToken = json.data.pendingToken;
+    document.getElementById('login-2fa-code').value = '';
+    document.getElementById('login-2fa-error').style.display = 'none';
+    document.getElementById('login-step-password').style.display = 'none';
+    document.getElementById('login-step-2fa').style.display = '';
+    document.getElementById('login-2fa-code').focus();
+    return;
+  }
+
   token = json.data.token;
   adminUser = json.data.user;
   localStorage.setItem('xv_admin_token', token);
   showApp();
 }
 
+async function submitLoginTwoFactor() {
+  const code = document.getElementById('login-2fa-code').value.trim();
+  const err  = document.getElementById('login-2fa-error');
+  const btn  = document.getElementById('login-2fa-btn');
+  if (!code) { err.textContent = 'Enter a code.'; err.style.display = 'block'; return; }
+
+  err.style.display = 'none';
+  btn.disabled = true; btn.textContent = 'Verifying…';
+  const r = await fetch('/api/auth/admin/login/2fa', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pendingToken: pendingLoginToken, code }),
+  });
+  const json = await r.json().catch(() => ({}));
+  btn.disabled = false; btn.textContent = 'Verify';
+  if (!r.ok) {
+    err.textContent = json.message || 'Verification failed.';
+    err.style.display = 'block';
+    return;
+  }
+
+  pendingLoginToken = null;
+  token = json.data.token;
+  adminUser = json.data.user;
+  localStorage.setItem('xv_admin_token', token);
+  showApp();
+}
+
+function cancelLoginTwoFactor() {
+  pendingLoginToken = null;
+  document.getElementById('login-step-2fa').style.display = 'none';
+  document.getElementById('login-step-password').style.display = '';
+  document.getElementById('login-pass').value = '';
+}
+
 function doLogout() {
   api('POST', '/api/auth/admin/logout');
   token = null;
+  pendingLoginToken = null;
   localStorage.removeItem('xv_admin_token');
   document.getElementById('app').style.display   = 'none';
   document.getElementById('login').style.display = 'flex';
+  document.getElementById('login-step-2fa').style.display = 'none';
+  document.getElementById('login-step-password').style.display = '';
+  document.getElementById('login-pass').value = '';
 }
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
@@ -1632,6 +1832,7 @@ function showApp() {
   document.getElementById('login').style.display = 'none';
   document.getElementById('app').style.display   = 'block';
   document.getElementById('admin-name').textContent = adminUser?.name || adminUser?.email || 'Admin';
+  document.getElementById('twofa-status-pill').textContent = adminUser?.twoFactorEnabled ? ' ✅' : '';
   applyModuleVisibility();
 
   if (adminUser?.mustChangePassword) {
