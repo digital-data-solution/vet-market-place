@@ -3513,9 +3513,9 @@ async function loadBlogPosts() {
         <button class="btn btn-sm" onclick='openBlogEditor(${JSON.stringify(p).replace(/'/g, '&#39;')})' style="background:#F1F5F9">Edit</button>
         ${p.status === 'published'
           ? `<button class="btn btn-sm" onclick="toggleBlogPublish('${p._id}', false)" style="background:#F1F5F9">Unpublish</button>
-             ${canBroadcastBlog() ? `<button class="btn btn-primary btn-sm" onclick="openBlogEmailModal('${p._id}', ${JSON.stringify(p.title)})">Send Email</button>` : ''}`
+             ${canBroadcastBlog() ? `<button class="btn btn-primary btn-sm" onclick='openBlogEmailModal(${JSON.stringify(p._id)}, ${JSON.stringify(p.title).replace(/'/g, '&#39;')})'>Send Email</button>` : ''}`
           : `<button class="btn btn-success btn-sm" onclick="toggleBlogPublish('${p._id}', true)">Publish</button>`}
-        <button class="btn btn-ghost btn-sm" onclick="deleteBlogPost('${p._id}', ${JSON.stringify(p.title)})">Delete</button>
+        <button class="btn btn-ghost btn-sm" onclick='deleteBlogPost(${JSON.stringify(p._id)}, ${JSON.stringify(p.title).replace(/'/g, '&#39;')})'>Delete</button>
       </td>
     </tr>`).join('');
 }
@@ -3677,9 +3677,9 @@ async function loadStaffAccounts() {
       <td style="white-space:nowrap;font-size:12px">${s.lastLoginAt ? fmt(s.lastLoginAt) : 'never'}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-sm" onclick='openStaffEditor(${JSON.stringify(s).replace(/'/g, '&#39;')})' style="background:#F1F5F9">Edit</button>
-        <button class="btn btn-sm" onclick="resetStaffPassword('${s._id}', ${JSON.stringify(s.name)})" style="background:#F1F5F9">Reset Password</button>
-        ${s.twoFactorEnabled ? `<button class="btn btn-sm" onclick="resetStaffTwoFactor('${s._id}', ${JSON.stringify(s.name)})" style="background:#F1F5F9" title="If they've lost their authenticator device and used up their backup codes">Reset 2FA</button>` : ''}
-        <button class="btn btn-ghost btn-sm" onclick="deleteStaffAccount('${s._id}', ${JSON.stringify(s.name)})">Delete</button>
+        <button class="btn btn-sm" onclick='resetStaffPassword(${JSON.stringify(s._id)}, ${JSON.stringify(s.name).replace(/'/g, '&#39;')})' style="background:#F1F5F9">Reset Password</button>
+        ${s.twoFactorEnabled ? `<button class="btn btn-sm" onclick='resetStaffTwoFactor(${JSON.stringify(s._id)}, ${JSON.stringify(s.name).replace(/'/g, '&#39;')})' style="background:#F1F5F9" title="If they've lost their authenticator device and used up their backup codes">Reset 2FA</button>` : ''}
+        <button class="btn btn-ghost btn-sm" onclick='deleteStaffAccount(${JSON.stringify(s._id)}, ${JSON.stringify(s.name).replace(/'/g, '&#39;')})'>Delete</button>
       </td>
     </tr>`).join('');
 }
