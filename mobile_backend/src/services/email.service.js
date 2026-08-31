@@ -1326,7 +1326,7 @@ export async function sendUnansweredSupportAlert(adminEmail, threads) {
 export async function sendBlogPostEmail(name, email, userId, post) {
   const firstName = name?.split(' ')[0] || 'there';
   const unsub = unsubscribeUrl(userId);
-  const postUrl = `https://xpressvetmarketplace.com/Blog/${post.slug}`;
+  const postUrl = `https://go.xpressvetmarketplace.com/b/${post.slug}`;
   const cover = post.coverImageUrl
     ? `<img src="${post.coverImageUrl}" alt="" style="width:100%;border-radius:12px;margin-bottom:20px;display:block" />`
     : '';

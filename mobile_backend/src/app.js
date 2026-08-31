@@ -79,6 +79,7 @@ import Shop          from './models/Shop.js';
 import Subscription  from './models/Subscription.js';
 import SupportThread from './models/SupportThread.js';
 import Listing       from './models/Listing.js';
+import BlogPost      from './models/BlogPost.js';
 
 const app = express();
 
@@ -206,6 +207,49 @@ app.get('/l/:id', async (req, res) => {
 <meta http-equiv="refresh" content="0;url=${esc(appUrl)}">
 </head><body style="font-family:system-ui;text-align:center;padding:40px">
 <p>Opening this listing on Xpress Vet…</p>
+<p><a href="${esc(appUrl)}">Tap here if it doesn't open automatically</a></p>
+</body></html>`);
+  } catch {
+    res.set('Content-Type', 'text/html; charset=utf-8');
+    return res.status(200).send(`<!doctype html><meta http-equiv="refresh" content="0;url=${esc(appUrl)}">`);
+  }
+});
+
+// ─── Blog share preview (/b/:slug) ─────────────────────────────────────────────
+// Same problem, same fix as /l/:id above: the app is a client-rendered SPA, so
+// WhatsApp/Facebook/etc's crawlers (which don't run JS) only ever see the app
+// shell's generic title/logo when a raw /Blog/:slug link is shared, never the
+// post's own title/cover image. This route server-renders real Open Graph tags
+// from the post, then bounces a human visitor straight into the app. Only ever
+// serves published posts — a draft's title/cover must never leak via a share
+// link before an admin publishes it.
+app.get('/b/:slug', async (req, res) => {
+  const slug = req.params.slug.toLowerCase();
+  const appUrl = `${WEB_APP_ORIGIN}/Blog/${encodeURIComponent(slug)}`;
+  try {
+    const post = await BlogPost.findOne({ slug, status: 'published' }).lean();
+    if (!post) {
+      res.set('Content-Type', 'text/html; charset=utf-8');
+      return res.status(404).send(`<!doctype html><meta http-equiv="refresh" content="0;url=${esc(WEB_APP_ORIGIN)}">`);
+    }
+    const title = post.title;
+    const desc  = (post.excerpt || 'New on the Xpress Vet blog.').slice(0, 180);
+    const img   = post.coverImageUrl || `${WEB_APP_ORIGIN}/favicon.png`;
+    res.set('Content-Type', 'text/html; charset=utf-8');
+    res.set('Cache-Control', 'public, max-age=300');
+    return res.send(`<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${esc(title)}</title>
+<meta name="description" content="${esc(desc)}">
+<meta property="og:type" content="article">
+<meta property="og:title" content="${esc(title)}">
+<meta property="og:description" content="${esc(desc)}">
+<meta property="og:image" content="${esc(img)}">
+<meta property="og:url" content="${esc(`${req.protocol}://${req.get('host')}/b/${slug}`)}">
+<meta name="twitter:card" content="summary_large_image">
+<meta http-equiv="refresh" content="0;url=${esc(appUrl)}">
+</head><body style="font-family:system-ui;text-align:center;padding:40px">
+<p>Opening this article on Xpress Vet…</p>
 <p><a href="${esc(appUrl)}">Tap here if it doesn't open automatically</a></p>
 </body></html>`);
   } catch {
