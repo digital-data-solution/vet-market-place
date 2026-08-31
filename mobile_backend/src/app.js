@@ -157,6 +157,7 @@ app.use((req, res, next) => {
   if (
     req.path.startsWith('/api/') ||
     req.path.startsWith('/l/') ||
+    req.path.startsWith('/b/') ||
     req.path === '/admin' ||
     req.path === '/health'
   ) return next();
