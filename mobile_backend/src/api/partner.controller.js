@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import mongoose from 'mongoose';
+import Subscription from '../models/Subscription.js';
 import logger from '../lib/logger.js';
 
 /**
@@ -169,5 +170,58 @@ export const listProfessionalsForCallAssignment = async (req, res) => {
   } catch (error) {
     logger.error('listProfessionalsForCallAssignment error', { error: error.message });
     return res.status(500).json({ success: false, message: 'Failed to load professionals.' });
+  }
+};
+
+/**
+ * GET /api/partner/stats
+ *
+ * Aggregate-only, no PII — built for XDDS's cross-portfolio "Company
+ * Overview" dashboard. Deliberately scoped to Subscription revenue (the
+ * tiered plans: user_premium/user_plus/starter/pro/basic/user_monthly)
+ * only — it does NOT include Xpress Market/escrow gross volume (that's a
+ * pass-through liability, not revenue — see the finance-consolidation
+ * decision this reuses) or any transaction-fee/commission revenue from
+ * escrow, since that isn't tracked as a discrete ledger anywhere yet.
+ * `scope` in the response says so explicitly rather than letting a
+ * partial number get read as "total company revenue."
+ *
+ * "Paid" is defined as status IN ['active', 'expired'] — a subscription
+ * only ever reaches either of those after a confirmed Paystack payment
+ * (see subscription.controller.js's webhook handler); 'pending' never
+ * completed payment and 'cancelled' is ambiguous (covers both a genuine
+ * paid-then-cancelled sub and an auto-cancelled duplicate pending attempt
+ * that was never paid), so both are excluded rather than risk overstating
+ * revenue. This intentionally does NOT reuse admin.stats.controller.js's
+ * getRevenueStats() trend aggregation, which sums $amount across every
+ * status with no filter at all (a known, still-open bug — see
+ * vetfresh-known-gotchas memory) — fixing that path was out of scope for
+ * this endpoint, so it was just avoided rather than inherited.
+ */
+export const getPartnerStats = async (req, res) => {
+  try {
+    const now = new Date();
+
+    const [revenueAgg, activeSubscriptions] = await Promise.all([
+      Subscription.aggregate([
+        { $match: { status: { $in: ['active', 'expired'] } } },
+        { $group: { _id: null, total: { $sum: '$amount' } } },
+      ]),
+      Subscription.countDocuments({ status: 'active', endDate: { $gte: now } }),
+    ]);
+
+    return res.json({
+      success: true,
+      data: {
+        totalRevenue: revenueAgg[0]?.total || 0,
+        currency: 'NGN',
+        activeSubscriptions,
+        period: 'all-time',
+        scope: 'Subscription (tiered plan) revenue only — excludes Xpress Market/escrow volume and commission.',
+      },
+    });
+  } catch (error) {
+    logger.error('getPartnerStats error', { error: error.message });
+    return res.status(500).json({ success: false, message: 'Failed to load stats.' });
   }
 };

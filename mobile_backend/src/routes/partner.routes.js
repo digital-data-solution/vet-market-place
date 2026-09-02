@@ -1,5 +1,5 @@
 import express from 'express';
-import { requirePartnerSecret, listProfessionalsForCallAssignment } from '../api/partner.controller.js';
+import { requirePartnerSecret, listProfessionalsForCallAssignment, getPartnerStats } from '../api/partner.controller.js';
 
 const router = express.Router();
 
@@ -10,5 +10,6 @@ const router = express.Router();
 router.use(requirePartnerSecret);
 
 router.get('/professionals', listProfessionalsForCallAssignment);
+router.get('/stats',         getPartnerStats);
 
 export default router;
