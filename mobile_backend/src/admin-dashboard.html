@@ -282,6 +282,9 @@
       <div class="nav-item" onclick="showSection('blog')" id="nav-blog">
         <span class="nav-icon">📰</span> Blog
       </div>
+      <div class="nav-item" onclick="showSection('helpvideos')" id="nav-helpvideos">
+        <span class="nav-icon">❓</span> Help Videos
+      </div>
       <div class="nav-item" onclick="showSection('emailstats')" id="nav-emailstats">
         <span class="nav-icon">📧</span> Email Analytics
       </div>
@@ -950,6 +953,32 @@
       </div>
     </div>
 
+    <!-- ── Help Videos ─────────────────────────────────── -->
+    <div id="section-helpvideos" class="section">
+      <div class="topbar">
+        <h2>Help Videos</h2>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm" onclick="loadHelpVideos()">↻ Refresh</button>
+          <button class="btn btn-primary btn-sm" onclick="openHelpVideoEditor()">+ New Video</button>
+        </div>
+      </div>
+      <p style="font-size:13px;color:#64748B;margin:-10px 0 18px">
+        Videos are hosted on YouTube — paste the link, we just embed it. Saves as a <strong>draft</strong> until you publish;
+        publishing shows it in the app's Help section immediately. Category groups videos into sections in the app;
+        Order sorts within a category (lower first).
+      </p>
+      <div class="card">
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr>
+              <th>Title</th><th>Category</th><th>Order</th><th>Status</th><th>Views</th><th></th>
+            </tr></thead>
+            <tbody id="helpvideos-tbody"><tr><td colspan="6"><div class="spinner"></div></td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Email Analytics ─────────────────────────────── -->
     <div id="section-emailstats" class="section">
       <div class="topbar">
@@ -1365,6 +1394,47 @@
       <div style="display:flex;gap:10px">
         <button class="btn btn-ghost" onclick="closeModal('blog-editor-modal')">Cancel</button>
         <button class="btn btn-primary" id="blog-save-btn" onclick="saveBlogPost()">Save Post</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Help Video Editor Modal ── -->
+<div id="helpvideo-editor-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeModal('helpvideo-editor-modal')">
+  <div class="modal" style="max-width:560px">
+    <h3 id="helpvideo-editor-title">New Help Video</h3>
+    <input type="hidden" id="helpvideo-edit-id" />
+
+    <div class="field">
+      <label>Title</label>
+      <input type="text" id="helpvideo-title" maxlength="160" placeholder="e.g. How to Register as a Farm and Start Selling" />
+    </div>
+    <div class="field">
+      <label>Description <span style="font-weight:400;color:#94A3B8">(optional)</span></label>
+      <textarea id="helpvideo-description" maxlength="500" rows="2" placeholder="One or two sentences describing what this video covers…"></textarea>
+    </div>
+    <div class="field">
+      <label>YouTube URL</label>
+      <input type="text" id="helpvideo-youtube-url" placeholder="https://www.youtube.com/watch?v=… or https://youtu.be/…" />
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div class="field">
+        <label>Category</label>
+        <input type="text" id="helpvideo-category" placeholder="e.g. Getting Started" />
+      </div>
+      <div class="field">
+        <label>Order <span style="font-weight:400;color:#94A3B8">(lower shows first)</span></label>
+        <input type="number" id="helpvideo-order" value="0" />
+      </div>
+    </div>
+
+    <div class="modal-actions" style="justify-content:space-between">
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:#374151" id="helpvideo-publish-now-wrap">
+        <input type="checkbox" id="helpvideo-publish-now" style="width:auto;margin:0" /> Publish immediately
+      </label>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-ghost" onclick="closeModal('helpvideo-editor-modal')">Cancel</button>
+        <button class="btn btn-primary" id="helpvideo-save-btn" onclick="saveHelpVideo()">Save Video</button>
       </div>
     </div>
   </div>
@@ -1804,7 +1874,7 @@ const NAV_MODULE_MAP = {
   revenue: 'analytics', growth: 'analytics', geographic: 'analytics', verifstats: 'analytics',
   referrals: 'analytics', practice: 'analytics', utm: 'analytics', content: 'analytics',
   messaging: 'analytics', notifications: 'notifications', emailcampaigns: 'emailcampaigns',
-  academy: 'academy', blog: 'blog', emailstats: 'analytics', exports: 'exports', system: 'analytics',
+  academy: 'academy', blog: 'blog', helpvideos: 'help_videos', emailstats: 'analytics', exports: 'exports', system: 'analytics',
 };
 
 function applyModuleVisibility() {
@@ -1868,6 +1938,7 @@ function showSection(name) {
     emailcampaigns: loadEmailCampaigns,
     academy: loadAcademyDrafts,
     blog: loadBlogPosts,
+    helpvideos: loadHelpVideos,
     emailstats: loadEmailStats,
     exports: () => {},
     staff: loadStaffAccounts,
@@ -3516,6 +3587,107 @@ async function loadBlogPosts() {
              ${canBroadcastBlog() ? `<button class="btn btn-primary btn-sm" onclick='openBlogEmailModal(${JSON.stringify(p._id)}, ${JSON.stringify(p.title).replace(/'/g, '&#39;')})'>Send Email</button>` : ''}`
           : `<button class="btn btn-success btn-sm" onclick="toggleBlogPublish('${p._id}', true)">Publish</button>`}
         <button class="btn btn-ghost btn-sm" onclick='deleteBlogPost(${JSON.stringify(p._id)}, ${JSON.stringify(p.title).replace(/'/g, '&#39;')})'>Delete</button>
+      </td>
+    </tr>`).join('');
+}
+
+// ── Help Videos ─────────────────────────────────────────────────────────────────
+// Admin-curated "how to use the app" tutorials. Video files themselves live on
+// YouTube — this only stores the link + metadata. Draft-first, same as Blog.
+let helpVideosCache = [];
+
+function helpVideoStatusBadge(s) {
+  return `<span class="badge ${s === 'published' ? 'badge-green' : 'badge-gray'}">${s}</span>`;
+}
+
+function openHelpVideoEditor(video) {
+  document.getElementById('helpvideo-editor-title').textContent = video ? 'Edit Help Video' : 'New Help Video';
+  document.getElementById('helpvideo-edit-id').value          = video?._id || '';
+  document.getElementById('helpvideo-title').value            = video?.title || '';
+  document.getElementById('helpvideo-description').value      = video?.description || '';
+  document.getElementById('helpvideo-youtube-url').value      = video?.youtubeUrl || '';
+  document.getElementById('helpvideo-category').value         = video?.category || 'General';
+  document.getElementById('helpvideo-order').value            = video?.order ?? 0;
+  // Publish-now only makes sense for a brand-new draft — an existing video's
+  // publish state toggles from the table row, same reasoning as Blog.
+  document.getElementById('helpvideo-publish-now-wrap').style.display = video ? 'none' : '';
+  document.getElementById('helpvideo-publish-now').checked = false;
+
+  document.getElementById('helpvideo-editor-modal').style.display = 'flex';
+}
+
+async function saveHelpVideo() {
+  const id          = document.getElementById('helpvideo-edit-id').value;
+  const title       = document.getElementById('helpvideo-title').value.trim();
+  const youtubeUrl  = document.getElementById('helpvideo-youtube-url').value.trim();
+  if (!title || !youtubeUrl) return toast('Title and YouTube URL are both required.', 'error');
+
+  const payload = {
+    title,
+    description: document.getElementById('helpvideo-description').value.trim(),
+    youtubeUrl,
+    category: document.getElementById('helpvideo-category').value.trim() || 'General',
+    order: Number(document.getElementById('helpvideo-order').value) || 0,
+  };
+
+  const btn = document.getElementById('helpvideo-save-btn');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  const r = id
+    ? await api('PUT', `/api/admin/help-videos/${id}`, payload)
+    : await api('POST', '/api/admin/help-videos', payload);
+  btn.disabled = false; btn.textContent = 'Save Video';
+
+  if (!r?.ok) return toast(r?.body?.message || 'Failed to save video.', 'error');
+
+  const saved = r.body.data;
+  if (!id && document.getElementById('helpvideo-publish-now').checked) {
+    await api('POST', `/api/admin/help-videos/${saved._id}/publish`);
+    toast('Video created and published.');
+  } else {
+    toast(id ? 'Video updated.' : 'Draft saved.');
+  }
+
+  closeModal('helpvideo-editor-modal');
+  loadHelpVideos();
+}
+
+async function toggleHelpVideoPublish(id, publish) {
+  const r = await api('POST', `/api/admin/help-videos/${id}/${publish ? 'publish' : 'unpublish'}`);
+  if (!r?.ok) return toast(r?.body?.message || 'Failed to update video.', 'error');
+  toast(publish ? 'Video published — now live in the app.' : 'Video unpublished — pulled back to draft.');
+  loadHelpVideos();
+}
+
+async function deleteHelpVideo(id, title) {
+  if (!confirm(`Delete "${title}"? This is irreversible.`)) return;
+  const r = await api('DELETE', `/api/admin/help-videos/${id}`);
+  if (!r?.ok) return toast(r?.body?.message || 'Failed to delete video.', 'error');
+  toast('Video deleted.');
+  loadHelpVideos();
+}
+
+async function loadHelpVideos() {
+  const tbody = document.getElementById('helpvideos-tbody');
+  tbody.innerHTML = '<tr><td colspan="6"><div class="spinner"></div></td></tr>';
+  const r = await api('GET', '/api/admin/help-videos');
+  helpVideosCache = r?.body?.data || [];
+  if (!helpVideosCache.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="no-data">No videos yet — click "+ New Video" to add the first one.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = helpVideosCache.map(v => `
+    <tr>
+      <td style="max-width:280px"><div style="font-weight:600">${v.title}</div>${v.description ? `<div style="font-size:12px;color:#64748B">${v.description}</div>` : ''}</td>
+      <td>${v.category}</td>
+      <td>${v.order}</td>
+      <td>${helpVideoStatusBadge(v.status)}</td>
+      <td>${v.viewCount ?? 0}</td>
+      <td style="white-space:nowrap">
+        <button class="btn btn-sm" onclick='openHelpVideoEditor(${JSON.stringify(v).replace(/'/g, '&#39;')})' style="background:#F1F5F9">Edit</button>
+        ${v.status === 'published'
+          ? `<button class="btn btn-sm" onclick="toggleHelpVideoPublish('${v._id}', false)" style="background:#F1F5F9">Unpublish</button>`
+          : `<button class="btn btn-success btn-sm" onclick="toggleHelpVideoPublish('${v._id}', true)">Publish</button>`}
+        <button class="btn btn-ghost btn-sm" onclick='deleteHelpVideo(${JSON.stringify(v._id)}, ${JSON.stringify(v.title).replace(/'/g, '&#39;')})'>Delete</button>
       </td>
     </tr>`).join('');
 }

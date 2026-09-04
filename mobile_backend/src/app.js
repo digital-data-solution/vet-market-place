@@ -45,6 +45,8 @@ import adminAcademyRoutes     from './routes/admin.academy.routes.js';
 import adminEmailCampaignsRoutes from './routes/admin.emailCampaigns.routes.js';
 import blogRoutes              from './routes/blog.routes.js';
 import adminBlogRoutes         from './routes/admin.blog.routes.js';
+import helpVideosRoutes        from './routes/helpVideos.routes.js';
+import adminHelpVideosRoutes   from './routes/admin.helpVideos.routes.js';
 import adminStaffRoutes        from './routes/admin.staff.routes.js';
 
 // Webhook handler — imported directly so it can receive raw body
@@ -633,6 +635,8 @@ app.use('/api/admin/academy',       adminAcademyRoutes);
 app.use('/api/admin/email-campaigns', adminEmailCampaignsRoutes);
 app.use('/api/v1/blog',             listingLimiter, blogRoutes);
 app.use('/api/admin/blog',          adminBlogRoutes);
+app.use('/api/v1/help-videos',      listingLimiter, helpVideosRoutes);
+app.use('/api/admin/help-videos',   adminHelpVideosRoutes);
 app.use('/api/admin/staff',         adminStaffRoutes);
 
 // ─── Client-side error reporting ─────────────────────────────────────────────

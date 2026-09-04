@@ -21,6 +21,7 @@ export const MODULES = [
   { key: 'academy',        label: 'Academy Courses',             description: 'Review Xpress Digital Academy course-publish drafts.' },
   { key: 'blog',           label: 'Blog',                        description: 'Write, edit, publish and unpublish blog posts, manage covers/tags. Does NOT include emailing posts out or any user search/PII — see Blog Broadcast.' },
   { key: 'blog_broadcast', label: 'Blog Broadcast',              description: 'Email a published blog post to users (a person, a segment, or everyone) — a materially bigger trust ask than editorial content, kept as its own grant on purpose. Split out for the external blog-editor role.' },
+  { key: 'help_videos',    label: 'Help Videos',                 description: 'Curate the in-app "How to Use Xpress Vet" tutorial videos — title, description, YouTube link, category and ordering. Videos are hosted on YouTube, not uploaded here.' },
   { key: 'exports',        label: 'Data Exports',                description: 'Download raw CSV exports of users/subscriptions/professionals — contains PII, kept separate from Analytics deliberately.' },
 ];
 
