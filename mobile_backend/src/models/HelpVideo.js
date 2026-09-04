@@ -50,13 +50,14 @@ function extractYouTubeId(url) {
   return null;
 }
 
-helpVideoSchema.pre('validate', function preValidate(next) {
+// Mongoose 9 dropped callback-style (next) hooks — a plain function (or one
+// returning a promise) is all that's needed; throwing rejects validation.
+helpVideoSchema.pre('validate', function preValidate() {
   if (this.isModified('youtubeUrl') || !this.youtubeVideoId) {
     const id = extractYouTubeId(this.youtubeUrl);
-    if (!id) return next(new Error('Could not parse a YouTube video ID from that URL.'));
+    if (!id) throw new Error('Could not parse a YouTube video ID from that URL.');
     this.youtubeVideoId = id;
   }
-  next();
 });
 
 helpVideoSchema.statics.extractYouTubeId = extractYouTubeId;
