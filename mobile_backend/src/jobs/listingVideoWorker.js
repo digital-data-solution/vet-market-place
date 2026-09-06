@@ -34,7 +34,7 @@ import Listing from '../models/Listing.js';
 import { renderListingVideo } from '../services/listingVideo.service.js';
 import { uploadVideoToCloudinary } from '../lib/cloudinaryUpload.js';
 import { sendPushToUser } from '../services/pushNotification.service.js';
-import { postListingVideoToTelegram, postListingVideoToTikTokDrafts } from '../services/telegram.service.js';
+import { postListingVideoToTelegram, postListingVideoToTikTokDrafts, postListingVideoToInstagramDrafts } from '../services/telegram.service.js';
 import logger from '../lib/logger.js';
 
 // Small on purpose — each job is CPU-heavy and can take 1-2+ minutes, so a
@@ -93,6 +93,7 @@ async function processOne(listing) {
 
     postListingVideoToTelegram(listing).catch(() => {}); // no-op until TELEGRAM_BOT_TOKEN/TELEGRAM_CHANNEL_ID are set, same as postListingToTelegram
     postListingVideoToTikTokDrafts(listing).catch(() => {}); // drops into the private drafts channel for Sam to post by hand — see telegram.service.js
+    postListingVideoToInstagramDrafts(listing).catch(() => {}); // same channel, Reels-flavored caption
   } catch (err) {
     listing.generatedVideoStatus = 'failed';
     listing.generatedVideoError = (err.message || 'Unknown render error').slice(0, 500);

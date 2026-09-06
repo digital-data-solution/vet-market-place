@@ -139,6 +139,9 @@ const listingSchema = new mongoose.Schema({
   // draft (fires once the video is 'ready', not at listing-creation time —
   // see jobs/listingVideoWorker.js).
   tiktokDraftedAt: { type: Date, default: null },
+  // Same again, for the Instagram Reels draft — same video, same private
+  // channel, different caption/label.
+  instagramDraftedAt: { type: Date, default: null },
 
   // Freshness — listing hidden from browse once past this; renew to extend.
   expiresAt: { type: Date, index: true },

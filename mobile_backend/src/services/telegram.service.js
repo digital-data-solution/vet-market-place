@@ -265,3 +265,65 @@ export async function postListingVideoToTikTokDrafts(listing) {
     logger.error('Telegram TikTok-draft post error', { listingId: listing._id, error: error.message });
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Instagram Reels drafts (same private channel, same bot)
+//
+// Unlike a plain Facebook Page post, Reels get pushed through Instagram's
+// own discovery feed — real organic reach even for a brand-new account, not
+// just followers-only. Deliberately NOT automated via the Graph API (see
+// [[xpress-vet-social-autopost]] memory — evaluated and skipped for regular
+// feed posts due to algorithmic throttling; Reels specifically might behave
+// differently but that's unverified and not worth building until there's a
+// reason to). Since every generated video is already the exact vertical
+// format Reels wants, this costs nothing extra — same file, same drafts
+// pattern as TikTok, just a different caption/label.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function buildInstagramCaption(listing) {
+  const price = formatPrice(listing.price, listing.currency);
+  const location = listing.city ? ` in ${listing.city}` : '';
+  return [
+    'Every listing on Xpress Vet gets a video ad like this — made completely automatically. 🎬',
+    '',
+    `"${listing.title}"${price ? ` — ${price}` : ''}${location}`,
+    '',
+    '📲 Link in bio — xpressvetmarketplace.com',
+    '',
+    '#XpressVet #PetsOfNigeria #SmallBusinessNigeria #ReelsNigeria #NigeriaTech',
+  ].join('\n');
+}
+
+/**
+ * Push an Instagram-Reels-ready draft into the private drafts channel once
+ * a listing's video is 'ready'. Same idempotency guard shape as the TikTok
+ * and WhatsApp drafts. Never throws; call fire-and-forget from
+ * listingVideoWorker.js.
+ */
+export async function postListingVideoToInstagramDrafts(listing) {
+  if (!BOT_TOKEN || !WA_DRAFTS_CHAT_ID) return; // integration not set up yet
+  if (listing.instagramDraftedAt) return;        // already drafted
+  if (!listing.generatedVideoUrl) return;
+
+  const caption = `📸 INSTAGRAM REELS DRAFT\n\n${buildInstagramCaption(listing)}`;
+  const body = { chat_id: WA_DRAFTS_CHAT_ID, video: listing.generatedVideoUrl, caption };
+
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendVideo`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) {
+      logger.error('Telegram Instagram-draft post failed', { listingId: listing._id, status: res.status, description: data.description });
+      return;
+    }
+    await Listing.updateOne(
+      { _id: listing._id, instagramDraftedAt: null },
+      { $set: { instagramDraftedAt: new Date() } },
+    );
+  } catch (error) {
+    logger.error('Telegram Instagram-draft post error', { listingId: listing._id, error: error.message });
+  }
+}
