@@ -4,8 +4,14 @@ name: Listing Video Worker
 # mobile_backend/src/jobs/listingVideoWorker.js's docstring for why this
 # needs to run somewhere other than the main API service). This repo is
 # public, so GitHub Actions minutes are unlimited/free here — no cost
-# concern running this on a schedule. ubuntu-latest runners come with
-# ffmpeg pre-installed already.
+# concern running this on a schedule.
+#
+# ffmpeg is installed explicitly below via apt — ubuntu-latest runners do
+# NOT actually have it preinstalled (confirmed the hard way: a first
+# version of this workflow assumed it was there, and the "confirm ffmpeg"
+# check used `ffmpeg -version | head -1`, whose exit code is head's, not
+# ffmpeg's — silently green even though ffmpeg was completely missing and
+# every real render failed with `spawn ffmpeg ENOENT`).
 #
 # Secrets required (Settings → Secrets and variables → Actions → New
 # repository secret) — never commit these:
@@ -35,8 +41,11 @@ jobs:
           cache: 'npm'
           cache-dependency-path: mobile_backend/package-lock.json
 
+      - name: Install ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y ffmpeg
+
       - name: Confirm ffmpeg is available
-        run: ffmpeg -version | head -1
+        run: ffmpeg -version
 
       - run: npm ci
 
