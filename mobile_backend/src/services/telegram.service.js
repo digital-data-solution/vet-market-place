@@ -87,6 +87,41 @@ export async function postListingToTelegram(listing) {
   }
 }
 
+/**
+ * Posts a listing's auto-generated video ad (services/listingVideo.service.js)
+ * to the same public channel, once it's ready — a SEPARATE post from
+ * postListingToTelegram above, not a replacement. The photo post already
+ * fires immediately at listing-creation time; the video isn't ready for up
+ * to ~30 minutes after that (see jobs/listingVideoWorker.js's schedule), so
+ * this is a natural follow-up post rather than something to merge into one.
+ * Called from listingVideoWorker.js's success path, fire-and-forget.
+ */
+export async function postListingVideoToTelegram(listing) {
+  if (!BOT_TOKEN || !CHANNEL_ID) return; // integration not set up yet
+  if (!listing.generatedVideoUrl) return;
+
+  const price = formatPrice(listing.price, listing.currency);
+  const lines = [`🎬 <b>${esc(listing.title)}</b> — video ad`];
+  if (price) lines.push(price + (listing.negotiable ? ' (negotiable)' : ''));
+  if (listing.city) lines.push(`📍 ${esc(listing.city)}`);
+  lines.push(`${SHARE_ORIGIN}/l/${listing._id}`);
+  const caption = lines.join('\n');
+
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendVideo`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: CHANNEL_ID, video: listing.generatedVideoUrl, caption, parse_mode: 'HTML' }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) {
+      logger.error('Telegram video post failed', { listingId: listing._id, status: res.status, description: data.description });
+    }
+  } catch (error) {
+    logger.error('Telegram video post error', { listingId: listing._id, error: error.message });
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // WhatsApp drafts (private channel, same bot)
 // ─────────────────────────────────────────────────────────────────────────────

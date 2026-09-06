@@ -34,6 +34,7 @@ import Listing from '../models/Listing.js';
 import { renderListingVideo } from '../services/listingVideo.service.js';
 import { uploadVideoToCloudinary } from '../lib/cloudinaryUpload.js';
 import { sendPushToUser } from '../services/pushNotification.service.js';
+import { postListingVideoToTelegram } from '../services/telegram.service.js';
 import logger from '../lib/logger.js';
 
 // Small on purpose — each job is CPU-heavy and can take 1-2+ minutes, so a
@@ -89,6 +90,8 @@ async function processOne(listing) {
       `"${listing.title}" now has a video ad — check it out and share it.`,
       { type: 'listing_video_ready', listingId: listing._id.toString() },
     ).catch(() => {});
+
+    postListingVideoToTelegram(listing).catch(() => {}); // no-op until TELEGRAM_BOT_TOKEN/TELEGRAM_CHANNEL_ID are set, same as postListingToTelegram
   } catch (err) {
     listing.generatedVideoStatus = 'failed';
     listing.generatedVideoError = (err.message || 'Unknown render error').slice(0, 500);
