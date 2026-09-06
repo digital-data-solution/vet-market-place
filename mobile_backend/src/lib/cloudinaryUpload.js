@@ -63,12 +63,39 @@ export async function uploadToCloudinary(fileBuffer, { folder = 'profiles', publ
 }
 
 /**
+ * Uploads a video FILE (by path, not buffer — generated listing videos can
+ * be a few MB, streaming from disk avoids holding the whole thing in
+ * memory) to Cloudinary as resource_type: 'video'. Deliberately separate
+ * from uploadToCloudinary above — video storage/bandwidth is billed very
+ * differently (and far more expensively) than images on Cloudinary, so
+ * this is never called by anything that runs unconditionally on every
+ * listing; see Listing.generatedVideoStatus's default ('none') in
+ * models/Listing.js.
+ *
+ * @param {string} filePath
+ * @param {object} options
+ * @param {string} [options.folder='listing-videos']
+ * @param {string} [options.publicId]
+ * @returns {Promise<{ url: string, publicId: string }>}
+ */
+export async function uploadVideoToCloudinary(filePath, { folder = 'listing-videos', publicId } = {}) {
+  const uploadOptions = { folder, resource_type: 'video' };
+  if (publicId) {
+    uploadOptions.public_id = publicId;
+    uploadOptions.overwrite = true;
+    uploadOptions.invalidate = true;
+  }
+  const result = await cloudinary.uploader.upload(filePath, uploadOptions);
+  return { url: result.secure_url, publicId: result.public_id };
+}
+
+/**
  * Deletes an image from Cloudinary by its full URL or explicit public_id.
  *
  * @param {string} urlOrPublicId - Cloudinary secure_url OR public_id string
  * @returns {Promise<boolean>} - true if deleted, false if not found / error
  */
-export async function deleteFromCloudinary(urlOrPublicId) {
+export async function deleteFromCloudinary(urlOrPublicId, resourceType = 'image') {
   try {
     // Detect whether we were given a URL or already a public_id
     const publicId = urlOrPublicId.startsWith('http')
@@ -81,7 +108,7 @@ export async function deleteFromCloudinary(urlOrPublicId) {
     }
 
     const result = await cloudinary.uploader.destroy(publicId, {
-      resource_type: 'image',
+      resource_type: resourceType,
       invalidate: true,
     });
 

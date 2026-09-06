@@ -137,6 +137,21 @@ const listingSchema = new mongoose.Schema({
 
   // Freshness — listing hidden from browse once past this; renew to extend.
   expiresAt: { type: Date, index: true },
+
+  // Auto-generated 15-25s vertical video ad (services/listingVideo.service.js
+  // + jobs/listingVideoWorker.js), separate from the seller-supplied external
+  // `videoUrl` above. Deliberately its own Cloudinary field, not reusing
+  // coverImage/images — video storage/bandwidth on Cloudinary costs far more
+  // than images per file (see the `videoUrl` comment above). Starts 'none',
+  // NOT 'pending' — nothing renders for a listing until something explicitly
+  // sets this to 'pending' (a paid-tier gate, an admin action, etc.). Not
+  // wired to fire automatically on every listing create yet — that's a real
+  // recurring-cost decision for Sam to make deliberately, not a default.
+  generatedVideoStatus:   { type: String, enum: ['none', 'pending', 'processing', 'ready', 'failed'], default: 'none', index: true },
+  generatedVideoUrl:      { type: String, default: null },
+  generatedVideoPublicId: { type: String, default: null },
+  generatedVideoError:    { type: String, default: null },
+  generatedVideoAt:       { type: Date, default: null },
 }, { timestamps: true });
 
 listingSchema.index({ location: '2dsphere' });
