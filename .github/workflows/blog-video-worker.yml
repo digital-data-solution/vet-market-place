@@ -51,4 +51,9 @@ jobs:
           CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
           CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
           CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+          # Without these, postBlogVideoToTikTokDrafts/InstagramDrafts silently
+          # no-op — same gap just found and fixed in listing-video-worker.yml.
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+          TELEGRAM_WA_DRAFTS_CHAT_ID: ${{ secrets.TELEGRAM_WA_DRAFTS_CHAT_ID }}
         run: node scripts/run-blog-video-sweep-once.mjs
