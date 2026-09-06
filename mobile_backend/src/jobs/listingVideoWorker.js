@@ -33,6 +33,7 @@ import path from 'path';
 import Listing from '../models/Listing.js';
 import { renderListingVideo } from '../services/listingVideo.service.js';
 import { uploadVideoToCloudinary } from '../lib/cloudinaryUpload.js';
+import { sendPushToUser } from '../services/pushNotification.service.js';
 import logger from '../lib/logger.js';
 
 // Small on purpose — each job is CPU-heavy and can take 1-2+ minutes, so a
@@ -81,6 +82,13 @@ async function processOne(listing) {
     logger.info('Listing video generated and uploaded', {
       listingId: listing._id.toString(), url: uploaded.url, duration: result.actualDuration,
     });
+
+    sendPushToUser(
+      listing.seller,
+      '🎬 Your listing video is ready!',
+      `"${listing.title}" now has a video ad — check it out and share it.`,
+      { type: 'listing_video_ready', listingId: listing._id.toString() },
+    ).catch(() => {});
   } catch (err) {
     listing.generatedVideoStatus = 'failed';
     listing.generatedVideoError = (err.message || 'Unknown render error').slice(0, 500);
