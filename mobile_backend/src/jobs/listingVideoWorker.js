@@ -110,6 +110,24 @@ async function runSweep() {
     if (!listing) break; // nothing pending — done for this run
     await processOne(listing);
   }
+  await retryUndraftedReady();
+}
+
+// Self-heals a real gap found 2026-09-06 (via blogVideoWorker.js's identical
+// fix — same root cause here): the drafts calls below no-op silently if
+// TELEGRAM_* isn't set wherever runSweep() runs, or if the Telegram API
+// call itself fails, and processOne() never retries a failed draft once the
+// listing is already 'ready'. Every sweep re-checks for 'ready' listings
+// still missing a draft and retries — cheap (no re-render, no re-upload).
+async function retryUndraftedReady() {
+  const stragglers = await Listing.find({
+    generatedVideoStatus: 'ready',
+    $or: [{ tiktokDraftedAt: null }, { instagramDraftedAt: null }],
+  }).limit(20);
+  for (const listing of stragglers) {
+    await postListingVideoToTikTokDrafts(listing).catch(() => {});
+    await postListingVideoToInstagramDrafts(listing).catch(() => {});
+  }
 }
 
 export default function startListingVideoWorker() {

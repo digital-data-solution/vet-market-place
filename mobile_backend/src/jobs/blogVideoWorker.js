@@ -87,6 +87,25 @@ async function runSweep() {
     if (!post) break; // nothing pending — done for this run
     await processOne(post);
   }
+  await retryUndraftedReady();
+}
+
+// Self-heals a real gap found 2026-09-06: the drafts calls below no-op
+// silently if TELEGRAM_* isn't set in whatever environment runSweep() runs
+// in (or if the Telegram API call itself fails), and processOne() doesn't
+// retry a failed draft on its own since the post is already 'ready' by
+// then. Every sweep re-checks for 'ready' posts still missing a draft and
+// retries them — cheap (no re-render, no re-upload) and catches both this
+// specific gap and any future transient Telegram outage.
+async function retryUndraftedReady() {
+  const stragglers = await BlogPost.find({
+    videoStatus: 'ready',
+    $or: [{ tiktokDraftedAt: null }, { instagramDraftedAt: null }],
+  }).limit(20);
+  for (const post of stragglers) {
+    await postBlogVideoToTikTokDrafts(post).catch(() => {});
+    await postBlogVideoToInstagramDrafts(post).catch(() => {});
+  }
 }
 
 export default function startBlogVideoWorker() {
