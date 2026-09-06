@@ -202,3 +202,66 @@ export async function postListingToWhatsAppDrafts(listing) {
     logger.error('Telegram WhatsApp-draft post error', { listingId: listing._id, error: error.message });
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TikTok drafts (same private channel as WhatsApp drafts, same bot)
+//
+// TikTok's Content Posting API restricts unaudited apps to PRIVATE-only
+// posts (see [[xpress-vet-marketing-next-steps]] memory / the audit
+// research done 2026-09-06) — real public auto-posting isn't available
+// until Sam applies for and passes that audit, which needs a real posting
+// history as evidence first. Until then, this is the same "automate the
+// prep, human clicks the last button" pattern already proven for WhatsApp:
+// the finished video + a ready caption land in Sam's private drafts
+// channel the moment a listing's video is ready, so posting to TikTok by
+// hand takes 10 seconds (open Telegram, save video, copy caption, paste)
+// instead of him having to come ask Claude for a caption each time.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function buildTikTokCaption(listing) {
+  const price = formatPrice(listing.price, listing.currency);
+  const location = listing.city ? ` in ${listing.city}` : '';
+  return [
+    'Every listing on Xpress Vet gets a video ad like this — made completely automatically. 🎬',
+    '',
+    `"${listing.title}"${price ? ` — ${price}` : ''}${location}`,
+    '',
+    '📲 xpressvetmarketplace.com',
+    '',
+    '#XpressVet #PetsOfNigeria #SmallBusinessNigeria #AI #NigeriaTech',
+  ].join('\n');
+}
+
+/**
+ * Push a TikTok-ready draft (the actual generated video + a ready caption)
+ * into the private drafts channel once a listing's video is 'ready'. Same
+ * idempotency guard shape as postListingToWhatsAppDrafts (tiktokDraftedAt).
+ * Never throws; call fire-and-forget from listingVideoWorker.js.
+ */
+export async function postListingVideoToTikTokDrafts(listing) {
+  if (!BOT_TOKEN || !WA_DRAFTS_CHAT_ID) return; // integration not set up yet
+  if (listing.tiktokDraftedAt) return;           // already drafted
+  if (!listing.generatedVideoUrl) return;
+
+  const caption = `🎵 TIKTOK DRAFT\n\n${buildTikTokCaption(listing)}`;
+  const body = { chat_id: WA_DRAFTS_CHAT_ID, video: listing.generatedVideoUrl, caption };
+
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendVideo`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) {
+      logger.error('Telegram TikTok-draft post failed', { listingId: listing._id, status: res.status, description: data.description });
+      return;
+    }
+    await Listing.updateOne(
+      { _id: listing._id, tiktokDraftedAt: null },
+      { $set: { tiktokDraftedAt: new Date() } },
+    );
+  } catch (error) {
+    logger.error('Telegram TikTok-draft post error', { listingId: listing._id, error: error.message });
+  }
+}

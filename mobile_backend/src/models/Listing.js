@@ -135,6 +135,11 @@ const listingSchema = new mongoose.Schema({
   // draft on a later edit/re-save. See services/telegram.service.js.
   whatsappDraftedAt: { type: Date, default: null },
 
+  // Same idempotency pattern, for the auto-generated video's TikTok-ready
+  // draft (fires once the video is 'ready', not at listing-creation time —
+  // see jobs/listingVideoWorker.js).
+  tiktokDraftedAt: { type: Date, default: null },
+
   // Freshness — listing hidden from browse once past this; renew to extend.
   expiresAt: { type: Date, index: true },
 
