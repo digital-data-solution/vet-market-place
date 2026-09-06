@@ -23,6 +23,7 @@ import Transaction from '../models/Transaction.js';
 import Booking     from '../models/Booking.js';
 import logger      from '../lib/logger.js';
 import { logActivity } from '../lib/activityLogger.js';
+import { resolveTier } from '../config/plans.js';
 import { sendPushToUser } from '../services/pushNotification.service.js';
 import { sendEmail, sendListingLiveEmail, sendEscrowSellerEmail, sendEscrowBuyerEmail } from '../services/email.service.js';
 import { postListingToTelegram, postListingToWhatsAppDrafts } from '../services/telegram.service.js';
@@ -340,6 +341,17 @@ export const createListing = async (req, res) => {
     logActivity(userId, req.user.role, 'market.listing.created', { listingId: listing._id, kind, price }, req);
     if (req.user.email) sendListingLiveEmail(req.user.name, req.user.email, listing.title).catch(() => {});
     postListingToTelegram(listing).catch(() => {}); // no-op until TELEGRAM_BOT_TOKEN/TELEGRAM_CHANNEL_ID are set
+
+    // Auto-generated listing video — paid tiers only (Sam's explicit choice,
+    // 2026-09-06): free-tier listings get no video, keeping the Cloudinary
+    // upload cost this triggers proportional to paying users, not total
+    // listing volume. See models/Listing.js's generatedVideoStatus comment
+    // and jobs/listingVideoWorker.js for the render/upload side — this only
+    // flips the flag the worker polls for, it does not render anything
+    // itself (this request must stay fast).
+    if (resolveTier(req.user).order > 0) {
+      Listing.updateOne({ _id: listing._id }, { $set: { generatedVideoStatus: 'pending' } }).catch(() => {});
+    }
     postListingToWhatsAppDrafts(listing).catch(() => {}); // separate try/catch on purpose — a failed draft push must never affect the listing or the public post above
     return res.status(201).json({ success: true, message: 'Listing published.', data: publicListing(listing) });
   } catch (error) {

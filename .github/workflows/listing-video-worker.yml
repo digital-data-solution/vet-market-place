@@ -1,0 +1,49 @@
+name: Listing Video Worker
+
+# Free alternative to a paid Render Background Worker (see
+# mobile_backend/src/jobs/listingVideoWorker.js's docstring for why this
+# needs to run somewhere other than the main API service). This repo is
+# public, so GitHub Actions minutes are unlimited/free here — no cost
+# concern running this on a schedule. ubuntu-latest runners come with
+# ffmpeg pre-installed already.
+#
+# Secrets required (Settings → Secrets and variables → Actions → New
+# repository secret) — never commit these:
+#   MONGODB_URI
+#   CLOUDINARY_CLOUD_NAME
+#   CLOUDINARY_API_KEY
+#   CLOUDINARY_API_SECRET
+
+on:
+  schedule:
+    - cron: '*/30 * * * *' # every 30 minutes
+  workflow_dispatch: {} # lets you trigger a sweep manually from the Actions tab too
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: mobile_backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: mobile_backend/package-lock.json
+
+      - name: Confirm ffmpeg is available
+        run: ffmpeg -version | head -1
+
+      - run: npm ci
+
+      - name: Run one listing-video sweep
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+        run: node scripts/run-listing-video-sweep-once.mjs
