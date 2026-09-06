@@ -193,6 +193,19 @@ const SEGMENTS = [
       return { _id: { $in: [...profUserIds, ...shopOwnerIds] } };
     },
   },
+  {
+    key: 'paid_tier_active',
+    label: 'Paid-tier sellers (active plan)',
+    description: 'Users on a paid plan.tier with an active subscription right now — the audience for the new auto-generated listing video feature.',
+    marketing: true,
+    getFilter: async () => {
+      const now = new Date();
+      return {
+        'plan.tier': { $exists: true, $ne: 'free' },
+        'plan.activeUntil': { $gt: now },
+      };
+    },
+  },
 ];
 
 function noBusinessAddonFilter(roles) {
