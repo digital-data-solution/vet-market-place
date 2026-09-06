@@ -78,6 +78,7 @@ async function processOne(listing) {
     listing.generatedVideoPublicId = uploaded.publicId;
     listing.generatedVideoError = null;
     listing.generatedVideoAt = new Date();
+    if (listing.youtubeStatus === 'none') listing.youtubeStatus = 'pending'; // drained separately by youtubeUploadWorker.js
     await listing.save();
 
     logger.info('Listing video generated and uploaded', {

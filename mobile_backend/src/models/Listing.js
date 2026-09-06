@@ -160,6 +160,17 @@ const listingSchema = new mongoose.Schema({
   generatedVideoPublicId: { type: String, default: null },
   generatedVideoError:    { type: String, default: null },
   generatedVideoAt:       { type: Date, default: null },
+
+  // Auto-upload of the generated video to Xpress Vet's own YouTube channel
+  // (as a Short — vertical, under 60s) — jobs/youtubeUploadWorker.js. Queued
+  // by listingVideoWorker.js the moment generatedVideoStatus flips to
+  // 'ready'; drained separately (its own quota/pacing, see that worker's
+  // docstring), so this never blocks or is blocked by the Cloudinary side.
+  youtubeStatus:  { type: String, enum: ['none', 'pending', 'processing', 'uploaded', 'failed'], default: 'none', index: true },
+  youtubeVideoId: { type: String, default: null },
+  youtubeUrl:     { type: String, default: null },
+  youtubeError:   { type: String, default: null },
+  youtubeAt:      { type: Date, default: null },
 }, { timestamps: true });
 
 listingSchema.index({ location: '2dsphere' });

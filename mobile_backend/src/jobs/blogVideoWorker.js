@@ -63,6 +63,7 @@ async function processOne(post) {
     post.videoPublicId = uploaded.publicId;
     post.videoError = null;
     post.videoAt = new Date();
+    if (post.youtubeStatus === 'none') post.youtubeStatus = 'pending'; // drained separately by youtubeUploadWorker.js
     await post.save();
 
     logger.info('Blog video generated and uploaded', {

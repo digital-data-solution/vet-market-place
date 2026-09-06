@@ -62,6 +62,17 @@ const blogPostSchema = new mongoose.Schema({
   videoAt:       { type: Date, default: null },
   tiktokDraftedAt:    { type: Date, default: null },
   instagramDraftedAt: { type: Date, default: null },
+
+  // Auto-upload of the generated video to Xpress Vet's own YouTube channel
+  // (as a Short) — jobs/youtubeUploadWorker.js. Queued by
+  // jobs/blogVideoWorker.js the moment videoStatus flips to 'ready'; drained
+  // on its own separate, slower cadence (see that worker's docstring for
+  // why), independent of the Telegram-drafts side.
+  youtubeStatus:  { type: String, enum: ['none', 'pending', 'processing', 'uploaded', 'failed'], default: 'none', index: true },
+  youtubeVideoId: { type: String, default: null },
+  youtubeUrl:     { type: String, default: null },
+  youtubeError:   { type: String, default: null },
+  youtubeAt:      { type: Date, default: null },
 }, { timestamps: true });
 
 blogPostSchema.index({ status: 1, publishedAt: -1 });
