@@ -1,0 +1,54 @@
+name: Blog Video Worker
+
+# Same free-GitHub-Actions pattern as listing-video-worker.yml — see that
+# file's comment for the full rationale (public repo = unlimited minutes,
+# ffmpeg needs an explicit apt-get install, don't pipe the version-check
+# through `head` or you mask a real failure behind a green check).
+#
+# This drains BlogPost.videoStatus:'pending' into rendered TikTok/Instagram
+# drafts (services/blogVideo.service.js + jobs/blogVideoWorker.js) — a
+# content source independent of Xpress Market listing volume.
+#
+# Secrets required (same ones listing-video-worker.yml already uses — no
+# new secrets to add if that workflow is already set up):
+#   MONGODB_URI
+#   CLOUDINARY_CLOUD_NAME
+#   CLOUDINARY_API_KEY
+#   CLOUDINARY_API_SECRET
+
+on:
+  schedule:
+    - cron: '15,45 * * * *' # every 30 minutes, offset from the listing-video sweep so they don't both fight for CPU on the same runner minute
+  workflow_dispatch: {} # lets you trigger a sweep manually from the Actions tab too
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: mobile_backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: mobile_backend/package-lock.json
+
+      - name: Install ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y ffmpeg
+
+      - name: Confirm ffmpeg is available
+        run: ffmpeg -version
+
+      - run: npm ci
+
+      - name: Run one blog-video sweep
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          CLOUDINARY_CLOUD_NAME: ${{ secrets.CLOUDINARY_CLOUD_NAME }}
+          CLOUDINARY_API_KEY: ${{ secrets.CLOUDINARY_API_KEY }}
+          CLOUDINARY_API_SECRET: ${{ secrets.CLOUDINARY_API_SECRET }}
+        run: node scripts/run-blog-video-sweep-once.mjs

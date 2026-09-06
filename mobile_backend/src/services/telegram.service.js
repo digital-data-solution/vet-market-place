@@ -32,6 +32,7 @@
 import fetch from 'node-fetch';
 import logger from '../lib/logger.js';
 import Listing from '../models/Listing.js';
+import BlogPost from '../models/BlogPost.js';
 
 const BOT_TOKEN         = process.env.TELEGRAM_BOT_TOKEN || '';
 const CHANNEL_ID        = process.env.TELEGRAM_CHANNEL_ID || '';
@@ -325,5 +326,115 @@ export async function postListingVideoToInstagramDrafts(listing) {
     );
   } catch (error) {
     logger.error('Telegram Instagram-draft post error', { listingId: listing._id, error: error.message });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Blog-post video drafts (same private drafts channel, same bot)
+//
+// Content source independent of Xpress Market listing volume — turns
+// existing blog posts (services/blogVideo.service.js) into the same kind of
+// TikTok/Instagram-ready draft as a listing video, so Sam always has
+// something to post even on weeks with no new listings. Same "prep is
+// automated, the final tap is manual" pattern as everything else above —
+// see the TikTok-drafts comment block for why full auto-posting isn't
+// available yet.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function buildBlogPostLink(post) {
+  return `${SHARE_ORIGIN}/b/${post.slug}`; // same short-link shape as blogEmail.service.js's postUrl
+}
+
+function buildBlogTikTokCaption(post) {
+  // No parse_mode on this send (see below), so the title goes through
+  // exactly as written — no HTML-escaping needed/wanted here.
+  return [
+    `${post.title} 🐾`,
+    '',
+    'Free vet-backed tips, no login needed.',
+    '',
+    `📖 Full guide: ${buildBlogPostLink(post)}`,
+    '',
+    '#XpressVet #VeterinaryTips #PetsOfNigeria #AnimalHealth #NigeriaTech',
+  ].join('\n');
+}
+
+function buildBlogInstagramCaption(post) {
+  return [
+    `${post.title} 🐾`,
+    '',
+    'Free vet-backed tips, no login needed.',
+    '',
+    '📖 Full guide — link in bio',
+    '',
+    '#XpressVet #VeterinaryTips #PetsOfNigeria #AnimalHealth #ReelsNigeria',
+  ].join('\n');
+}
+
+/**
+ * Push a TikTok-ready draft of a blog post's auto-generated video into the
+ * private drafts channel once it's 'ready'. Same idempotency-guard shape as
+ * postListingVideoToTikTokDrafts. Never throws; call fire-and-forget from
+ * jobs/blogVideoWorker.js.
+ */
+export async function postBlogVideoToTikTokDrafts(post) {
+  if (!BOT_TOKEN || !WA_DRAFTS_CHAT_ID) return; // integration not set up yet
+  if (post.tiktokDraftedAt) return;              // already drafted
+  if (!post.videoUrl) return;
+
+  const caption = `🎵 TIKTOK DRAFT (blog)\n\n${buildBlogTikTokCaption(post)}`;
+  const body = { chat_id: WA_DRAFTS_CHAT_ID, video: post.videoUrl, caption };
+
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendVideo`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) {
+      logger.error('Telegram blog TikTok-draft post failed', { postId: post._id, status: res.status, description: data.description });
+      return;
+    }
+    await BlogPost.updateOne(
+      { _id: post._id, tiktokDraftedAt: null },
+      { $set: { tiktokDraftedAt: new Date() } },
+    );
+  } catch (error) {
+    logger.error('Telegram blog TikTok-draft post error', { postId: post._id, error: error.message });
+  }
+}
+
+/**
+ * Push an Instagram-Reels-ready draft of a blog post's auto-generated video
+ * into the private drafts channel. Same idempotency-guard shape as
+ * postListingVideoToInstagramDrafts. Never throws; call fire-and-forget
+ * from jobs/blogVideoWorker.js.
+ */
+export async function postBlogVideoToInstagramDrafts(post) {
+  if (!BOT_TOKEN || !WA_DRAFTS_CHAT_ID) return; // integration not set up yet
+  if (post.instagramDraftedAt) return;           // already drafted
+  if (!post.videoUrl) return;
+
+  const caption = `📸 INSTAGRAM REELS DRAFT (blog)\n\n${buildBlogInstagramCaption(post)}`;
+  const body = { chat_id: WA_DRAFTS_CHAT_ID, video: post.videoUrl, caption };
+
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendVideo`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) {
+      logger.error('Telegram blog Instagram-draft post failed', { postId: post._id, status: res.status, description: data.description });
+      return;
+    }
+    await BlogPost.updateOne(
+      { _id: post._id, instagramDraftedAt: null },
+      { $set: { instagramDraftedAt: new Date() } },
+    );
+  } catch (error) {
+    logger.error('Telegram blog Instagram-draft post error', { postId: post._id, error: error.message });
   }
 }

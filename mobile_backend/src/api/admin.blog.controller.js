@@ -7,6 +7,7 @@ import BlogPost from '../models/BlogPost.js';
 import User from '../models/User.js';
 import { uploadToCloudinary, deleteFromCloudinary } from '../lib/cloudinaryUpload.js';
 import { dispatchBlogPostEmail, resolveBlogTargetFilter } from '../services/blogEmail.service.js';
+import { extractKeyPoints } from '../services/blogVideo.service.js';
 import logger from '../lib/logger.js';
 
 function slugify(text) {
@@ -131,6 +132,15 @@ export const publishPost = async (req, res) => {
     if (!post) return res.status(404).json({ success: false, message: 'Post not found.' });
     post.status = 'published';
     if (!post.publishedAt) post.publishedAt = new Date();
+
+    // Queue the auto-generated TikTok/Instagram teaser video — only once
+    // ever per post (videoStatus stays 'none' forever for posts with no
+    // "## Key Points" section; a later re-publish/edit never re-queues a
+    // post that already rendered or is mid-flight).
+    if (post.videoStatus === 'none' && extractKeyPoints(post.contentMarkdown).length > 0) {
+      post.videoStatus = 'pending';
+    }
+
     await post.save();
     return res.json({ success: true, data: post });
   } catch (error) {

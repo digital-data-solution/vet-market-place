@@ -48,6 +48,20 @@ const blogPostSchema = new mongoose.Schema({
   emailError:          { type: String, default: null },
 
   createdByEmail: { type: String, default: null },
+
+  // Auto-generated short vertical "tips" video (services/blogVideo.service.js)
+  // for TikTok/Instagram distribution — same idempotency-field shape as
+  // Listing's generatedVideo* fields. Set to 'pending' by publishPost (only
+  // when the post has a "## Key Points" section) and drained by
+  // jobs/blogVideoWorker.js. Stays 'none' for posts without a Key Points
+  // section — never silently rendered with garbage content.
+  videoStatus: { type: String, enum: ['none', 'pending', 'processing', 'ready', 'failed'], default: 'none' },
+  videoUrl:      { type: String, default: null },
+  videoPublicId: { type: String, default: null },
+  videoError:    { type: String, default: null },
+  videoAt:       { type: Date, default: null },
+  tiktokDraftedAt:    { type: Date, default: null },
+  instagramDraftedAt: { type: Date, default: null },
 }, { timestamps: true });
 
 blogPostSchema.index({ status: 1, publishedAt: -1 });
