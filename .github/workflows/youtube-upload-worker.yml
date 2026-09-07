@@ -7,7 +7,11 @@ name: YouTube Upload Worker
 #
 # Runs once a day, not every 30 minutes like the render workers — see
 # jobs/youtubeUploadWorker.js's docstring for why (mostly content-strategy
-# pacing, not a quota constraint).
+# pacing, not a quota constraint). Each video it claims uploads as
+# private + a specific scheduled publishAt time spread across that day
+# (Nigeria-engagement-weighted, see the worker's docstring) — so this
+# cron MUST run before the earliest of those slots (8am UTC / 9am WAT),
+# otherwise YouTube rejects a publishAt that's already in the past.
 #
 # No-ops entirely (does nothing, exits clean) until Sam completes the
 # one-time setup in scripts/youtube-authorize.mjs and these 3 secrets
@@ -20,7 +24,7 @@ name: YouTube Upload Worker
 
 on:
   schedule:
-    - cron: '0 9 * * *' # once daily, 9am UTC
+    - cron: '0 5 * * *' # once daily, 5am UTC / 6am WAT — before the earliest scheduled slot
   workflow_dispatch: {} # lets you trigger a sweep manually from the Actions tab too
 
 jobs:

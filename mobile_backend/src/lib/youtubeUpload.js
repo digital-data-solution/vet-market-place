@@ -55,11 +55,22 @@ export function isYoutubeConfigured() {
  * `#Shorts` in the title is what gets a vertical/short video correctly
  * routed into the Shorts shelf rather than treated as a regular upload.
  */
-export async function uploadVideoToYouTube(filePath, { title, description, tags = [] }) {
+/**
+ * `publishAt` (optional): an ISO-8601 timestamp in the future. When given,
+ * the video uploads as private and YouTube itself flips it to public at
+ * that exact moment — no separate "go live now" call or polling needed on
+ * our side, YouTube's own servers do it. Omit it (as one-off/manual calls
+ * typically will) to publish immediately, same as before.
+ */
+export async function uploadVideoToYouTube(filePath, { title, description, tags = [], publishAt = null }) {
   const auth = getOAuthClient();
   if (!auth) throw new Error('YouTube not configured (YOUTUBE_CLIENT_ID/SECRET/REFRESH_TOKEN missing).');
 
   const youtube = google.youtube({ version: 'v3', auth });
+
+  const status = publishAt
+    ? { privacyStatus: 'private', publishAt, selfDeclaredMadeForKids: false } // YouTube requires 'private' whenever publishAt is set
+    : { privacyStatus: 'public', selfDeclaredMadeForKids: false };
 
   const res = await youtube.videos.insert({
     part: ['snippet', 'status'],
@@ -70,10 +81,7 @@ export async function uploadVideoToYouTube(filePath, { title, description, tags 
         tags,
         categoryId: '15', // Pets & Animals
       },
-      status: {
-        privacyStatus: 'public',
-        selfDeclaredMadeForKids: false,
-      },
+      status,
     },
     media: {
       body: fs.createReadStream(filePath),
