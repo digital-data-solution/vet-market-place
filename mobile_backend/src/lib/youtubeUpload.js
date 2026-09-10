@@ -76,7 +76,16 @@ export async function uploadVideoToYouTube(filePath, { title, description, tags 
     part: ['snippet', 'status'],
     requestBody: {
       snippet: {
-        title: title.slice(0, 95) + ' #Shorts', // YouTube's title cap is 100 chars
+        // YouTube's title cap is 100 chars total — reserve room for the
+        // ' #Shorts' suffix (8 chars) so the combined string never exceeds
+        // it. Real bug hit 2026-09-10: title.slice(0, 95) + ' #Shorts' can
+        // total 103 chars whenever the source title is >=95 chars, which
+        // YouTube rejects outright ("invalid or empty video title" — a
+        // confusing error for what's actually a length violation). Every
+        // title uploaded before that day happened to be under 95 chars
+        // pre-slice, so this never surfaced until a longer combined
+        // course+lesson title did.
+        title: title.slice(0, 100 - ' #Shorts'.length) + ' #Shorts',
         description,
         tags,
         categoryId: '15', // Pets & Animals
