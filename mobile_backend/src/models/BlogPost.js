@@ -73,6 +73,16 @@ const blogPostSchema = new mongoose.Schema({
   youtubeUrl:     { type: String, default: null },
   youtubeError:   { type: String, default: null },
   youtubeAt:      { type: Date, default: null },
+
+  // Real Instagram Reels auto-posting (Graph API, jobs/instagramUploadWorker.js)
+  // — added 2026-09-10 once Sam said manual copy-paste wasn't sustainable.
+  // Separate from `instagramDraftedAt` above (the Telegram-drafts fallback,
+  // kept for now as a safety net until this is proven solid).
+  instagramStatus:  { type: String, enum: ['none', 'pending', 'processing', 'posted', 'failed'], default: 'none', index: true },
+  instagramMediaId: { type: String, default: null },
+  instagramUrl:      { type: String, default: null },
+  instagramError:    { type: String, default: null },
+  instagramPostedAt: { type: Date, default: null },
 }, { timestamps: true });
 
 blogPostSchema.index({ status: 1, publishedAt: -1 });

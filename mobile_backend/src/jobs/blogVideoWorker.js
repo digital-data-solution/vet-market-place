@@ -19,7 +19,7 @@ import path from 'path';
 import BlogPost from '../models/BlogPost.js';
 import { renderBlogTeaser } from '../services/blogVideo.service.js';
 import { uploadVideoToCloudinary } from '../lib/cloudinaryUpload.js';
-import { postBlogVideoToTikTokDrafts, postBlogVideoToInstagramDrafts } from '../services/telegram.service.js';
+import { postBlogVideoToTikTokDrafts } from '../services/telegram.service.js';
 import logger from '../lib/logger.js';
 
 // Larger than listingVideoWorker's BATCH_SIZE=3 — text-only slides render
@@ -64,14 +64,14 @@ async function processOne(post) {
     post.videoError = null;
     post.videoAt = new Date();
     if (post.youtubeStatus === 'none') post.youtubeStatus = 'pending'; // drained separately by youtubeUploadWorker.js
+    if (post.instagramStatus === 'none') post.instagramStatus = 'pending'; // drained separately by instagramUploadWorker.js — real Reels auto-posting, replaces the manual Instagram draft below
     await post.save();
 
     logger.info('Blog video generated and uploaded', {
       postId: post._id.toString(), url: uploaded.url, duration: result.actualDuration,
     });
 
-    postBlogVideoToTikTokDrafts(post).catch(() => {});
-    postBlogVideoToInstagramDrafts(post).catch(() => {});
+    postBlogVideoToTikTokDrafts(post).catch(() => {}); // TikTok still has no viable full-auto path (see telegram.service.js) — drafts stay
   } catch (err) {
     post.videoStatus = 'failed';
     post.videoError = (err.message || 'Unknown render error').slice(0, 500);
@@ -91,21 +91,22 @@ async function runSweep() {
   await retryUndraftedReady();
 }
 
-// Self-heals a real gap found 2026-09-06: the drafts calls below no-op
+// Self-heals a real gap found 2026-09-06: the drafts call below no-ops
 // silently if TELEGRAM_* isn't set in whatever environment runSweep() runs
 // in (or if the Telegram API call itself fails), and processOne() doesn't
 // retry a failed draft on its own since the post is already 'ready' by
-// then. Every sweep re-checks for 'ready' posts still missing a draft and
-// retries them — cheap (no re-render, no re-upload) and catches both this
-// specific gap and any future transient Telegram outage.
+// then. Every sweep re-checks for 'ready' posts still missing a TikTok
+// draft and retries — cheap (no re-render, no re-upload) and catches both
+// this specific gap and any future transient Telegram outage. (Instagram
+// dropped out of this retry 2026-09-10 — real auto-posting replaced the
+// manual draft, self-heals via its own instagramStatus queue instead.)
 async function retryUndraftedReady() {
   const stragglers = await BlogPost.find({
     videoStatus: 'ready',
-    $or: [{ tiktokDraftedAt: null }, { instagramDraftedAt: null }],
+    tiktokDraftedAt: null,
   }).limit(20);
   for (const post of stragglers) {
     await postBlogVideoToTikTokDrafts(post).catch(() => {});
-    await postBlogVideoToInstagramDrafts(post).catch(() => {});
   }
 }
 

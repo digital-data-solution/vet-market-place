@@ -1,0 +1,55 @@
+name: Instagram Upload Worker
+
+# Posts already-rendered videos (blog + listing, both already on Cloudinary)
+# straight to Xpress Vet's own Instagram account (@xpressvet) as Reels via
+# the Graph API. No ffmpeg needed — this only calls the API with an
+# already-public Cloudinary URL, doesn't render or even download anything.
+#
+# Instagram's API has no "publish later" param, so unlike the YouTube
+# worker, the SCHEDULE lives here in the cron itself — timed to real
+# researched Nigeria engagement windows (weekday middays+evenings, weekend
+# late mornings), same research basis as the YouTube worker's slots.
+#
+# No-ops entirely (does nothing, exits clean) until Sam completes the
+# one-time setup in scripts/instagram-authorize.mjs and these secrets
+# exist (Settings -> Secrets and variables -> Actions):
+#   INSTAGRAM_ACCOUNT_ID
+#   INSTAGRAM_ACCESS_TOKEN
+#   INSTAGRAM_TOKEN_ISSUED_AT
+# Also needs the existing MONGODB_URI secret.
+#
+# REMINDER (see lib/instagramUpload.js): the access token expires ~60 days
+# after issue and needs manual renewal — the worker logs a warning starting
+# 10 days before that in its own run output, check it occasionally.
+
+on:
+  schedule:
+    - cron: '0 12,17 * * 1-5' # weekdays: 1pm and 6pm WAT (UTC+1)
+    - cron: '0 10 * * 0,6'    # weekends: 11am WAT — within the 9am-12pm peak window
+  workflow_dispatch: {} # lets you trigger a sweep manually from the Actions tab too
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: mobile_backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: mobile_backend/package-lock.json
+
+      - run: npm ci
+
+      - name: Run one Instagram-upload sweep
+        env:
+          MONGODB_URI: ${{ secrets.MONGODB_URI }}
+          INSTAGRAM_ACCOUNT_ID: ${{ secrets.INSTAGRAM_ACCOUNT_ID }}
+          INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+          INSTAGRAM_TOKEN_ISSUED_AT: ${{ secrets.INSTAGRAM_TOKEN_ISSUED_AT }}
+        run: node scripts/run-instagram-upload-sweep-once.mjs

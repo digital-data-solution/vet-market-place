@@ -34,7 +34,7 @@ import Listing from '../models/Listing.js';
 import { renderListingVideo } from '../services/listingVideo.service.js';
 import { uploadVideoToCloudinary } from '../lib/cloudinaryUpload.js';
 import { sendPushToUser } from '../services/pushNotification.service.js';
-import { postListingVideoToTelegram, postListingVideoToTikTokDrafts, postListingVideoToInstagramDrafts } from '../services/telegram.service.js';
+import { postListingVideoToTelegram, postListingVideoToTikTokDrafts } from '../services/telegram.service.js';
 import logger from '../lib/logger.js';
 
 // Small on purpose — each job is CPU-heavy and can take 1-2+ minutes, so a
@@ -79,6 +79,7 @@ async function processOne(listing) {
     listing.generatedVideoError = null;
     listing.generatedVideoAt = new Date();
     if (listing.youtubeStatus === 'none') listing.youtubeStatus = 'pending'; // drained separately by youtubeUploadWorker.js
+    if (listing.instagramStatus === 'none') listing.instagramStatus = 'pending'; // drained separately by instagramUploadWorker.js — real Reels auto-posting, replaces the manual Instagram draft below
     await listing.save();
 
     logger.info('Listing video generated and uploaded', {
@@ -93,8 +94,7 @@ async function processOne(listing) {
     ).catch(() => {});
 
     postListingVideoToTelegram(listing).catch(() => {}); // no-op until TELEGRAM_BOT_TOKEN/TELEGRAM_CHANNEL_ID are set, same as postListingToTelegram
-    postListingVideoToTikTokDrafts(listing).catch(() => {}); // drops into the private drafts channel for Sam to post by hand — see telegram.service.js
-    postListingVideoToInstagramDrafts(listing).catch(() => {}); // same channel, Reels-flavored caption
+    postListingVideoToTikTokDrafts(listing).catch(() => {}); // TikTok still has no viable full-auto path — drafts stay, see telegram.service.js
   } catch (err) {
     listing.generatedVideoStatus = 'failed';
     listing.generatedVideoError = (err.message || 'Unknown render error').slice(0, 500);
@@ -115,19 +115,21 @@ async function runSweep() {
 }
 
 // Self-heals a real gap found 2026-09-06 (via blogVideoWorker.js's identical
-// fix — same root cause here): the drafts calls below no-op silently if
+// fix — same root cause here): the drafts call below no-ops silently if
 // TELEGRAM_* isn't set wherever runSweep() runs, or if the Telegram API
 // call itself fails, and processOne() never retries a failed draft once the
 // listing is already 'ready'. Every sweep re-checks for 'ready' listings
-// still missing a draft and retries — cheap (no re-render, no re-upload).
+// still missing a TikTok draft and retries — cheap (no re-render, no
+// re-upload). (Instagram dropped out of this retry 2026-09-10 — real
+// auto-posting replaced the manual draft, self-heals via its own
+// instagramStatus queue instead.)
 async function retryUndraftedReady() {
   const stragglers = await Listing.find({
     generatedVideoStatus: 'ready',
-    $or: [{ tiktokDraftedAt: null }, { instagramDraftedAt: null }],
+    tiktokDraftedAt: null,
   }).limit(20);
   for (const listing of stragglers) {
     await postListingVideoToTikTokDrafts(listing).catch(() => {});
-    await postListingVideoToInstagramDrafts(listing).catch(() => {});
   }
 }
 

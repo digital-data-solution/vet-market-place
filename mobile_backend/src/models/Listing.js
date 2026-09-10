@@ -171,6 +171,15 @@ const listingSchema = new mongoose.Schema({
   youtubeUrl:     { type: String, default: null },
   youtubeError:   { type: String, default: null },
   youtubeAt:      { type: Date, default: null },
+
+  // Real Instagram Reels auto-posting (Graph API, jobs/instagramUploadWorker.js)
+  // — added 2026-09-10. Separate from `instagramDraftedAt` above (the
+  // Telegram-drafts fallback, kept for now as a safety net).
+  instagramStatus:  { type: String, enum: ['none', 'pending', 'processing', 'posted', 'failed'], default: 'none', index: true },
+  instagramMediaId: { type: String, default: null },
+  instagramUrl:      { type: String, default: null },
+  instagramError:    { type: String, default: null },
+  instagramPostedAt: { type: Date, default: null },
 }, { timestamps: true });
 
 listingSchema.index({ location: '2dsphere' });
