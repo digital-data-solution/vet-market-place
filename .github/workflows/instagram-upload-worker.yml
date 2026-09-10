@@ -18,6 +18,11 @@ name: Instagram Upload Worker
 #   INSTAGRAM_TOKEN_ISSUED_AT
 # Also needs the existing MONGODB_URI secret.
 #
+# Facebook Page posting (lib/facebookUpload.js) rides this same sweep —
+# best-effort, alongside each Instagram post. Needs FACEBOOK_PAGE_ID too
+# (reuses INSTAGRAM_ACCESS_TOKEN, the System User token, to derive a real
+# Page Access Token at call time — no separate Facebook token secret).
+#
 # REMINDER (see lib/instagramUpload.js): the access token expires ~60 days
 # after issue and needs manual renewal — the worker logs a warning starting
 # 10 days before that in its own run output, check it occasionally.
@@ -52,4 +57,5 @@ jobs:
           INSTAGRAM_ACCOUNT_ID: ${{ secrets.INSTAGRAM_ACCOUNT_ID }}
           INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
           INSTAGRAM_TOKEN_ISSUED_AT: ${{ secrets.INSTAGRAM_TOKEN_ISSUED_AT }}
+          FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
         run: node scripts/run-instagram-upload-sweep-once.mjs
