@@ -30,6 +30,7 @@
 import BlogPost from '../models/BlogPost.js';
 import Listing from '../models/Listing.js';
 import { postReelToInstagram, isInstagramConfigured, checkTokenAge } from '../lib/instagramUpload.js';
+import { postVideoToFacebookPage, isFacebookConfigured } from '../lib/facebookUpload.js';
 import logger from '../lib/logger.js';
 
 const BATCH_SIZE = 2; // combined across both content sources, per sweep — see the cron for how often sweeps run
@@ -77,6 +78,27 @@ async function claimNextListing() {
   ).catch(() => null);
 }
 
+// Facebook posting is best-effort, attempted alongside Instagram using the
+// same video + caption — never blocks or is blocked by the Instagram
+// result. Same System User token, just a different Graph API endpoint
+// (see lib/facebookUpload.js).
+async function tryPostToFacebook(doc, videoUrl, caption, label) {
+  if (!isFacebookConfigured()) return;
+  try {
+    const { videoId, url } = await postVideoToFacebookPage(videoUrl, caption);
+    doc.facebookStatus = 'posted';
+    doc.facebookVideoId = videoId;
+    doc.facebookUrl = url;
+    doc.facebookError = null;
+    doc.facebookPostedAt = new Date();
+    logger.info(`${label} video posted to Facebook`, { id: doc._id.toString(), url });
+  } catch (err) {
+    doc.facebookStatus = 'failed';
+    doc.facebookError = (err.message || 'Unknown Facebook post error').slice(0, 500);
+    logger.error(`${label} video Facebook post failed`, { id: doc._id.toString(), error: err.message });
+  }
+}
+
 async function processBlogPost(post) {
   try {
     const { mediaId, url } = await postReelToInstagram(post.videoUrl, buildBlogCaption(post));
@@ -85,11 +107,13 @@ async function processBlogPost(post) {
     post.instagramUrl = url;
     post.instagramError = null;
     post.instagramPostedAt = new Date();
+    await tryPostToFacebook(post, post.videoUrl, buildBlogCaption(post), 'Blog');
     await post.save();
     logger.info('Blog video posted to Instagram', { postId: post._id.toString(), url });
   } catch (err) {
     post.instagramStatus = 'failed';
     post.instagramError = (err.message || 'Unknown Instagram post error').slice(0, 500);
+    await tryPostToFacebook(post, post.videoUrl, buildBlogCaption(post), 'Blog');
     await post.save().catch(() => {});
     logger.error('Blog video Instagram post failed', { postId: post._id.toString(), error: err.message });
   }
@@ -103,11 +127,13 @@ async function processListing(listing) {
     listing.instagramUrl = url;
     listing.instagramError = null;
     listing.instagramPostedAt = new Date();
+    await tryPostToFacebook(listing, listing.generatedVideoUrl, buildListingCaption(listing), 'Listing');
     await listing.save();
     logger.info('Listing video posted to Instagram', { listingId: listing._id.toString(), url });
   } catch (err) {
     listing.instagramStatus = 'failed';
     listing.instagramError = (err.message || 'Unknown Instagram post error').slice(0, 500);
+    await tryPostToFacebook(listing, listing.generatedVideoUrl, buildListingCaption(listing), 'Listing');
     await listing.save().catch(() => {});
     logger.error('Listing video Instagram post failed', { listingId: listing._id.toString(), error: err.message });
   }

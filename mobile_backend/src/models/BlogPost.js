@@ -83,6 +83,15 @@ const blogPostSchema = new mongoose.Schema({
   instagramUrl:      { type: String, default: null },
   instagramError:    { type: String, default: null },
   instagramPostedAt: { type: Date, default: null },
+
+  // Facebook Page auto-posting (same System User token as Instagram, added
+  // 2026-09-10) — best-effort, attempted alongside Instagram in the same
+  // worker run, never blocks or is blocked by the Instagram result.
+  facebookStatus:   { type: String, enum: ['none', 'pending', 'posted', 'failed'], default: 'none' },
+  facebookVideoId:  { type: String, default: null },
+  facebookUrl:      { type: String, default: null },
+  facebookError:    { type: String, default: null },
+  facebookPostedAt: { type: Date, default: null },
 }, { timestamps: true });
 
 blogPostSchema.index({ status: 1, publishedAt: -1 });
