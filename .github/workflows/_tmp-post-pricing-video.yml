@@ -1,0 +1,43 @@
+name: TEMP - Post Pricing Video
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: mobile_backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: mobile_backend/package-lock.json
+      - run: npm ci
+      - name: Post pricing video to Instagram + Facebook
+        env:
+          INSTAGRAM_ACCOUNT_ID: ${{ secrets.INSTAGRAM_ACCOUNT_ID }}
+          INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+          FACEBOOK_PAGE_ID: ${{ secrets.FACEBOOK_PAGE_ID }}
+        run: |
+          node -e "
+          import('./src/lib/instagramUpload.js').then(async ({ postReelToInstagram, isInstagramConfigured }) => {
+            const { postVideoToFacebookPage, isFacebookConfigured } = await import('./src/lib/facebookUpload.js');
+            const videoUrl = 'https://res.cloudinary.com/dhip3gaej/video/upload/v1789119732/marketing-videos/pricing-tiers-animation.mp4';
+            const caption = 'Xpress Vet pricing, in 10 seconds. 🐾\n\nStart free — upgrade only when your practice actually outgrows it. No forced tiers, no surprise fees.\n\n📲 xpressvetmarketplace.com\n\n#XpressVet #VeterinaryPractice #PetsOfNigeria #AnimalHealth';
+            try {
+              if (!isInstagramConfigured()) throw new Error('not configured');
+              const { url } = await postReelToInstagram(videoUrl, caption);
+              console.log('Instagram: OK', url);
+            } catch (err) { console.log('Instagram: FAILED', err.message); }
+            try {
+              if (!isFacebookConfigured()) throw new Error('not configured');
+              const { url } = await postVideoToFacebookPage(videoUrl, caption);
+              console.log('Facebook: OK', url);
+            } catch (err) { console.log('Facebook: FAILED', err.message); }
+          });
+          "
