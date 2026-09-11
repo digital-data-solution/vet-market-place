@@ -191,7 +191,7 @@ function buildTextSlideFilter({ inputIdx, logoIdx, heading, headingSize, body, b
  * contentMarkdown. Returns { path, expectedDuration, ok, warnings, errors,
  * actualDuration } — same verified-result shape as listingVideo.service.js.
  */
-export async function renderBlogTeaser(post, outputPath) {
+export async function renderBlogTeaser(post, outputPath, { hookText = null } = {}) {
   const points = extractKeyPoints(post.contentMarkdown);
   if (!points.length) {
     throw new Error('No "## Key Points" section found — cannot build a teaser for this post.');
@@ -200,8 +200,11 @@ export async function renderBlogTeaser(post, outputPath) {
   const workDir = path.dirname(outputPath);
   fs.mkdirSync(workDir, { recursive: true });
 
+  // `hookText` (see lib/hookVariants.js) lets a caller A/B-test the opening
+  // slide's copy without touching anything else about the render — falls
+  // back to the plain post title, same as this always behaved before.
   const slides = [
-    { duration: TITLE_DURATION, heading: post.title, headingSize: 68, body: null, bodySize: 0 },
+    { duration: TITLE_DURATION, heading: hookText || post.title, headingSize: 68, body: null, bodySize: 0 },
     ...points.map((p) => ({ duration: POINT_DURATION, heading: null, headingSize: 0, body: p, bodySize: 52 })),
     { duration: CTA_DURATION, heading: 'Read the full guide', headingSize: 56, body: 'Free on the Xpress Vet blog — xpressvetmarketplace.com', bodySize: 36 },
   ];

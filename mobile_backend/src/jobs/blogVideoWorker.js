@@ -20,7 +20,15 @@ import BlogPost from '../models/BlogPost.js';
 import { renderBlogTeaser } from '../services/blogVideo.service.js';
 import { uploadVideoToCloudinary } from '../lib/cloudinaryUpload.js';
 import { postBlogVideoToTikTokDrafts } from '../services/telegram.service.js';
+import { generateHookVariants, pickVariantIndex } from '../lib/hookVariants.js';
 import logger from '../lib/logger.js';
+
+// A/B hook-variant test (lib/hookVariants.js, added 2026-09-11) — 3 opening
+// lines per post (the plain title, plus 2 templated reframings), assigned
+// deterministically per post so a re-render never changes what's being
+// tested. Kept at module scope so both processOne() and any future
+// analytics query use the exact same variant count.
+const HOOK_VARIANT_COUNT = 3;
 
 // Larger than listingVideoWorker's BATCH_SIZE=3 — text-only slides render
 // much faster than the photo/zoompan pipeline (no source images to
@@ -41,7 +49,9 @@ async function processOne(post) {
   const tempPath = path.join(WORK_DIR, `${post._id}.mp4`);
 
   try {
-    const result = await renderBlogTeaser(post, tempPath);
+    const variantIndex = pickVariantIndex(post._id, HOOK_VARIANT_COUNT);
+    const hookText = generateHookVariants(post.title)[variantIndex];
+    const result = await renderBlogTeaser(post, tempPath, { hookText });
 
     if (!result.ok) {
       post.videoStatus = 'failed';
@@ -63,6 +73,8 @@ async function processOne(post) {
     post.videoPublicId = uploaded.publicId;
     post.videoError = null;
     post.videoAt = new Date();
+    post.videoHookVariantIndex = variantIndex;
+    post.videoHookText = hookText;
     if (post.youtubeStatus === 'none') post.youtubeStatus = 'pending'; // drained separately by youtubeUploadWorker.js
     if (post.instagramStatus === 'none') post.instagramStatus = 'pending'; // drained separately by instagramUploadWorker.js — real Reels auto-posting, replaces the manual Instagram draft below
     await post.save();

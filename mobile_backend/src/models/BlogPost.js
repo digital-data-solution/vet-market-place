@@ -63,6 +63,14 @@ const blogPostSchema = new mongoose.Schema({
   tiktokDraftedAt:    { type: Date, default: null },
   instagramDraftedAt: { type: Date, default: null },
 
+  // A/B hook-variant tracking (lib/hookVariants.js, added 2026-09-11) — which
+  // opening-slide copy this render actually used. Deterministic per-post
+  // (see pickVariantIndex), so it's recorded here rather than recomputed,
+  // making a future "does variant 1 out-perform the control" query possible
+  // once real view/engagement numbers exist to join against.
+  videoHookVariantIndex: { type: Number, default: null },
+  videoHookText:         { type: String, default: null },
+
   // Auto-upload of the generated video to Xpress Vet's own YouTube channel
   // (as a Short) — jobs/youtubeUploadWorker.js. Queued by
   // jobs/blogVideoWorker.js the moment videoStatus flips to 'ready'; drained
