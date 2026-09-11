@@ -26,18 +26,15 @@ jobs:
         run: |
           node -e "
           import('./src/lib/instagramUpload.js').then(async ({ postReelToInstagram, isInstagramConfigured }) => {
-            const { postVideoToFacebookPage, isFacebookConfigured } = await import('./src/lib/facebookUpload.js');
-            const videoUrl = 'https://res.cloudinary.com/dhip3gaej/video/upload/v1789119732/marketing-videos/pricing-tiers-animation.mp4';
+            // Facebook already succeeded on the first run (see the earlier
+            // workflow run) — only retrying Instagram here now that the
+            // video has a real audio track, to avoid a duplicate FB post.
+            const videoUrl = 'https://res.cloudinary.com/dhip3gaej/video/upload/v1789120180/marketing-videos/pricing-tiers-animation.mp4';
             const caption = 'Xpress Vet pricing, in 10 seconds. 🐾\n\nStart free — upgrade only when your practice actually outgrows it. No forced tiers, no surprise fees.\n\n📲 xpressvetmarketplace.com\n\n#XpressVet #VeterinaryPractice #PetsOfNigeria #AnimalHealth';
             try {
               if (!isInstagramConfigured()) throw new Error('not configured');
               const { url } = await postReelToInstagram(videoUrl, caption);
               console.log('Instagram: OK', url);
             } catch (err) { console.log('Instagram: FAILED', err.message); }
-            try {
-              if (!isFacebookConfigured()) throw new Error('not configured');
-              const { url } = await postVideoToFacebookPage(videoUrl, caption);
-              console.log('Facebook: OK', url);
-            } catch (err) { console.log('Facebook: FAILED', err.message); }
           });
           "
