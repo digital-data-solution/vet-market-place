@@ -12,6 +12,9 @@
     "worker:blog-video": "node src/workers/blogVideoStandalone.js"
   },
   "dependencies": {
+    "@remotion/bundler": "^4.0.523",
+    "@remotion/cli": "^4.0.523",
+    "@remotion/renderer": "^4.0.523",
     "@supabase/supabase-js": "^2.95.3",
     "axios": "^1.13.2",
     "bcrypt": "^6.0.0",
@@ -33,7 +36,10 @@
     "node-fetch": "^3.3.2",
     "pdfkit": "^0.20.2",
     "qrcode": "^1.5.4",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
     "redis": "^5.10.0",
+    "remotion": "^4.0.523",
     "speakeasy": "^2.0.0",
     "svix": "^1.99.1",
     "web-push": "^3.6.7",
