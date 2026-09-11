@@ -85,6 +85,14 @@ async function processOne(listing) {
     logger.info('Listing video generated and uploaded', {
       listingId: listing._id.toString(), url: uploaded.url, duration: result.actualDuration,
     });
+    // Non-fatal QA findings (duration drift, a suspected blank slide — see
+    // lib/videoFrameQa.js) still upload as normal, but get surfaced loudly
+    // rather than silently discarded.
+    if (result.warnings?.length) {
+      logger.error('Listing video uploaded WITH QA warnings — worth a manual look', {
+        listingId: listing._id.toString(), url: uploaded.url, warnings: result.warnings,
+      });
+    }
 
     sendPushToUser(
       listing.seller,

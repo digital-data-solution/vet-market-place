@@ -70,6 +70,15 @@ async function processOne(post) {
     logger.info('Blog video generated and uploaded', {
       postId: post._id.toString(), url: uploaded.url, duration: result.actualDuration,
     });
+    // Non-fatal QA findings (duration drift, a suspected blank slide — see
+    // lib/videoFrameQa.js) still upload as normal, but get surfaced loudly
+    // rather than silently discarded — this is the gap that let a real
+    // blank-slide bug ship unnoticed before this check existed.
+    if (result.warnings?.length) {
+      logger.error('Blog video uploaded WITH QA warnings — worth a manual look', {
+        postId: post._id.toString(), url: uploaded.url, warnings: result.warnings,
+      });
+    }
 
     postBlogVideoToTikTokDrafts(post).catch(() => {}); // TikTok still has no viable full-auto path (see telegram.service.js) — drafts stay
   } catch (err) {

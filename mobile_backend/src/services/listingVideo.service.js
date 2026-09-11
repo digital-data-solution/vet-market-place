@@ -27,6 +27,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { detectBlankStretches } from '../lib/videoFrameQa.js';
 import fs from 'fs';
 
 const execFileAsync = promisify(execFile);
@@ -312,6 +313,14 @@ async function verifyRender(filePath, expectedDuration) {
   } catch {
     warnings.push('No audio stream detected — expected if no music bed was mixed in for this render.');
   }
+
+  // Blank-slide check (see lib/videoFrameQa.js) — catches a Ken Burns slide
+  // that rendered flat/black (e.g. a broken image source), which the
+  // decode/duration/resolution checks above can't detect on their own.
+  // Warning-level, not blocking — a real cut-to-black transition shouldn't
+  // fail the render.
+  const blankFrameWarnings = await detectBlankStretches(filePath).catch((err) => [`Blank-slide check itself failed: ${err.message}`]);
+  warnings.push(...blankFrameWarnings);
 
   return { ok: errors.length === 0, warnings, errors, actualDuration };
 }

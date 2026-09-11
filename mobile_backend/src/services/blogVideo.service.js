@@ -23,6 +23,7 @@ import { promisify } from 'util';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import { detectBlankStretches } from '../lib/videoFrameQa.js';
 
 const execFileAsync = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -265,6 +266,14 @@ export async function renderBlogTeaser(post, outputPath) {
   } catch (err) {
     errors.push(`Could not read output duration: ${err.message}`);
   }
+
+  // Blank-slide check (see lib/videoFrameQa.js) — a drawtext/overlay filter
+  // silently no-op'ing produces a technically-valid, decodable file with a
+  // flat-color slide, which the decode-pass/duration checks above can't
+  // catch on their own. Logged as a warning, not an error — doesn't block
+  // the render, just gets surfaced for a human/Claude to spot-check.
+  const blankFrameWarnings = await detectBlankStretches(outputPath).catch((err) => [`Blank-slide check itself failed: ${err.message}`]);
+  warnings.push(...blankFrameWarnings);
 
   return { path: outputPath, expectedDuration: expectedTotal, ok: errors.length === 0, warnings, errors, actualDuration };
 }
