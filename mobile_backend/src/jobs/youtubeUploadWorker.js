@@ -103,7 +103,7 @@ function buildBlogDescription(post) {
   return [
     post.excerpt || '',
     '',
-    `Full guide: ${SHARE_ORIGIN}/b/${post.slug}`,
+    `Full guide: ${SHARE_ORIGIN}/b/${post.slug}?src=yt`,
     '',
     'Xpress Vet Marketplace — buy, sell, and find veterinary services and products across Nigeria.',
     '',
@@ -118,7 +118,7 @@ function buildListingDescription(listing) {
     '',
     price ? `Price: ${price}${listing.negotiable ? ' (negotiable)' : ''}` : null,
     listing.city ? `Location: ${listing.city}` : null,
-    `View & buy: ${SHARE_ORIGIN}/l/${listing._id}`,
+    `View & buy: ${SHARE_ORIGIN}/l/${listing._id}?src=yt`,
     '',
     'Xpress Vet Marketplace — buy, sell, and find veterinary services and products across Nigeria.',
     '',

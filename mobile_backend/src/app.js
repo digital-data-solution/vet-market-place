@@ -83,8 +83,22 @@ import Subscription  from './models/Subscription.js';
 import SupportThread from './models/SupportThread.js';
 import Listing       from './models/Listing.js';
 import BlogPost      from './models/BlogPost.js';
+import ShareClick    from './models/ShareClick.js';
 
 const app = express();
+
+// Records a visit that arrived via a tagged link (?src=ig etc. — see
+// models/ShareClick.js). Fire-and-forget, never blocks the response.
+// Link-preview crawlers fetch the same URLs when a link is pasted/posted, so
+// they're skipped or every share would look like a click. NOT 'instagram' —
+// Instagram's in-app browser (a real person tapping the link) has it in its UA.
+const CRAWLER_UA = /bot|crawler|spider|facebookexternalhit|facebookcatalog|meta-externalagent|whatsapp|telegram|slack|discord|preview/i;
+function recordShareClick(req) {
+  const src = String(req.query.src || '').toLowerCase();
+  if (!/^[a-z0-9_-]{1,20}$/.test(src)) return;
+  if (CRAWLER_UA.test(req.get('user-agent') || '')) return;
+  ShareClick.create({ src, path: req.path.slice(0, 200) }).catch(() => {});
+}
 
 // ─── Trust proxy (required for Render / rate limiting) ────────────────────────
 app.set('trust proxy', 1);
@@ -165,6 +179,7 @@ app.use((req, res, next) => {
     req.path === '/health'
   ) return next();
   if (!INDEX_HTML) return next(new Error('index.html not found'));
+  recordShareClick(req); // e.g. the Instagram bio link /Blog?src=ig
   res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.set('Content-Type', 'text/html; charset=utf-8');
   return res.send(INDEX_HTML);
@@ -186,6 +201,7 @@ function esc(s) {
   ));
 }
 app.get('/l/:id', async (req, res) => {
+  recordShareClick(req);
   const appUrl = `${WEB_APP_ORIGIN}/ListingDetail?id=${encodeURIComponent(req.params.id)}`;
   try {
     const listing = await Listing.findById(req.params.id).lean();
@@ -228,6 +244,7 @@ app.get('/l/:id', async (req, res) => {
 // serves published posts — a draft's title/cover must never leak via a share
 // link before an admin publishes it.
 app.get('/b/:slug', async (req, res) => {
+  recordShareClick(req);
   const slug = req.params.slug.toLowerCase();
   const appUrl = `${WEB_APP_ORIGIN}/Blog/${encodeURIComponent(slug)}`;
   try {

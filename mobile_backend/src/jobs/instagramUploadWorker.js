@@ -36,27 +36,39 @@ import logger from '../lib/logger.js';
 const BATCH_SIZE = 2; // combined across both content sources, per sweep — see the cron for how often sweeps run
 const SHARE_ORIGIN = 'https://go.xpressvetmarketplace.com';
 
-function buildBlogCaption(post) {
+// Instagram captions can't hold clickable links, so the Instagram version
+// points to the link in bio (set to /Blog?src=ig by hand in the Instagram
+// app — the Graph API can't edit the bio). With a bare URL in the caption,
+// 38 Reels reaching ~1.5k accounts drove only ~27 blog views (Sept 2026).
+// Facebook DOES make caption links clickable, so it gets the direct link.
+// ?src= tags feed models/ShareClick.js so clicks per platform are countable.
+function buildBlogCaption(post, platform = 'ig') {
+  const link = platform === 'ig'
+    ? '📖 Full guide → link in bio'
+    : `📖 Full guide: ${SHARE_ORIGIN}/b/${post.slug}?src=${platform}`;
   return [
     `${post.title} 🐾`,
     '',
     'Free vet-backed tips, no login needed.',
     '',
-    `📖 Full guide: ${SHARE_ORIGIN}/b/${post.slug}`,
+    link,
     '',
     '#XpressVet #VeterinaryTips #PetsOfNigeria #AnimalHealth #Reels',
   ].join('\n');
 }
 
-function buildListingCaption(listing) {
+function buildListingCaption(listing, platform = 'ig') {
   const price = Number.isFinite(listing.price) ? `₦${listing.price.toLocaleString('en-NG')}` : null;
   const location = listing.city ? ` in ${listing.city}` : '';
+  const link = platform === 'ig'
+    ? '📲 See it on Xpress Vet → link in bio'
+    : `📲 ${SHARE_ORIGIN}/l/${listing._id}?src=${platform}`;
   return [
     'Every listing on Xpress Vet gets a video ad like this — made completely automatically. 🎬',
     '',
     `"${listing.title}"${price ? ` — ${price}` : ''}${location}`,
     '',
-    `📲 ${SHARE_ORIGIN}/l/${listing._id}`,
+    link,
     '',
     '#XpressVet #PetsOfNigeria #SmallBusinessNigeria #Reels #NigeriaTech',
   ].join('\n');
@@ -108,13 +120,13 @@ async function processBlogPost(post) {
     post.instagramUrl = url;
     post.instagramError = null;
     post.instagramPostedAt = new Date();
-    await tryPostToFacebook(post, post.videoUrl, buildBlogCaption(post), 'Blog');
+    await tryPostToFacebook(post, post.videoUrl, buildBlogCaption(post, 'fb'), 'Blog');
     await post.save();
     logger.info('Blog video posted to Instagram', { postId: post._id.toString(), url });
   } catch (err) {
     post.instagramStatus = 'failed';
     post.instagramError = (err.message || 'Unknown Instagram post error').slice(0, 500);
-    await tryPostToFacebook(post, post.videoUrl, buildBlogCaption(post), 'Blog');
+    await tryPostToFacebook(post, post.videoUrl, buildBlogCaption(post, 'fb'), 'Blog');
     await post.save().catch(() => {});
     logger.error('Blog video Instagram post failed', { postId: post._id.toString(), error: err.message });
   }
@@ -128,13 +140,13 @@ async function processListing(listing) {
     listing.instagramUrl = url;
     listing.instagramError = null;
     listing.instagramPostedAt = new Date();
-    await tryPostToFacebook(listing, listing.generatedVideoUrl, buildListingCaption(listing), 'Listing');
+    await tryPostToFacebook(listing, listing.generatedVideoUrl, buildListingCaption(listing, 'fb'), 'Listing');
     await listing.save();
     logger.info('Listing video posted to Instagram', { listingId: listing._id.toString(), url });
   } catch (err) {
     listing.instagramStatus = 'failed';
     listing.instagramError = (err.message || 'Unknown Instagram post error').slice(0, 500);
-    await tryPostToFacebook(listing, listing.generatedVideoUrl, buildListingCaption(listing), 'Listing');
+    await tryPostToFacebook(listing, listing.generatedVideoUrl, buildListingCaption(listing, 'fb'), 'Listing');
     await listing.save().catch(() => {});
     logger.error('Listing video Instagram post failed', { listingId: listing._id.toString(), error: err.message });
   }
