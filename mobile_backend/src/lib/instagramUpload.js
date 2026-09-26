@@ -93,12 +93,29 @@ async function createContainer(videoUrl, caption) {
  * video_url, transcoding) — this typically takes well under a minute for
  * a ~25s Short-length clip, but can occasionally take longer.
  */
+//
+// status_code:ERROR is NOT always final: 11 blog Reels (Sept 2026) were
+// marked failed on an ERROR poll, yet querying those same containers later
+// showed status "Finished: Media has been uploaded and it is ready to be
+// published" — Instagram reported ERROR transiently mid-processing. So an
+// ERROR only counts once it has persisted for ERROR_GRACE_MS, and the
+// human-readable `status` field is included in the thrown message.
+const ERROR_GRACE_MS = 90 * 1000;
+
 async function waitForContainerReady(containerId, { maxWaitMs = 5 * 60 * 1000, pollIntervalMs = 5000 } = {}) {
   const deadline = Date.now() + maxWaitMs;
+  let firstErrorAt = null;
   while (Date.now() < deadline) {
-    const data = await graphRequest(`/${containerId}`, { params: { fields: 'status_code' } });
+    const data = await graphRequest(`/${containerId}`, { params: { fields: 'status_code,status' } });
     if (data.status_code === 'FINISHED') return;
-    if (data.status_code === 'ERROR') throw new Error(`Instagram container ${containerId} failed processing (status_code: ERROR).`);
+    if (data.status_code === 'ERROR') {
+      firstErrorAt ??= Date.now();
+      if (Date.now() - firstErrorAt >= ERROR_GRACE_MS) {
+        throw new Error(`Instagram container ${containerId} failed processing (status_code: ERROR, status: ${data.status || 'n/a'}).`);
+      }
+    } else {
+      firstErrorAt = null;
+    }
     await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
   }
   throw new Error(`Instagram container ${containerId} didn't finish processing within ${maxWaitMs / 1000}s.`);
@@ -121,8 +138,15 @@ async function publishContainer(containerId) {
 export async function postReelToInstagram(videoUrl, caption) {
   if (!isInstagramConfigured()) throw new Error('Instagram not configured (INSTAGRAM_ACCOUNT_ID/ACCESS_TOKEN missing).');
 
-  const containerId = await createContainer(videoUrl, caption);
-  await waitForContainerReady(containerId);
+  // One retry with a brand-new container — a container that ERRORed can't
+  // be re-polled into success, but resubmitting the same URL usually works.
+  let containerId = await createContainer(videoUrl, caption);
+  try {
+    await waitForContainerReady(containerId);
+  } catch {
+    containerId = await createContainer(videoUrl, caption);
+    await waitForContainerReady(containerId);
+  }
   const mediaId = await publishContainer(containerId);
 
   // Graph API doesn't hand back a permalink directly from media_publish —

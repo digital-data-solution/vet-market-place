@@ -84,6 +84,7 @@ async function claimNextListing() {
 // (see lib/facebookUpload.js).
 async function tryPostToFacebook(doc, videoUrl, caption, label) {
   if (!isFacebookConfigured()) return;
+  if (doc.facebookStatus === 'posted') return; // an Instagram retry must not double-post to the Page
   try {
     const { videoId, url } = await postVideoToFacebookPage(videoUrl, caption);
     doc.facebookStatus = 'posted';
