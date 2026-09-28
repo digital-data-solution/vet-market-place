@@ -31,3 +31,25 @@ jobs:
           echo "== Follower cities =="
           curl -s "$G/insights?metric=follower_demographics&period=lifetime&metric_type=total_value&breakdown=city&access_token=$TOKEN" \
             | jq '.data[0].total_value.breakdowns[0].results // . | if type=="array" then (sort_by(-.value) | .[:10] | map("\(.dimension_values[0]): \(.value)")) else . end'
+
+      - name: Per-post stats
+        run: |
+          G="https://graph.facebook.com/v21.0"
+          URL="$G/$ACCOUNT/media?fields=id,timestamp,media_product_type,like_count,comments_count,caption&limit=100&access_token=$TOKEN"
+          echo "== Posts (one JSON line each) =="
+          while [ -n "$URL" ] && [ "$URL" != "null" ]; do
+            PAGE=$(curl -s "$URL")
+            echo "$PAGE" | jq -c '.data[]' | while read -r M; do
+              ID=$(echo "$M" | jq -r .id)
+              # Reels and feed posts support different metric sets; try the fuller one first.
+              INS=$(curl -s "$G/$ID/insights?metric=reach,views,saved,shares,total_interactions,follows,profile_visits&access_token=$TOKEN")
+              if echo "$INS" | jq -e .error >/dev/null; then
+                INS=$(curl -s "$G/$ID/insights?metric=reach,views,saved,shares,total_interactions&access_token=$TOKEN")
+              fi
+              echo "$M" | jq -c --argjson ins "$INS" \
+                '{date: .timestamp[:10], type: .media_product_type, likes: .like_count, comments: .comments_count,
+                  title: ((.caption // "") | split("\n")[0] | .[:70])}
+                 + ([$ins.data[]? | {(.name): .values[0].value}] | add // {})'
+            done
+            URL=$(echo "$PAGE" | jq -r '.paging.next // empty')
+          done
