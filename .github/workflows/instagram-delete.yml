@@ -1,0 +1,26 @@
+name: Instagram Delete Posts
+
+# Deletes specific @xpress_vet posts by media ID (from the Instagram Stats
+# workflow's per-post output). Irreversible — only run with IDs Sam has
+# approved. Exists because Sam's local WiFi blocks Meta.
+
+on:
+  workflow_dispatch:
+    inputs:
+      media_ids:
+        description: 'Space-separated Instagram media IDs to delete'
+        required: true
+
+jobs:
+  delete:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+      IDS: ${{ inputs.media_ids }}
+    steps:
+      - name: Delete
+        run: |
+          for ID in $IDS; do
+            echo "$ID: $(curl -s -X DELETE "https://graph.facebook.com/v21.0/$ID?access_token=$TOKEN")"
+          done

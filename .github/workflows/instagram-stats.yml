@@ -35,7 +35,7 @@ jobs:
       - name: Per-post stats
         run: |
           G="https://graph.facebook.com/v21.0"
-          URL="$G/$ACCOUNT/media?fields=id,timestamp,media_product_type,like_count,comments_count,caption&limit=100&access_token=$TOKEN"
+          URL="$G/$ACCOUNT/media?fields=id,permalink,thumbnail_url,timestamp,media_product_type,like_count,comments_count,caption&limit=100&access_token=$TOKEN"
           echo "== Posts (one JSON line each) =="
           while [ -n "$URL" ] && [ "$URL" != "null" ]; do
             PAGE=$(curl -s "$URL")
@@ -47,7 +47,7 @@ jobs:
                 INS=$(curl -s "$G/$ID/insights?metric=reach,views,saved,shares,total_interactions&access_token=$TOKEN")
               fi
               echo "$M" | jq -c --argjson ins "$INS" \
-                '{date: .timestamp[:10], type: .media_product_type, likes: .like_count, comments: .comments_count,
+                '{id, permalink, thumb: .thumbnail_url, date: .timestamp[:10], type: .media_product_type, likes: .like_count, comments: .comments_count,
                   title: ((.caption // "") | split("\n")[0] | .[:70])}
                  + ([$ins.data[]? | {(.name): .values[0].value}] | add // {})'
             done
