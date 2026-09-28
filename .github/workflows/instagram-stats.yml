@@ -66,7 +66,8 @@ jobs:
           NOW=$(date +%s); SINCE=$((NOW - 28*86400))
           echo "== Page insights, last 28 days (one metric per call so one bad name can't sink the rest) =="
           for M in page_impressions_unique page_post_engagements page_views_total page_daily_follows_unique page_video_views; do
-            echo "$M: $(curl -s "$G/$PAGE/insights?metric=$M&period=day&since=$SINCE&until=$NOW&access_token=$PT"               | jq -c 'if .error then .error.message else ([.data[0].values[]?.value | numbers] | add) end')"
+            echo "$M: $(curl -s "$G/$PAGE/insights?metric=$M&period=day&since=$SINCE&until=$NOW&access_token=$PT" \
+              | jq -c 'if .error then .error.message else ([.data[0].values[]?.value | numbers] | add) end')"
           done
           echo "== Page posts (one JSON line each) =="
           URL="$G/$PAGE/posts?fields=id,created_time,message,permalink_url,shares,reactions.summary(true).limit(0),comments.summary(true).limit(0)&limit=100&access_token=$PT"
@@ -76,9 +77,9 @@ jobs:
             echo "$PAGE_JSON" | jq -c '.data[]?' | while read -r P; do
               ID=$(echo "$P" | jq -r .id)
               INS=$(curl -s "$G/$ID/insights?metric=post_impressions_unique,post_clicks&access_token=$PT")
-              echo "$P" | jq -c --argjson ins "$INS"                 '{fb: true, date: .created_time[:10], reactions: .reactions.summary.total_count, comments: .comments.summary.total_count,
-                  shares: (.shares.count // 0), title: ((.message // "") | split("
-")[0] | .[:70])}
+              echo "$P" | jq -c --argjson ins "$INS" \
+                '{fb: true, date: .created_time[:10], reactions: .reactions.summary.total_count, comments: .comments.summary.total_count,
+                  shares: (.shares.count // 0), title: ((.message // "") | split("\n")[0] | .[:70])}
                  + (if $ins.error then {insightsError: $ins.error.message} else ([$ins.data[]? | {(.name): .values[0].value}] | add // {}) end)'
             done
             URL=$(echo "$PAGE_JSON" | jq -r '.paging.next // empty')
