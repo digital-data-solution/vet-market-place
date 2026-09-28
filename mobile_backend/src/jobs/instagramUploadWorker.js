@@ -41,6 +41,13 @@ const SHARE_ORIGIN = 'https://go.xpressvetmarketplace.com';
 // jump the queue. Tags are free-form, hence the case-insensitive match.
 const PRIORITY_TAGS = [/^cats?$/i, /^dogs?$/i];
 
+// Promo Reels (pricing, listing video ads, feature announcements) all
+// reached under 20 accounts, so Sam dropped them from Instagram (2026-09-28).
+// They still go to the Facebook Page, where caption links are clickable.
+// Listings are always promo; blog posts are promo when tagged like these.
+const PROMO_TAGS = [/^xpress market$/i, /^new feature$/i];
+const isPromoPost = (post) => (post.tags || []).some((t) => PROMO_TAGS.some((re) => re.test(t)));
+
 // Only 5 comments across those 60 Reels. Ending on a question invites them,
 // and comments are what gets a Reel shown to more people.
 function commentPrompt(tags = []) {
@@ -131,7 +138,17 @@ async function tryPostToFacebook(doc, videoUrl, caption, label) {
   }
 }
 
+// Facebook only; instagramStatus goes back to 'none' so it isn't re-claimed
+// ('none' is also what the video workers treat as "never queued").
+async function processFacebookOnly(doc, videoUrl, caption, label) {
+  await tryPostToFacebook(doc, videoUrl, caption, label);
+  doc.instagramStatus = 'none';
+  await doc.save().catch(() => {});
+  logger.info(`${label} promo video skipped on Instagram`, { id: doc._id.toString() });
+}
+
 async function processBlogPost(post) {
+  if (isPromoPost(post)) return processFacebookOnly(post, post.videoUrl, buildBlogCaption(post, 'fb'), 'Blog');
   try {
     const { mediaId, url } = await postReelToInstagram(post.videoUrl, buildBlogCaption(post));
     post.instagramStatus = 'posted';
@@ -152,23 +169,7 @@ async function processBlogPost(post) {
 }
 
 async function processListing(listing) {
-  try {
-    const { mediaId, url } = await postReelToInstagram(listing.generatedVideoUrl, buildListingCaption(listing));
-    listing.instagramStatus = 'posted';
-    listing.instagramMediaId = mediaId;
-    listing.instagramUrl = url;
-    listing.instagramError = null;
-    listing.instagramPostedAt = new Date();
-    await tryPostToFacebook(listing, listing.generatedVideoUrl, buildListingCaption(listing, 'fb'), 'Listing');
-    await listing.save();
-    logger.info('Listing video posted to Instagram', { listingId: listing._id.toString(), url });
-  } catch (err) {
-    listing.instagramStatus = 'failed';
-    listing.instagramError = (err.message || 'Unknown Instagram post error').slice(0, 500);
-    await tryPostToFacebook(listing, listing.generatedVideoUrl, buildListingCaption(listing, 'fb'), 'Listing');
-    await listing.save().catch(() => {});
-    logger.error('Listing video Instagram post failed', { listingId: listing._id.toString(), error: err.message });
-  }
+  return processFacebookOnly(listing, listing.generatedVideoUrl, buildListingCaption(listing, 'fb'), 'Listing');
 }
 
 export async function runSweep() {
@@ -182,11 +183,12 @@ export async function runSweep() {
 
   let done = 0;
   while (done < BATCH_SIZE) {
+    // Facebook-only promo items don't use up an Instagram slot.
     const post = await claimNextBlogPost();
-    if (post) { await processBlogPost(post); done++; continue; }
+    if (post) { const promo = isPromoPost(post); await processBlogPost(post); if (!promo) done++; continue; }
 
     const listing = await claimNextListing();
-    if (listing) { await processListing(listing); done++; continue; }
+    if (listing) { await processListing(listing); continue; }
 
     break; // nothing pending in either collection — done for this run
   }
