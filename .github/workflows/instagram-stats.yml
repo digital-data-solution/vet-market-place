@@ -1,0 +1,33 @@
+name: Instagram Stats
+
+# Read-only: prints @xpress_vet's follower count, last-28-day insights and
+# follower countries (Instagram only returns countries once the account has
+# 100+ followers). Exists because Sam's local WiFi blocks Meta, so the Graph
+# API can't be reached from his PC — run it from the Actions tab instead.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  stats:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+      ACCOUNT: ${{ secrets.INSTAGRAM_ACCOUNT_ID }}
+    steps:
+      - name: Fetch stats
+        run: |
+          G="https://graph.facebook.com/v21.0/$ACCOUNT"
+          NOW=$(date +%s); SINCE=$((NOW - 28*86400))
+          echo "== Profile =="
+          curl -s "$G?fields=username,followers_count,follows_count,media_count&access_token=$TOKEN" | jq .
+          echo "== Last 28 days =="
+          curl -s "$G/insights?metric=reach,profile_views,accounts_engaged,total_interactions,website_clicks,follows_and_unfollows&period=day&metric_type=total_value&since=$SINCE&until=$NOW&access_token=$TOKEN" \
+            | jq '[.data[]? | {(.name): .total_value.value}] | add // .'
+          echo "== Follower countries =="
+          curl -s "$G/insights?metric=follower_demographics&period=lifetime&metric_type=total_value&breakdown=country&access_token=$TOKEN" \
+            | jq '.data[0].total_value.breakdowns[0].results // . | if type=="array" then (sort_by(-.value) | map("\(.dimension_values[0]): \(.value)")) else . end'
+          echo "== Follower cities =="
+          curl -s "$G/insights?metric=follower_demographics&period=lifetime&metric_type=total_value&breakdown=city&access_token=$TOKEN" \
+            | jq '.data[0].total_value.breakdowns[0].results // . | if type=="array" then (sort_by(-.value) | .[:10] | map("\(.dimension_values[0]): \(.value)")) else . end'
