@@ -36,6 +36,22 @@ import logger from '../lib/logger.js';
 const BATCH_SIZE = 2; // combined across both content sources, per sweep — see the cron for how often sweeps run
 const SHARE_ORIGIN = 'https://go.xpressvetmarketplace.com';
 
+// Per-post stats (Sept 2026, 60 Reels): cat/dog clinical topics reached
+// ~130-215 accounts each, most poultry posts under 20 — so cat/dog posts
+// jump the queue. Tags are free-form, hence the case-insensitive match.
+const PRIORITY_TAGS = [/^cats?$/i, /^dogs?$/i];
+
+// Only 5 comments across those 60 Reels. Ending on a question invites them,
+// and comments are what gets a Reel shown to more people.
+function commentPrompt(tags = []) {
+  const has = (re) => tags.some((t) => re.test(t));
+  if (has(/^cats?$/i)) return 'Has your cat ever had this? Tell us in the comments 👇';
+  if (has(/^dogs?$/i)) return 'Has your dog ever had this? Tell us in the comments 👇';
+  if (has(/^(poultry|chickens?|broilers?|layers?)$/i)) return 'Have you seen this on your farm? Tell us in the comments 👇';
+  if (has(/^(cattle|goats?|sheep|pigs?|livestock|ruminants?)$/i)) return 'Have you seen this in your herd? Tell us in the comments 👇';
+  return 'Got a question for a vet? Ask in the comments 👇';
+}
+
 // Instagram captions can't hold clickable links, so the Instagram version
 // points to the link in bio (set to /Blog?src=ig by hand in the Instagram
 // app — the Graph API can't edit the bio). With a bare URL in the caption,
@@ -50,6 +66,8 @@ function buildBlogCaption(post, platform = 'ig') {
     `${post.title} 🐾`,
     '',
     'Free vet-backed tips, no login needed.',
+    '',
+    commentPrompt(post.tags),
     '',
     link,
     '',
@@ -75,11 +93,12 @@ function buildListingCaption(listing, platform = 'ig') {
 }
 
 async function claimNextBlogPost() {
-  return BlogPost.findOneAndUpdate(
-    { instagramStatus: 'pending' },
+  const claim = (filter) => BlogPost.findOneAndUpdate(
+    { instagramStatus: 'pending', ...filter },
     { $set: { instagramStatus: 'processing' } },
     { sort: { publishedAt: 1 }, new: true },
   ).catch(() => null);
+  return (await claim({ tags: { $in: PRIORITY_TAGS } })) || claim({});
 }
 
 async function claimNextListing() {
