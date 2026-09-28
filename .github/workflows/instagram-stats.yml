@@ -69,17 +69,18 @@ jobs:
             echo "$M: $(curl -s "$G/$PAGE/insights?metric=$M&period=day&since=$SINCE&until=$NOW&access_token=$PT" \
               | jq -c 'if .error then .error.message else ([.data[0].values[]?.value | numbers] | add) end')"
           done
-          echo "== Page posts (one JSON line each) =="
-          URL="$G/$PAGE/posts?fields=id,created_time,message,permalink_url,shares,reactions.summary(true).limit(0),comments.summary(true).limit(0)&limit=100&access_token=$PT"
+          # /posts needs pages_read_user_content (the bot doesn't have it); /videos works
+          # with the Page token, and every Page post from the worker is a video.
+          echo "== Page videos (one JSON line each) =="
+          URL="$G/$PAGE/videos?fields=id,created_time,description,permalink_url,views&limit=100&access_token=$PT"
           while [ -n "$URL" ]; do
             PAGE_JSON=$(curl -s "$URL")
             echo "$PAGE_JSON" | jq -c 'if .error then {error: .error.message} else empty end'
-            echo "$PAGE_JSON" | jq -c '.data[]?' | while read -r P; do
-              ID=$(echo "$P" | jq -r .id)
-              INS=$(curl -s "$G/$ID/insights?metric=post_impressions_unique,post_clicks&access_token=$PT")
-              echo "$P" | jq -c --argjson ins "$INS" \
-                '{fb: true, date: .created_time[:10], reactions: .reactions.summary.total_count, comments: .comments.summary.total_count,
-                  shares: (.shares.count // 0), title: ((.message // "") | split("\n")[0] | .[:70])}
+            echo "$PAGE_JSON" | jq -c '.data[]?' | while read -r V; do
+              ID=$(echo "$V" | jq -r .id)
+              INS=$(curl -s "$G/$ID/video_insights?metric=total_video_views_unique,total_video_impressions_unique,total_video_reactions_by_type_total&access_token=$PT")
+              echo "$V" | jq -c --argjson ins "$INS" \
+                '{fb: true, date: .created_time[:10], views: .views, title: ((.description // "") | split("\n")[0] | .[:70])}
                  + (if $ins.error then {insightsError: $ins.error.message} else ([$ins.data[]? | {(.name): .values[0].value}] | add // {}) end)'
             done
             URL=$(echo "$PAGE_JSON" | jq -r '.paging.next // empty')
