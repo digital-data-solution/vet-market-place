@@ -24,3 +24,4 @@ now filters (`ccnc=false`, `ccnd=false`) so future runs won't pull NC/ND-restric
 If you add more tracks manually (e.g. from YouTube Audio Library), add their attribution line
 here too, if the license requires it — YouTube Audio Library's "no attribution required" tracks
 don't need an entry.
+- **Born Free** by Pokki DJ — CC BY 3.0 — "Born Free" by Pokki DJ is licensed under CC BY 3.0 (https://creativecommons.org/licenses/by/3.0/). Source: Jamendo. (Added 2026-09-29; instrumental, used by the vet-tip Reels.)

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Composition } from 'remotion';
 import { FeatureComparison, TIER_DURATION_FRAMES } from './FeatureComparison.jsx';
+import { VetTipReel, calculateMetadata as calculateVetTipReelMetadata } from './VetTipReel.jsx';
 import { PLAN_TIERS, TIER_ORDER } from '../config/plans.js';
 
 // Real bug found via frame-QA (2026-09-11): Remotion passes defaultProps
@@ -22,13 +23,26 @@ const tiers = TIER_ORDER.map((key) => {
 });
 
 export const RemotionRoot = () => (
-  <Composition
-    id="FeatureComparison"
-    component={FeatureComparison}
-    durationInFrames={tiers.length * TIER_DURATION_FRAMES}
-    fps={30}
-    width={1080}
-    height={1920}
-    defaultProps={{ tiers }}
-  />
+  <>
+    <Composition
+      id="FeatureComparison"
+      component={FeatureComparison}
+      durationInFrames={tiers.length * TIER_DURATION_FRAMES}
+      fps={30}
+      width={1080}
+      height={1920}
+      defaultProps={{ tiers }}
+    />
+    {/* Props come from scripts/renderVetTipReels.mjs; these defaults only keep the Studio from crashing. */}
+    <Composition
+      id="VetTipReel"
+      component={VetTipReel}
+      durationInFrames={300}
+      fps={30}
+      width={1080}
+      height={1920}
+      defaultProps={{ title: '', segments: [], music: null }}
+      calculateMetadata={calculateVetTipReelMetadata}
+    />
+  </>
 );
