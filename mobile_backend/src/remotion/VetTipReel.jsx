@@ -138,7 +138,8 @@ function SuiteScreen({ screen }) {
   return (
     <AbsoluteFill style={{ background: `linear-gradient(160deg, #1e3a8a, ${BRAND})`, fontFamily: 'Arial, sans-serif' }}>
       <div style={{
-        position: 'absolute', top: 300, left: 150, width: 780, height: 800, borderRadius: 48, overflow: 'hidden',
+        // top 345: clears a two-line title pill (b3's overlapped at 300); bottom stays above the captions at 1140.
+        position: 'absolute', top: 345, left: 150, width: 780, height: 770, borderRadius: 48, overflow: 'hidden',
         background: '#f1f5f9', border: '10px solid #0f172a', boxShadow: '0 30px 80px rgba(0,0,0,0.45)',
       }}>
         <div style={{ background: 'white', padding: '22px 30px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '2px solid #e2e8f0' }}>
