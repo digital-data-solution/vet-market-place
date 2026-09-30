@@ -38,6 +38,10 @@ const CALENDAR = [
   ['11-five-emergency-signs', '2026-10-23'],
   ['05-dog-bite', '2026-10-26'],
   ['09-ticks-indoors', '2026-10-28'],
+  // Business Suite videos (for vets/clinic owners) — Tuesdays, between the pet tips.
+  ['b1-vaccine-reminders', '2026-10-06'],
+  ['b2-day-close', '2026-10-13'],
+  ['b3-start-practice', '2026-10-20'],
 ];
 
 const AI_NOTE = '🎙️ Narrated with an AI voice.';
@@ -47,8 +51,12 @@ function captions(key) {
   const withNote = (text) => text.replace(/\n\nCredits: /, `\n\n${AI_NOTE}\n\nCredits: `);
   return {
     captionInstagram: withNote(base),
-    // Facebook makes links clickable, so it gets the real link instead of "link in bio".
-    captionFacebook: withNote(base.replace('Full guide: link in bio 👆', 'Full guide: https://go.xpressvetmarketplace.com/Blog?src=fb')),
+    // Facebook makes links clickable, so each "→ link in bio" becomes the real link.
+    captionFacebook: withNote(base
+      .replace(/^(📍 .+?) → link in bio$/m, '$1: https://go.xpressvetmarketplace.com/professionals?src=fb')
+      .replace(/^(💼 .+?) → link in bio$/m, '$1: https://go.xpressvetmarketplace.com/Business?src=fb')
+      .replace('📖 Full guide → link in bio', '📖 Full guide: https://go.xpressvetmarketplace.com/Blog?src=fb')
+      .replace('🩺 Vets: get listed free on Xpress Vet → link in bio', '🩺 Vets: get listed free on Xpress Vet: https://go.xpressvetmarketplace.com/auth/register?src=fb')),
   };
 }
 

@@ -29,17 +29,40 @@ const MUSIC = [
   { file: 'born-free.mp3', credit: 'Music: "Born Free" by Pokki DJ, CC BY 3.0 (Jamendo)' },
 ];
 
-const probeSeconds = (file) => Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file]).toString().trim());
+// Topic-matched call to action for the end card + caption (2026-09-30).
+// "Find a vet" lands on /professionals — sign-in needed, account is free.
+const CTA = {
+  emergency: { headline: 'Need a vet now?', action: 'Find one near you' },
+  farm: { headline: 'Need a poultry vet?', action: 'Find one near you' },
+  pet: { headline: 'Want a trusted vet?', action: 'Find one near you' },
+  // For vets/clinic owners; caption line starts with 💼 so the Facebook version
+  // links to /Business instead of /professionals.
+  business: { headline: 'Run your clinic on your phone', action: 'Start free', emoji: '💼' },
+};
+const CTA_BY_VIDEO = {
+  '02-bloat': 'emergency', '04-parvo-one-injection': 'emergency', '05-dog-bite': 'emergency',
+  '08-palm-oil-myth': 'emergency', '11-five-emergency-signs': 'emergency',
+  '06-newcastle': 'farm', '10-heat-stress': 'farm',
+};
+// spec.json can set "cta" per video; otherwise the map above, else pet care.
+const ctaFor = (video) => CTA[video.cta || CTA_BY_VIDEO[video.id] || 'pet'];
+
+const probeSeconds =(file) => Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file]).toString().trim());
 
 function captionText(video, props, music) {
   const segs = video.segments;
   const credits = [...new Set(props.segments.map((s) => s.credit).filter(Boolean)), music.credit];
+  const cta = ctaFor(video);
+  // Each "→ link in bio" line is swapped for a direct link in the Facebook caption
+  // (scheduleVetTipReels.mjs), where links are clickable.
   return [
     segs[0].text,
     '',
-    'Full guide: link in bio 👆',
-    '',
     segs[segs.length - 1].text.replace(/Tell us in the comments\.?$/, 'Tell us in the comments 👇'),
+    '',
+    `${cta.emoji || '📍'} ${cta.headline}${/[?!.]$/.test(cta.headline) ? '' : '.'} ${cta.action} → link in bio`,
+    '📖 Full guide → link in bio',
+    '🩺 Vets: get listed free on Xpress Vet → link in bio',
     '',
     video.tags,
     '',
@@ -66,7 +89,7 @@ async function main() {
     for (const seg of props.segments) {
       if (seg.mediaKind === 'video') seg.mediaDuration = probeSeconds(path.join(WORK, seg.media));
     }
-    const inputProps = { title: props.title, segments: props.segments, music: `_brand/${music.file}` };
+    const inputProps = { title: props.title, segments: props.segments, music: `_brand/${music.file}`, cta: ctaFor(video) };
     const composition = await selectComposition({ serveUrl, id: 'VetTipReel', inputProps });
     const raw = path.join(OUT, `${video.id}.raw.mp4`);
     const final = path.join(OUT, `${video.id}.mp4`);
