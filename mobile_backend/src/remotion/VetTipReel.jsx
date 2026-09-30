@@ -148,9 +148,8 @@ export function VetTipReel({ title, segments, music }) {
         <Background seg={seg} />
         <AbsoluteFill style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0) 30%, rgba(0,0,0,0) 50%, rgba(0,0,0,0.7) 100%)' }} />
         <Captions words={seg.words} />
-        {seg.credit ? (
-          <div style={{ position: 'absolute', bottom: 40, left: 40, right: 40, fontFamily: 'Arial', fontSize: 24, color: 'rgba(255,255,255,0.75)' }}>{seg.credit}</div>
-        ) : null}
+        {/* No on-screen credits (Sam, 2026-09-29): Pexels needs none, and the CC BY/BY-SA
+            Commons photos are credited in the post caption (renderVetTipReels.mjs). */}
         <Audio src={staticFile(seg.audio)} />
       </Sequence>
     );
@@ -164,7 +163,7 @@ export function VetTipReel({ title, segments, music }) {
       <Sequence from={cursor}>
         <EndCard />
       </Sequence>
-      {music ? <Audio src={staticFile(music)} volume={(f) => interpolate(f, [durationInFrames - 30, durationInFrames], [0.09, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' })} loop /> : null}
+      {music ? <Audio src={staticFile(music)} volume={(f) => interpolate(f, [durationInFrames - 30, durationInFrames], [0.07, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' })} loop /> : null}
     </AbsoluteFill>
   );
 }
