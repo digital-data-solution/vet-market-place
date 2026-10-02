@@ -19,7 +19,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BACKEND = path.join(__dirname, '..');
 const REELS_DIR = process.env.REELS_DIR || path.join(BACKEND, '..', '..', 'instagram-videos');
 const WORK = path.join(REELS_DIR, 'work');
-const OUT = path.join(REELS_DIR, 'out');
+// PLATFORM=youtube renders the Shorts version (subscribe end card) into out/youtube/
+// without touching the Instagram files in out/.
+const PLATFORM = process.env.PLATFORM || 'instagram';
+const OUT = path.join(REELS_DIR, 'out', ...(PLATFORM === 'youtube' ? ['youtube'] : []));
 const ASSETS = path.join(BACKEND, 'src', 'assets', 'listingVideo');
 
 // Instrumental (Jamendo's vocalinstrumental filter) and CC BY 3.0, not share-alike —
@@ -32,9 +35,9 @@ const MUSIC = [
 // Topic-matched call to action for the end card + caption (2026-09-30).
 // "Find a vet" lands on /professionals — sign-in needed, account is free.
 const CTA = {
-  emergency: { headline: 'Need a vet now?', action: 'Find one near you' },
-  farm: { headline: 'Need a poultry vet?', action: 'Find one near you' },
-  pet: { headline: 'Want a trusted vet?', action: 'Find one near you' },
+  emergency: { headline: 'Need a vet now?', action: 'Find one near you', audience: 'pet owner' },
+  farm: { headline: 'Need a poultry vet?', action: 'Find one near you', audience: 'poultry farmer' },
+  pet: { headline: 'Want a trusted vet?', action: 'Find one near you', audience: 'pet owner' },
   // For vets/clinic owners; caption line starts with 💼 so the Facebook version
   // links to /Business instead of /professionals.
   business: { headline: 'Run your clinic on your phone', action: 'Start free', emoji: '💼' },
@@ -89,7 +92,7 @@ async function main() {
     for (const seg of props.segments) {
       if (seg.mediaKind === 'video') seg.mediaDuration = probeSeconds(path.join(WORK, seg.media));
     }
-    const inputProps = { title: props.title, segments: props.segments, music: `_brand/${music.file}`, cta: ctaFor(video) };
+    const inputProps = { title: props.title, segments: props.segments, music: `_brand/${music.file}`, cta: ctaFor(video), platform: PLATFORM };
     const composition = await selectComposition({ serveUrl, id: 'VetTipReel', inputProps });
     const raw = path.join(OUT, `${video.id}.raw.mp4`);
     const final = path.join(OUT, `${video.id}.mp4`);

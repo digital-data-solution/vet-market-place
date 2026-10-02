@@ -251,6 +251,44 @@ function Header({ title, totalFrames }) {
 // cta = { headline, action } — topic-matched ask (emergency / farm / pet care),
 // set per video in scripts/renderVetTipReels.mjs. Added 2026-09-30: the old card
 // only said "Full guide: link in bio", and bio clicks were 4 in 28 days.
+// YouTube Shorts version (2026-10-02, Sam: "call to actions like follow,
+// subscribe"): links live in the description, not a bio, so the card asks for
+// the subscribe/like/share that grow a channel instead.
+function YouTubeEndCard({ cta }) {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const pop = spring({ frame, fps, config: { damping: 13, stiffness: 120 }, durationInFrames: 16 });
+  const pulse = 1 + 0.05 * Math.sin(frame / 4);
+  return (
+    <AbsoluteFill style={{ background: `linear-gradient(160deg, ${BRAND}, #1e3a8a)`, justifyContent: 'center', alignItems: 'center', gap: 34 }}>
+      <div style={{ transform: `scale(${pop})`, background: 'white', borderRadius: 40, padding: 24 }}>
+        <Img src={staticFile('_brand/logo.png')} style={{ height: 130 }} />
+      </div>
+      <div style={{ fontFamily: FONT, fontWeight: 900, fontSize: 64, color: 'white', textAlign: 'center', lineHeight: 1.15, width: 960 }}>
+        Free vet tips from a Nigerian vet
+      </div>
+      <div style={{
+        transform: `scale(${pop * pulse})`, fontFamily: FONT, fontWeight: 900, fontSize: 76, color: 'white',
+        background: '#FF0000', borderRadius: 24, padding: '22px 54px',
+      }}>
+        🔔 SUBSCRIBE
+      </div>
+      <div style={{ fontFamily: FONT, fontWeight: 900, fontSize: 50, color: HIGHLIGHT, textAlign: 'center', lineHeight: 1.2, width: 960 }}>
+        👍 Like &amp; share with a {cta?.audience || 'pet owner'}
+      </div>
+      <div style={{ fontFamily: 'Arial', fontWeight: 700, fontSize: 40, color: 'white', textAlign: 'center', width: 960 }}>
+        {cta?.headline || 'Need a vet?'} 👇 link in description
+      </div>
+      <div style={{
+        fontFamily: 'Arial', fontWeight: 700, fontSize: 36, color: '#0f172a', background: 'white',
+        borderRadius: 40, padding: '14px 32px', textAlign: 'center',
+      }}>
+        Follow @xpress_vet on Instagram
+      </div>
+    </AbsoluteFill>
+  );
+}
+
 function EndCard({ cta }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
@@ -277,7 +315,7 @@ function EndCard({ cta }) {
   );
 }
 
-export function VetTipReel({ title, segments, music, cta }) {
+export function VetTipReel({ title, segments, music, cta, platform }) {
   const { durationInFrames } = useVideoConfig();
   let cursor = 0;
   const seqs = segments.map((seg, i) => {
@@ -302,7 +340,7 @@ export function VetTipReel({ title, segments, music, cta }) {
         <Header title={title} totalFrames={cursor} />
       </Sequence>
       <Sequence from={cursor}>
-        <EndCard cta={cta} />
+        {platform === 'youtube' ? <YouTubeEndCard cta={cta} /> : <EndCard cta={cta} />}
       </Sequence>
       {music ? <Audio src={staticFile(music)} volume={(f) => interpolate(f, [durationInFrames - 30, durationInFrames], [0.07, 0], { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' })} loop /> : null}
     </AbsoluteFill>

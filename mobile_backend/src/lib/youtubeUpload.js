@@ -62,7 +62,10 @@ export function isYoutubeConfigured() {
  * our side, YouTube's own servers do it. Omit it (as one-off/manual calls
  * typically will) to publish immediately, same as before.
  */
-export async function uploadVideoToYouTube(filePath, { title, description, tags = [], publishAt = null }) {
+// `syntheticMedia`: YouTube's "altered or synthetic content" disclosure —
+// required when a realistic AI voice is used (the vet-tip Shorts are narrated
+// in a clone of Sam's voice).
+export async function uploadVideoToYouTube(filePath, { title, description, tags = [], publishAt = null, syntheticMedia = false }) {
   const auth = getOAuthClient();
   if (!auth) throw new Error('YouTube not configured (YOUTUBE_CLIENT_ID/SECRET/REFRESH_TOKEN missing).');
 
@@ -71,6 +74,7 @@ export async function uploadVideoToYouTube(filePath, { title, description, tags 
   const status = publishAt
     ? { privacyStatus: 'private', publishAt, selfDeclaredMadeForKids: false } // YouTube requires 'private' whenever publishAt is set
     : { privacyStatus: 'public', selfDeclaredMadeForKids: false };
+  if (syntheticMedia) status.containsSyntheticMedia = true;
 
   const res = await youtube.videos.insert({
     part: ['snippet', 'status'],
