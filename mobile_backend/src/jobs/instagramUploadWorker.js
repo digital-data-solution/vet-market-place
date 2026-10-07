@@ -28,12 +28,20 @@
  * same as everywhere else in this pipeline.
  */
 import BlogPost from '../models/BlogPost.js';
+import ScheduledReel from '../models/ScheduledReel.js';
 import Listing from '../models/Listing.js';
 import { postReelToInstagram, isInstagramConfigured, checkTokenAge } from '../lib/instagramUpload.js';
 import { postVideoToFacebookPage, isFacebookConfigured } from '../lib/facebookUpload.js';
 import logger from '../lib/logger.js';
 
-const BATCH_SIZE = 2; // combined across both content sources, per sweep — see the cron for how often sweeps run
+const BATCH_SIZE = 1; // one Instagram post per evening (was 2 — bulk days got the lowest reach)
+
+// 2026-10-07: GitHub's cron fires 4-6 h late, so the workflow now retries
+// every 30 min (Thu/Sat/Sun — the days without a scheduled vet-tip Reel)
+// and this window decides when a post actually goes out.
+const WINDOW_START_WAT = 18; // 6pm
+const WINDOW_END_WAT = 22;   // 10pm
+const MIN_GAP_HOURS = 10;    // never two Instagram posts in one evening, across both workers
 const SHARE_ORIGIN = 'https://go.xpressvetmarketplace.com';
 
 // Per-post stats (Sept 2026, 60 Reels): cat/dog clinical topics reached
@@ -175,6 +183,20 @@ async function processListing(listing) {
 export async function runSweep() {
   if (!isInstagramConfigured()) {
     logger.info('Instagram upload worker: not configured yet (INSTAGRAM_ACCOUNT_ID/ACCESS_TOKEN missing) — skipping sweep. See scripts/instagram-authorize.mjs.');
+    return;
+  }
+
+  const now = new Date();
+  const watHour = (now.getUTCHours() + 1) % 24; // Nigeria = UTC+1, no DST
+  if (watHour < WINDOW_START_WAT || watHour >= WINDOW_END_WAT) {
+    logger.info(`Instagram upload worker: ${watHour}:00 WAT is outside the ${WINDOW_START_WAT}:00–${WINDOW_END_WAT}:00 window — skipping.`);
+    return;
+  }
+  const since = new Date(now.getTime() - MIN_GAP_HOURS * 3600e3);
+  const recent = await BlogPost.exists({ instagramPostedAt: { $gte: since } })
+    || await ScheduledReel.exists({ instagramPostedAt: { $gte: since } });
+  if (recent) {
+    logger.info('Instagram upload worker: something already went to Instagram this evening — skipping.');
     return;
   }
 

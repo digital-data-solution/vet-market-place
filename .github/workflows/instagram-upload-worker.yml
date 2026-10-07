@@ -27,10 +27,13 @@ name: Instagram Upload Worker
 # after issue and needs manual renewal — the worker logs a warning starting
 # 10 days before that in its own run output, check it occasionally.
 
+# 2026-10-07: GitHub fires scheduled runs 4-6 h late, so we retry every 30
+# min from 13:00 UTC on Thu/Sat/Sun (Mon/Tue/Wed/Fri belong to the vet-tip
+# Reels in scheduled-reels-worker.yml). Runs outside 6-10pm WAT stop at the
+# first step; the worker posts at most one Reel per evening.
 on:
   schedule:
-    - cron: '0 12,17 * * 1-5' # weekdays: 1pm and 6pm WAT (UTC+1)
-    - cron: '0 10 * * 0,6'    # weekends: 11am WAT — within the 9am-12pm peak window
+    - cron: '0,30 13-20 * * 0,4,6'
   workflow_dispatch: {} # lets you trigger a sweep manually from the Actions tab too
 
 jobs:
@@ -41,17 +44,32 @@ jobs:
       run:
         working-directory: mobile_backend
     steps:
+      - name: Inside the 6-10pm WAT window?
+        id: window
+        run: |
+          h=$(TZ=Africa/Lagos date +%H)
+          if [ "${{ github.event_name }}" = workflow_dispatch ] || { [ "$h" -ge 18 ] && [ "$h" -lt 22 ]; }; then
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "$h:00 WAT — outside the window, nothing to do."
+          fi
+        working-directory: .
+
       - uses: actions/checkout@v7
+        if: steps.window.outputs.go == 'true'
 
       - uses: actions/setup-node@v7
+        if: steps.window.outputs.go == 'true'
         with:
           node-version: '24'
           cache: 'npm'
           cache-dependency-path: mobile_backend/package-lock.json
 
       - run: npm ci
+        if: steps.window.outputs.go == 'true'
 
       - name: Run one Instagram-upload sweep
+        if: steps.window.outputs.go == 'true'
         env:
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
           INSTAGRAM_ACCOUNT_ID: ${{ secrets.INSTAGRAM_ACCOUNT_ID }}
