@@ -2,14 +2,19 @@ name: Scheduled Reels Worker
 
 # Posts ready-made Reels stored in the ScheduledReel collection (first batch:
 # the 11 narrated vet-tip videos, Oct 2026) at Sam's calendar slot —
-# Monday/Wednesday/Friday 7:30pm WAT (18:30 UTC), after the 1pm and 6pm
+# Monday/Wednesday/Friday evening (6-10pm WAT), after the 1pm and 6pm
 # automatic blog Reels, plus Tuesday for the weekly Business Suite video
 # (added 2026-09-30). One Reel per run; postAt decides which one is due.
+#
+# GitHub starts scheduled runs hours late (Oct 2026: 4-6 h, Reels landed at
+# ~1am WAT), so instead of one 18:30 UTC run we try every 30 min from 13:00
+# UTC. Runs outside the 6-10pm WAT window stop at the first step; the worker
+# posts at most one Reel per evening (src/jobs/scheduledReelWorker.js).
 # Needs the same secrets as instagram-upload-worker.yml.
 
 on:
   schedule:
-    - cron: '30 18 * * 1,2,3,5'
+    - cron: '0,30 13-20 * * 1,2,3,5'
   workflow_dispatch: {}
 
 jobs:
@@ -20,17 +25,32 @@ jobs:
       run:
         working-directory: mobile_backend
     steps:
+      - name: Inside the 6-10pm WAT window?
+        id: window
+        run: |
+          h=$(TZ=Africa/Lagos date +%H)
+          if [ "${{ github.event_name }}" = workflow_dispatch ] || { [ "$h" -ge 18 ] && [ "$h" -lt 22 ]; }; then
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "$h:00 WAT — outside the window, nothing to do."
+          fi
+        working-directory: .
+
       - uses: actions/checkout@v7
+        if: steps.window.outputs.go == 'true'
 
       - uses: actions/setup-node@v7
+        if: steps.window.outputs.go == 'true'
         with:
           node-version: '24'
           cache: 'npm'
           cache-dependency-path: mobile_backend/package-lock.json
 
       - run: npm ci
+        if: steps.window.outputs.go == 'true'
 
       - name: Run one scheduled-Reels sweep
+        if: steps.window.outputs.go == 'true'
         env:
           MONGODB_URI: ${{ secrets.MONGODB_URI }}
           INSTAGRAM_ACCOUNT_ID: ${{ secrets.INSTAGRAM_ACCOUNT_ID }}
