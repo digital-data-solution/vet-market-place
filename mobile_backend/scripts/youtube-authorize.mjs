@@ -21,8 +21,11 @@
  *   1. Select (or create) that project in the top project-picker.
  *   2. APIs & Services -> Library -> search "YouTube Data API v3" -> Enable.
  *   3. APIs & Services -> OAuth consent screen -> External -> fill the
- *      required fields (app name "Xpress Vet", your email) -> Save. Leave
- *      Publishing status as "Testing" (no Google review needed for this).
+ *      required fields (app name "Xpress Vet", your email) -> Save. Then
+ *      click "Publish app" (status "In production"). Do NOT leave it in
+ *      "Testing": Google expires Testing refresh tokens after 7 days, which
+ *      killed every upload in Oct 2026 (invalid_grant). Unverified is fine
+ *      for your own channel — you just click past the "unverified" warning.
  *   4. OAuth consent screen -> Test users -> Add your own Google account
  *      email (the one that owns the Xpress Vet YouTube channel).
  *   5. APIs & Services -> Credentials -> Create Credentials -> OAuth
