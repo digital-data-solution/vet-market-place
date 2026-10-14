@@ -187,7 +187,9 @@ app.use((req, res, next) => {
 
 // ─── Health ───────────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => {
-  res.json({ status: 'OK', version: '8-spa-presend', uptime: process.uptime(), timestamp: new Date().toISOString() });
+  // socialPosting: whether the Render server posts the evening Reels itself (jobs/socialPostingJobs.js)
+  const socialPosting = Boolean(process.env.INSTAGRAM_ACCOUNT_ID && process.env.INSTAGRAM_ACCESS_TOKEN && process.env.FACEBOOK_PAGE_ID);
+  res.json({ status: 'OK', version: '8-spa-presend', uptime: process.uptime(), socialPosting, timestamp: new Date().toISOString() });
 });
 
 // ─── Marketplace share preview (/l/:id) ───────────────────────────────────────

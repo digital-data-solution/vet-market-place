@@ -12,6 +12,7 @@
 import ScheduledReel from '../models/ScheduledReel.js';
 import { postReelToInstagram, isInstagramConfigured, checkTokenAge } from '../lib/instagramUpload.js';
 import { postVideoToFacebookPage, isFacebookConfigured } from '../lib/facebookUpload.js';
+import { claimEveningSlot, releaseEveningSlot } from '../lib/instagramEveningSlot.js';
 import logger from '../lib/logger.js';
 
 const WINDOW_START_WAT = 18; // 6pm
@@ -55,6 +56,12 @@ export async function runSweep() {
   const tokenWarning = checkTokenAge();
   if (tokenWarning) logger.error(`Instagram token warning: ${tokenWarning}`);
 
+  const slot = await claimEveningSlot('scheduled-reels');
+  if (!slot) {
+    logger.info('Scheduled Reels: another sweep has this evening\'s Instagram slot — skipping.');
+    return;
+  }
+
   // A run just before 7pm WAT may take that evening's Reel.
   const due = new Date(now.getTime() + EARLY_GRACE_HOURS * 3600e3);
   const reel = await ScheduledReel.findOneAndUpdate(
@@ -64,6 +71,7 @@ export async function runSweep() {
   );
   if (!reel) {
     logger.info('Scheduled Reels: nothing due.');
+    await releaseEveningSlot(slot);
     return;
   }
 
@@ -82,4 +90,5 @@ export async function runSweep() {
   }
   await tryPostToFacebook(reel);
   await reel.save();
+  if (reel.instagramStatus !== 'posted') await releaseEveningSlot(slot);
 }

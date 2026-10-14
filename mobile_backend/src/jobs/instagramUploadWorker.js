@@ -32,6 +32,7 @@ import ScheduledReel from '../models/ScheduledReel.js';
 import Listing from '../models/Listing.js';
 import { postReelToInstagram, isInstagramConfigured, checkTokenAge } from '../lib/instagramUpload.js';
 import { postVideoToFacebookPage, isFacebookConfigured } from '../lib/facebookUpload.js';
+import { claimEveningSlot, releaseEveningSlot } from '../lib/instagramEveningSlot.js';
 import logger from '../lib/logger.js';
 
 const BATCH_SIZE = 1; // one Instagram post per evening (was 2 — bulk days got the lowest reach)
@@ -203,6 +204,12 @@ export async function runSweep() {
   const tokenWarning = checkTokenAge();
   if (tokenWarning) logger.error(`Instagram token warning: ${tokenWarning}`); // logger.error, not .info — this deserves attention even though it's not a hard failure yet
 
+  const slot = await claimEveningSlot('instagram-upload');
+  if (!slot) {
+    logger.info('Instagram upload worker: another sweep has this evening\'s Instagram slot — skipping.');
+    return;
+  }
+
   let done = 0;
   while (done < BATCH_SIZE) {
     // Facebook-only promo items don't use up an Instagram slot.
@@ -214,4 +221,6 @@ export async function runSweep() {
 
     break; // nothing pending in either collection — done for this run
   }
+
+  if (!(await BlogPost.exists({ instagramPostedAt: { $gte: now } }))) await releaseEveningSlot(slot);
 }

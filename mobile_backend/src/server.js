@@ -26,6 +26,7 @@ const { default: startMarketJobs }            = await import('./jobs/marketJobs.
 const { default: startMediaCleanupJob }       = await import('./jobs/mediaCleanup.js');
 const { default: startAdminNotificationDispatchJob } = await import('./jobs/adminNotificationDispatch.js');
 const { default: startEmailQueueWorker }      = await import('./jobs/emailQueueWorker.js');
+const { default: startSocialPostingJobs }     = await import('./jobs/socialPostingJobs.js');
 
 // Start services
 await connectDB();
@@ -60,6 +61,7 @@ startMarketJobs();
 startMediaCleanupJob();
 startAdminNotificationDispatchJob();
 startEmailQueueWorker();
+startSocialPostingJobs();
 
 const PORT = process.env.PORT || 5000;
 

@@ -12,6 +12,9 @@ name: Scheduled Reels Worker
 # posts at most one Reel per evening (src/jobs/scheduledReelWorker.js).
 # Needs the same secrets as instagram-upload-worker.yml.
 
+# Since 2026-10-14 the Render server posts these on time (src/jobs/socialPostingJobs.js);
+# this workflow is now the BACKUP. lib/instagramEveningSlot.js stops double posts.
+
 on:
   schedule:
     - cron: '0,30 13-20 * * 1,2,3,5'
