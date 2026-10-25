@@ -32,6 +32,12 @@ export function isFacebookConfigured() {
   return Boolean(process.env.FACEBOOK_PAGE_ID && process.env.INSTAGRAM_ACCESS_TOKEN);
 }
 
+// Auto-posted Page videos got ~0 views (Sept–Oct 2026), so the workers stop
+// posting to the Page unless FACEBOOK_AUTOPOST=on. Instagram is unaffected.
+export function isFacebookAutopostOn() {
+  return isFacebookConfigured() && process.env.FACEBOOK_AUTOPOST === 'on';
+}
+
 // Derives a real Page Access Token from the System User token. Not cached —
 // this runs at most a few times/day (worker BATCH_SIZE=2, a handful of
 // sweeps/day) so the extra round-trip is negligible, and staying

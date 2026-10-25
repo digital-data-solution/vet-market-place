@@ -31,7 +31,7 @@ import BlogPost from '../models/BlogPost.js';
 import ScheduledReel from '../models/ScheduledReel.js';
 import Listing from '../models/Listing.js';
 import { postReelToInstagram, isInstagramConfigured, checkTokenAge } from '../lib/instagramUpload.js';
-import { postVideoToFacebookPage, isFacebookConfigured } from '../lib/facebookUpload.js';
+import { postVideoToFacebookPage, isFacebookAutopostOn } from '../lib/facebookUpload.js';
 import { claimEveningSlot, releaseEveningSlot } from '../lib/instagramEveningSlot.js';
 import logger from '../lib/logger.js';
 
@@ -74,6 +74,16 @@ function commentPrompt(tags = []) {
 // 38 Reels reaching ~1.5k accounts drove only ~27 blog views (Sept 2026).
 // Facebook DOES make caption links clickable, so it gets the direct link.
 // ?src= tags feed models/ShareClick.js so clicks per platform are countable.
+// Paid vet chat (Oct 2026): the money comes from owners with a sick animal,
+// so every post ends on a WhatsApp link to the Xpress Vet Business number.
+// The prefilled text carries the platform so we can tell where chats came from.
+const CONSULT_WHATSAPP = process.env.CONSULT_WHATSAPP || '2349061138341';
+function consultLine(platform = 'ig') {
+  if (platform === 'ig') return '🩺 Sick pet or birds? Chat with a vet on WhatsApp → link in bio';
+  const text = encodeURIComponent(`Hi Xpress Vet, I need a vet's help (${platform})`);
+  return `🩺 Sick pet or birds? Chat with a vet on WhatsApp: https://wa.me/${CONSULT_WHATSAPP}?text=${text}`;
+}
+
 function buildBlogCaption(post, platform = 'ig') {
   const link = platform === 'ig'
     ? '📖 Full guide → link in bio'
@@ -85,6 +95,7 @@ function buildBlogCaption(post, platform = 'ig') {
     '',
     commentPrompt(post.tags),
     '',
+    consultLine(platform),
     link,
     '',
     '#XpressVet #VeterinaryTips #PetsOfNigeria #AnimalHealth #Reels',
@@ -130,7 +141,7 @@ async function claimNextListing() {
 // result. Same System User token, just a different Graph API endpoint
 // (see lib/facebookUpload.js).
 async function tryPostToFacebook(doc, videoUrl, caption, label) {
-  if (!isFacebookConfigured()) return;
+  if (!isFacebookAutopostOn()) return;
   if (doc.facebookStatus === 'posted') return; // an Instagram retry must not double-post to the Page
   try {
     const { videoId, url } = await postVideoToFacebookPage(videoUrl, caption);

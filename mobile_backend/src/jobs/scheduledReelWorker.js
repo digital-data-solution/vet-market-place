@@ -11,7 +11,7 @@
  */
 import ScheduledReel from '../models/ScheduledReel.js';
 import { postReelToInstagram, isInstagramConfigured, checkTokenAge } from '../lib/instagramUpload.js';
-import { postVideoToFacebookPage, isFacebookConfigured } from '../lib/facebookUpload.js';
+import { postVideoToFacebookPage, isFacebookAutopostOn } from '../lib/facebookUpload.js';
 import { claimEveningSlot, releaseEveningSlot } from '../lib/instagramEveningSlot.js';
 import logger from '../lib/logger.js';
 
@@ -21,7 +21,7 @@ const MIN_GAP_HOURS = 10;    // one Reel per evening
 const EARLY_GRACE_HOURS = 1; // postAt is 7pm WAT; a 6pm run may post it
 
 async function tryPostToFacebook(reel) {
-  if (!isFacebookConfigured() || reel.facebookStatus === 'posted') return;
+  if (!isFacebookAutopostOn() || reel.facebookStatus === 'posted') return;
   try {
     const { url } = await postVideoToFacebookPage(reel.videoUrl, reel.captionFacebook);
     reel.facebookStatus = 'posted';
