@@ -42,6 +42,19 @@ const CALENDAR = [
   ['b1-vaccine-reminders', '2026-10-06'],
   ['b2-day-close', '2026-10-13'],
   ['b3-start-practice', '2026-10-20'],
+  // November 2026 "DM us <keyword>" batch (academy topic bank), Mon/Wed/Fri.
+  ['12-festive-foods-dog', '2026-11-04'],
+  ['13-quiz-puppy-parvo', '2026-11-06'],
+  ['14-puppy-vaccine-schedule', '2026-11-09'],
+  ['15-quiz-twisted-neck', '2026-11-11'],
+  ['16-kitten-first-month', '2026-11-13'],
+  ['17-harmattan-dog-skin', '2026-11-16'],
+  ['18-quiz-pale-gums', '2026-11-18'],
+  ['19-ringworm-cats-kids', '2026-11-20'],
+  ['20-distemper', '2026-11-23'],
+  ['21-quiz-gumboro', '2026-11-25'],
+  ['22-fireworks-calm', '2026-11-27'],
+  ['23-cat-christmas-food', '2026-11-30'],
 ];
 
 const AI_NOTE = '🎙️ Narrated with an AI voice.';

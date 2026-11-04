@@ -48,7 +48,10 @@ const CTA_BY_VIDEO = {
   '06-newcastle': 'farm', '10-heat-stress': 'farm',
 };
 // spec.json can set "cta" per video; otherwise the map above, else pet care.
-const ctaFor = (video) => CTA[video.cta || CTA_BY_VIDEO[video.id] || 'pet'];
+// cta "dm" (Nov 2026, Sam's choice): "DM us <keyword>" for a free guide, answered by hand.
+const ctaFor = (video) => (video.cta === 'dm'
+  ? { kind: 'dm', keyword: video.keyword, quiz: !!video.quiz }
+  : CTA[video.cta || CTA_BY_VIDEO[video.id] || 'pet']);
 
 const probeSeconds =(file) => Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file]).toString().trim());
 
@@ -56,6 +59,18 @@ function captionText(video, props, music) {
   const segs = video.segments;
   const credits = [...new Set(props.segments.map((s) => s.credit).filter(Boolean)), music.credit];
   const cta = ctaFor(video);
+  if (cta.kind === 'dm') {
+    return [
+      segs[0].text,
+      '',
+      ...(cta.quiz ? [segs[segs.length - 3].text, '', 'Comment your number 👇 Answer tomorrow evening.', ''] : []),
+      `💬 DM us "${cta.keyword}" for a free guide 📩`,
+      '',
+      video.tags,
+      '',
+      'Credits: ' + credits.join(' · '),
+    ].join('\n');
+  }
   // Each "→ link in bio" line is swapped for a direct link in the Facebook caption
   // (scheduleVetTipReels.mjs), where links are clickable.
   return [

@@ -289,10 +289,41 @@ function YouTubeEndCard({ cta }) {
   );
 }
 
+function DmEndCard({ cta }) {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const pop = spring({ frame, fps, config: { damping: 13, stiffness: 120 }, durationInFrames: 16 });
+  const word = cta.keyword || 'VET';
+  return (
+    <AbsoluteFill style={{ background: `linear-gradient(160deg, ${BRAND}, #1e3a8a)`, justifyContent: 'center', alignItems: 'center', gap: 34 }}>
+      <div style={{ background: 'white', borderRadius: 40, padding: 24 }}>
+        <Img src={staticFile('_brand/logo.png')} style={{ height: 120 }} />
+      </div>
+      {cta.quiz ? (
+        <div style={{ fontFamily: FONT, fontWeight: 900, fontSize: 64, color: 'white', textAlign: 'center', width: 960, lineHeight: 1.15 }}>
+          Comment your answer 👇
+        </div>
+      ) : null}
+      <div style={{ fontFamily: FONT, fontWeight: 900, fontSize: 76, color: 'white', textAlign: 'center' }}>DM us</div>
+      <div style={{
+        transform: `scale(${pop})`, fontFamily: FONT, fontWeight: 900, fontSize: word.length > 7 ? 104 : 130,
+        color: '#0f172a', background: HIGHLIGHT, borderRadius: 32, padding: '18px 48px', letterSpacing: 2,
+      }}>
+        {word}
+      </div>
+      <div style={{ fontFamily: FONT, fontWeight: 900, fontSize: 60, color: 'white', textAlign: 'center', width: 960 }}>
+        for a free guide 📩
+      </div>
+      <div style={{ fontFamily: 'Arial', fontWeight: 700, fontSize: 40, color: 'white', marginTop: 10 }}>@xpress_vet</div>
+    </AbsoluteFill>
+  );
+}
+
 function EndCard({ cta }) {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const pop = spring({ frame, fps, config: { damping: 13, stiffness: 120 }, durationInFrames: 16 });
+  if (cta?.kind === 'dm') return <DmEndCard cta={cta} />;
   return (
     <AbsoluteFill style={{ background: `linear-gradient(160deg, ${BRAND}, #1e3a8a)`, justifyContent: 'center', alignItems: 'center', gap: 38 }}>
       <div style={{ transform: `scale(${pop})`, background: 'white', borderRadius: 40, padding: 28 }}>
