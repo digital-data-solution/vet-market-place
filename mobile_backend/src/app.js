@@ -11,6 +11,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
 
 // Routes
+import { createPublicVetHandlers } from './api/publicVets.controller.js';
 import authRoutes            from './routes/auth.routes.js';
 import kennelRoutes          from './routes/kennel.routes.js';
 import shopRoutes            from './routes/shop.routes.js';
@@ -175,6 +176,9 @@ app.use((req, res, next) => {
     req.path.startsWith('/api/') ||
     req.path.startsWith('/l/') ||
     req.path.startsWith('/b/') ||
+    req.path.startsWith('/v/') ||
+    req.path === '/vets' ||
+    req.path.startsWith('/vets/') ||
     req.path === '/admin' ||
     req.path === '/health'
   ) return next();
@@ -280,6 +284,19 @@ app.get('/b/:slug', async (req, res) => {
     return res.status(200).send(`<!doctype html><meta http-equiv="refresh" content="0;url=${esc(appUrl)}">`);
   }
 });
+
+// ─── Public vet pages (/v/:id, /vets, /vets/:state) ───────────────────────────
+// No login. Only vets who said yes in config/publicVets.js are shown.
+const publicVetLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  message: { success: false, message: 'Too many requests. Please try again shortly.' },
+});
+const trackPublicVetClick = (req, _res, next) => { recordShareClick(req); next(); };
+const publicVetPages = createPublicVetHandlers();
+app.get('/v/:id',       publicVetLimiter, trackPublicVetClick, publicVetPages.vetPage);
+app.get('/vets',        publicVetLimiter, trackPublicVetClick, publicVetPages.statesIndex);
+app.get('/vets/:state', publicVetLimiter, trackPublicVetClick, publicVetPages.statePage);
 
 // ─── Rate limiters ────────────────────────────────────────────────────────────
 // authLimiter used to live here and wrap the ENTIRE /api/auth router — that
