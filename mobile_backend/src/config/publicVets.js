@@ -17,6 +17,8 @@ export const PUBLIC_VETS = [
   { id: '6a79d7dcb1fc0044a3ee670a', state: 'Lagos', town: 'Surulere', treats: ['poultry', 'pets'] },
   // Nayah's: said YES on WhatsApp, 2026-11-06 20:53; town and listing number confirmed 20:54.
   { id: '6a7ebe972c5e56fc5b9ba8c4', state: 'Kwara', town: 'Ilorin' },
+  // BST: said Yes on WhatsApp, 2026-11-06 20:53; town and listing number confirmed 20:56. Does not treat poultry.
+  { id: '6a81dbb543c70eb7db372e0a', state: 'Oyo', town: 'Ologuneru, Ibadan', treats: ['pets', 'farm'] },
 ];
 
 // 36 states + FCT, so a slug that is real but has no vets yet gets a helpful
