@@ -21,6 +21,8 @@ export const PUBLIC_VETS = [
   { id: '6a81dbb543c70eb7db372e0a', state: 'Oyo', town: 'Ologuneru, Ibadan', treats: ['pets', 'farm'] },
   // Allismic: said Yes on WhatsApp, 2026-11-06 18:24. Sam confirmed the town and listing number.
   { id: '6a95e7310533e9acb7893cce', state: 'Oyo', town: 'Ojoo, Ibadan' },
+  // Veterinary Clinic Kwoi: said Yes on WhatsApp, 2026-11-06 22:20; accepting clients 22:21; said Kaduna State earlier.
+  { id: '6a30fb862d7049bee5988ad2', state: 'Kaduna', town: 'Kwoi' },
 ];
 
 // 36 states + FCT, so a slug that is real but has no vets yet gets a helpful
