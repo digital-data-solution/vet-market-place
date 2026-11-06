@@ -7,8 +7,15 @@
 // text: it often omits the state and can hold a street address, which these
 // pages must not show.
 //
+// `treats` is optional ('poultry', 'pets', 'farm'). Use it when the vet told us
+// what they treat and their listing doesn't say; otherwise it comes from the
+// listing's specialization.
+//
 // Example: { id: '<professional _id>', state: 'Lagos', town: 'Egbeda' }
-export const PUBLIC_VETS = [];
+export const PUBLIC_VETS = [
+  // Pawpriority: said Yes on WhatsApp, 2026-11-06 17:23; town and listing number confirmed 17:26.
+  { id: '6a79d7dcb1fc0044a3ee670a', state: 'Lagos', town: 'Surulere', treats: ['poultry', 'pets'] },
+];
 
 // 36 states + FCT, so a slug that is real but has no vets yet gets a helpful
 // page rather than a 404.

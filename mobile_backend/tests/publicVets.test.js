@@ -91,6 +91,14 @@ describe('public vet pages', () => {
     expect(pets.text).toContain('No vet here lists');
   });
 
+  test('what a vet told us they treat overrides their listing', async () => {
+    const app = makeApp([{ id: YES, state: 'Lagos', town: 'Egbeda', treats: ['pets'] }]);
+    const pets = await request(app).get('/vets/lagos?treats=pets');
+    expect(pets.text).toContain('Test Vet Clinic');
+    const poultry = await request(app).get('/vets/lagos?treats=poultry');
+    expect(poultry.text).not.toContain('Test Vet Clinic');
+  });
+
   test('a real state with no vets says so, and an unknown state goes to the index', async () => {
     const app = makeApp(list);
     const empty = await request(app).get('/vets/cross-river');
@@ -111,10 +119,9 @@ describe('public vet pages', () => {
 
 describe('routing in the real app', () => {
   test('the SPA catch-all does not swallow the public pages', async () => {
-    const res = await request(realApp).get('/vets');
-    expect(res.status).toBe(200);
-    expect(res.text).toContain('Find a vet by state');
+    // A state with no consenting vets, so this needs no database.
     const state = await request(realApp).get('/vets/cross-river');
+    expect(state.status).toBe(200);
     expect(state.text).toContain('Vets in Cross River');
   });
 });

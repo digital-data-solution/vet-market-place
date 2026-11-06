@@ -113,7 +113,7 @@ export function createPublicVetHandlers({ publicVets = PUBLIC_VETS, findVets = d
         state: entry.state,
         town: entry.town,
         title: decodeEntities(doc.businessName) || `Vet in ${entry.town}`,
-        treats: treatsFrom(doc.specialization),
+        treats: entry.treats ?? treatsFrom(doc.specialization),
         phone: internationalPhone(doc.phone || doc.userId?.phone),
       }];
     });
