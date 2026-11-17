@@ -1,7 +1,9 @@
 // Vets shown on the public, no-login pages (/v/:id and /vets/:state).
 //
-// Add a vet ONLY after they have said YES to their phone number appearing on
-// an open web page. Listing on the marketplace is not that consent.
+// Until 2026-11-17 a vet was added only after saying YES. On 2026-11-17 Sam
+// decided (confirmed in chat) to add listed vets from their marketplace
+// listing and tell them afterwards that they can reply NO. Remove any vet who
+// says NO the same day.
 //
 // `state` and `town` are written by hand because Professional.address is free
 // text: it often omits the state and can hold a street address, which these
@@ -25,6 +27,23 @@ export const PUBLIC_VETS = [
   { id: '6a30fb862d7049bee5988ad2', state: 'Kaduna', town: 'Kwoi' },
   // Petsure: said Yes on WhatsApp to the public-page question, 2026-11-07 05:05. Town from listing (Enugu); also covers Ebonyi.
   { id: '6a9c84c07b818adec40bd631', state: 'Enugu', town: 'Enugu (also covers Ebonyi)' },
+
+  // Added 2026-11-17 on Sam's decision, from their listings (town only, never the street).
+  // dev-fa tells each vet afterwards; anyone who replies NO comes off.
+  // Livestock Crib told us on 11-06 they treat poultry, dogs and cats.
+  { id: '6a2fd3de84d2f7edb841fc8d', state: 'Lagos', town: 'Alapere', treats: ['poultry', 'pets', 'farm'] },
+  { id: '6a7ca3b42c5e56fc5b9ba88c', state: 'Lagos', town: 'Egbeda' },
+  { id: '6a96aa560533e9acb7893d59', state: 'Lagos', town: 'Festac' },
+  { id: '6a336327e63dcfdb9da35a7f', state: 'Oyo', town: 'Odo Ona, Ibadan' },
+  { id: '6a82f14a0de4698741204319', state: 'Oyo', town: 'Bodija, Ibadan' },
+  { id: '6a7b35519f5cf7e6c8f82e5b', state: 'Ogun', town: 'Obafemi Owode' },
+  { id: '6a32b92a797aab86cb335ef7', state: 'Ogun', town: 'Magboro (also visits Lagos and along the Lagos–Ibadan Expressway)' },
+  { id: '6a44110fd5d887b90d5082f8', state: 'Kaduna', town: 'Zaria' },
+  // Amriza: poultry only, never pets (said so on 11-06).
+  { id: '6a7ae7decef1fe31674167bf', state: 'Kaduna', town: 'Zaria', treats: ['poultry'] },
+  { id: '6a7b14859f5cf7e6c8f82e3f', state: 'FCT', town: 'Abuja Municipal (AMAC)' },
+  { id: '6a340a3194e929b554229473', state: 'Osun', town: 'Okuku' },
+  { id: '6a9904fc92fa168870dfd205', state: 'Delta', town: 'Asaba' },
 ];
 
 // 36 states + FCT, so a slug that is real but has no vets yet gets a helpful

@@ -87,6 +87,22 @@ export const GUIDE_STATES = {
     'poultry-vets': 'Poultry farms are growing across Enugu and neighbouring Ebonyi, from small backyard flocks to commercial broiler and layer houses. In the rainy season, wet litter brings coccidiosis, so act early when droppings change.',
     'pet-vets': 'Dog and cat owners in Enugu and Ebonyi can reach a vet below for vaccines, tick control, deworming and emergencies.',
   },
+  Ogun: {
+    // No poultry page for Ogun until a listed vet there treats poultry (an empty page would not help farmers).
+    'pet-vets': 'From Abeokuta to Mowe, Magboro and the Lagos border towns, dog and cat owners in Ogun can reach a vet below for vaccines, ticks, deworming and emergencies.',
+  },
+  FCT: {
+    'poultry-vets': 'Poultry farms ring Abuja, from Kuje and Gwagwalada to Bwari and the city’s edges. High feed and day-old chick prices mean every bird lost hurts, so early help from a vet pays.',
+    'pet-vets': 'Many Abuja homes keep dogs for security and companionship. Rabies vaccines, puppy shots, tick control and fast help in an emergency start with a vet you can reach.',
+  },
+  Osun: {
+    'poultry-vets': 'Poultry farming is a key business across Osun, from Osogbo and Ilesa to Ikirun and Okuku. A vet who can come quickly or advise early on WhatsApp helps stop losses before they spread.',
+    'pet-vets': 'Dog and cat owners across Osun can reach a vet below for vaccines, deworming, tick control and emergencies.',
+  },
+  Delta: {
+    'poultry-vets': 'Poultry farms are growing around Asaba, Warri, Sapele and across Delta. Hot, humid weather and wet seasons bring heat stress and coccidiosis, so act early when birds change.',
+    'pet-vets': 'From Asaba to Warri, dog and cat owners in Delta can reach a vet below for vaccines, tick control, deworming and emergencies.',
+  },
   Kwara: {
     'poultry-vets': 'Poultry farming is growing fast around Ilorin and across Kwara. Strong harmattan and hot dry months put birds under stress, and stressed birds fall sick more easily.',
     'pet-vets': 'Dog and cat owners in Ilorin and across Kwara can reach a vet below for vaccines, deworming, tick control and emergencies.',
