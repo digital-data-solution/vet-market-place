@@ -12,9 +12,11 @@
  */
 import Professional from '../models/Professional.js';
 import { PUBLIC_VETS, NIGERIAN_STATES } from '../config/publicVets.js';
+import { GUIDE_TYPES, GUIDE_STATES } from '../config/vetGuides.js';
 import logger from '../lib/logger.js';
 
 const WEB_APP_ORIGIN = process.env.WEB_APP_ORIGIN || 'https://xpressvetmarketplace.com';
+const PUBLIC_ORIGIN = process.env.PUBLIC_PAGES_ORIGIN || 'https://go.xpressvetmarketplace.com';
 const OBJECT_ID = /^[0-9a-f]{24}$/i;
 const TREATS = { poultry: 'poultry', pets: 'dogs, cats and other pets' };
 
@@ -57,10 +59,23 @@ function vetCard(vet) {
   return `<section class="card"><h2>${esc(vet.title)}</h2><p class="town">${esc(vet.town)}, ${esc(vet.state)}</p><p>${esc(treats)}</p>${buttons}</section>`;
 }
 
-function page({ title, description, body }) {
+/** Guide-page card: no phone number, so Google never indexes one. */
+function guideCard(vet) {
+  const treats = vet.treats.map((t) => TREAT_LABELS[t]).join(' · ') || 'General veterinary practice';
+  return `<section class="card"><h3>${esc(vet.title)}</h3><p class="town">${esc(vet.town)}, ${esc(vet.state)}</p><p>${esc(treats)}</p><div class="btns"><a class="btn wa" href="/v/${esc(vet.id)}">Call or WhatsApp (no login)</a></div></section>`;
+}
+
+/** Guide pages that exist, as [type, state] pairs. */
+export function guidePages() {
+  return Object.keys(GUIDE_STATES).flatMap((s) => Object.keys(GUIDE_TYPES).filter((t) => GUIDE_STATES[s][t]).map((t) => [t, s]));
+}
+
+export const guidePath = (type, state) => `/${type}/${stateSlug(state)}`;
+
+function page({ title, description, body, index = false, canonical = null }) {
   return `<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="robots" content="noindex">
+${index ? '' : '<meta name="robots" content="noindex">'}${canonical ? `<link rel="canonical" href="${esc(canonical)}">` : ''}
 <title>${esc(title)}</title>
 <meta name="description" content="${esc(description)}">
 <meta property="og:type" content="website">
@@ -72,7 +87,13 @@ body{margin:0;background:#f6f7f9;color:#1c2430;font:16px/1.5 system-ui,-apple-sy
 main{max-width:560px;margin:0 auto;padding:16px}
 .brand{font-weight:700;color:#e8610a;text-decoration:none}
 h1{font-size:24px;line-height:1.25;margin:12px 0 4px}
-h2{font-size:18px;margin:0 0 2px}
+h2{font-size:20px;margin:24px 0 6px}
+h3{font-size:18px;margin:0 0 2px}
+.card h2{font-size:18px;margin:0 0 2px}
+.lead{font-size:17px}
+.tips dt{font-weight:700;margin-top:10px}.tips dd{margin:2px 0 0}
+.cta{background:#fff7f0;border:1px solid #f3c9a6;border-radius:10px;padding:14px;margin:16px 0}
+.cta .btn{display:block;background:#e8610a;margin-top:10px}
 p{margin:4px 0}
 .card{background:#fff;border:1px solid #e3e6ea;border-radius:10px;padding:14px;margin:12px 0}
 .town,.muted{color:#5b6573}
@@ -119,10 +140,10 @@ export function createPublicVetHandlers({ publicVets = PUBLIC_VETS, findVets = d
     });
   }
 
-  const sendHtml = (res, html) => {
+  const sendHtml = (res, html, { index = false } = {}) => {
     res.set('Content-Type', 'text/html; charset=utf-8');
     res.set('Cache-Control', 'public, max-age=300');
-    res.set('X-Robots-Tag', 'noindex');
+    if (!index) res.set('X-Robots-Tag', 'noindex');
     return res.send(html);
   };
 
@@ -196,7 +217,39 @@ export function createPublicVetHandlers({ publicVets = PUBLIC_VETS, findVets = d
     }
   }
 
-  return { vetPage, statesIndex, statePage };
+  async function guidePage(req, res) {
+    const type = req.params.type;
+    const guide = GUIDE_TYPES[type];
+    const stateName = Object.keys(GUIDE_STATES).find((s) => stateSlug(s) === String(req.params.state).toLowerCase());
+    const intro = guide && stateName ? GUIDE_STATES[stateName][type] : null;
+    if (!intro) {
+      const known = NIGERIAN_STATES.find((s) => stateSlug(s) === String(req.params.state).toLowerCase());
+      return res.redirect(302, known ? `/vets/${stateSlug(known)}` : '/vets');
+    }
+    try {
+      const vets = (await loadVets(publicVets.filter((e) => e.state === stateName)))
+        .filter((v) => v.treats.includes(guide.treats));
+      const list = vets.length
+        ? vets.map(guideCard).join('')
+        : `<p>No ${esc(guide.noun)} is listed in ${esc(stateName)} yet. <a href="/vets/${esc(stateSlug(stateName))}">See all vets in ${esc(stateName)}</a>.</p>`;
+      const tips = guide.tips.map(([t, d]) => `<dt>${esc(t)}</dt><dd>${esc(d)}</dd>`).join('');
+      const faq = guide.faq.map(([q, a]) => `<h3>${esc(q)}</h3><p>${esc(a)}</p>`).join('');
+      const cta = (c) => (c ? `<div class="cta"><p>${esc(c.text)}</p><a class="btn" href="${esc(c.href)}" rel="noopener">${esc(c.button)}</a></div>` : '');
+      const others = guidePages().filter(([t, s]) => !(t === type && s === stateName))
+        .map(([t, s]) => `<a href="${guidePath(t, s)}">${esc(GUIDE_TYPES[t].h1(s))}</a>`).join('');
+      return sendHtml(res, page({
+        index: true,
+        canonical: `${PUBLIC_ORIGIN}${guidePath(type, stateName)}`,
+        title: `${guide.title(stateName)} | Xpress Vet`,
+        description: guide.description(stateName),
+        body: `<h1>${esc(guide.h1(stateName))}</h1><p class="lead">${esc(intro)}</p>${list}${cta(guide.community)}<h2>${esc(guide.tipsHeading)}</h2><dl class="tips">${tips}</dl>${cta(guide.learn)}<h2>Questions</h2>${faq}<h2>More guides</h2><div class="states">${others}</div>`,
+      }), { index: true });
+    } catch (err) {
+      return sendError(res, err);
+    }
+  }
+
+  return { vetPage, statesIndex, statePage, guidePage };
 }
 
 function defaultFindVets(ids) {

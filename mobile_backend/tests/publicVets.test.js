@@ -45,6 +45,8 @@ function makeApp(publicVets) {
   app.get('/v/:id', h.vetPage);
   app.get('/vets', h.statesIndex);
   app.get('/vets/:state', h.statePage);
+  app.get('/poultry-vets/:state', (req, res) => { req.params.type = 'poultry-vets'; return h.guidePage(req, res); });
+  app.get('/pet-vets/:state', (req, res) => { req.params.type = 'pet-vets'; return h.guidePage(req, res); });
   return app;
 }
 
@@ -117,7 +119,57 @@ describe('public vet pages', () => {
   });
 });
 
+describe('Google guide pages', () => {
+  test('a guide page can be indexed and lists the vet without a phone number', async () => {
+    const res = await request(makeApp(list)).get('/poultry-vets/lagos');
+    expect(res.status).toBe(200);
+    expect(res.text).not.toContain('noindex');
+    expect(res.headers['x-robots-tag']).toBeUndefined();
+    expect(res.text).toContain('rel="canonical" href="https://go.xpressvetmarketplace.com/poultry-vets/lagos"');
+    expect(res.text).toContain('Test Vet Clinic');
+    expect(res.text).toContain(`href="/v/${YES}"`);
+    expect(res.text).not.toContain('2348031234567');
+    expect(res.text).not.toContain('Closed Clinic');
+    for (const secret of ['Dr Private Name', 'VCN-SECRET', 'private@example.com', 'Hidden Street']) {
+      expect(res.text).not.toContain(secret);
+    }
+  });
+
+  test('a guide only lists vets who treat that kind of animal', async () => {
+    const res = await request(makeApp(list)).get('/pet-vets/lagos');
+    expect(res.status).toBe(200);
+    expect(res.text).not.toContain('Test Vet Clinic');
+    expect(res.text).toContain('is listed in Lagos yet');
+  });
+
+  test('a state without a guide goes to its normal page', async () => {
+    const app = makeApp(list);
+    const noGuide = await request(app).get('/poultry-vets/cross-river');
+    expect(noGuide.status).toBe(302);
+    expect(noGuide.headers.location).toBe('/vets/cross-river');
+    const unknown = await request(app).get('/pet-vets/atlantis');
+    expect(unknown.headers.location).toBe('/vets');
+  });
+
+  test('the WhatsApp pages stay out of Google', async () => {
+    const res = await request(makeApp(list)).get('/vets/lagos');
+    expect(res.text).toContain('noindex');
+  });
+});
+
 describe('routing in the real app', () => {
+  test('robots.txt and sitemap.xml list the guide pages', async () => {
+    const robots = await request(realApp).get('/robots.txt');
+    expect(robots.status).toBe(200);
+    expect(robots.text).toContain('Sitemap: https://go.xpressvetmarketplace.com/sitemap.xml');
+    const map = await request(realApp).get('/sitemap.xml');
+    expect(map.headers['content-type']).toContain('xml');
+    for (const p of ['/poultry-vets/lagos', '/pet-vets/oyo', '/poultry-vets/kwara']) {
+      expect(map.text).toContain(`https://go.xpressvetmarketplace.com${p}`);
+    }
+  });
+
+
   test('the SPA catch-all does not swallow the public pages', async () => {
     // A state with no consenting vets, so this needs no database.
     const state = await request(realApp).get('/vets/cross-river');
