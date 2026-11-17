@@ -5,6 +5,7 @@ import {
   createPublicVetHandlers,
   internationalPhone,
   treatsFrom,
+  visitSource,
 } from '../src/api/publicVets.controller.js';
 
 const YES = 'a'.repeat(24);
@@ -36,12 +37,15 @@ const docs = [
   },
 ];
 
-function makeApp(publicVets) {
+function makeApp(publicVets, events = []) {
   const app = express();
+  app.use(express.json());
   const h = createPublicVetHandlers({
     publicVets,
     findVets: async (ids) => docs.filter((d) => ids.includes(d._id)),
+    recordEvent: async (e) => { events.push(e); },
   });
+  app.post('/api/public/tap', h.tap);
   app.get('/v/:id', h.vetPage);
   app.get('/vets', h.statesIndex);
   app.get('/vets/:state', h.statePage);
@@ -154,6 +158,52 @@ describe('Google guide pages', () => {
   test('the WhatsApp pages stay out of Google', async () => {
     const res = await request(makeApp(list)).get('/vets/lagos');
     expect(res.text).toContain('noindex');
+  });
+});
+
+describe('counting visits and taps', () => {
+  test('a Google visit to a guide is counted, and the source follows the farmer to the vet page', async () => {
+    const events = [];
+    const app = makeApp(list, events);
+    const guide = await request(app).get('/poultry-vets/lagos').set('Referer', 'https://www.google.com.ng/');
+    expect(events).toContainEqual({ kind: 'view', path: '/poultry-vets/lagos', src: 'google' });
+    expect(guide.text).toContain(`href="/v/${YES}?from=google"`);
+    const vet = await request(app).get(`/v/${YES}?from=google`);
+    expect(events).toContainEqual({ kind: 'view', path: `/v/${YES}`, vetId: YES, src: 'google' });
+    expect(vet.text).toContain('data-tap="whatsapp"');
+    expect(vet.text).toContain('data-src="google"');
+    expect(vet.text).toContain("sendBeacon('/api/public/tap'");
+  });
+
+  test('a tap on a listed vet is counted; anything else is ignored', async () => {
+    const events = [];
+    const app = makeApp(list, events);
+    const ok = await request(app).post('/api/public/tap').send({ vet: YES, kind: 'whatsapp', src: 'google', path: `/v/${YES}` });
+    expect(ok.status).toBe(204);
+    expect(events).toEqual([{ kind: 'whatsapp', vetId: YES, src: 'google', path: `/v/${YES}` }]);
+    await request(app).post('/api/public/tap').send({ vet: NOT_LISTED, kind: 'call' });
+    await request(app).post('/api/public/tap').send({ vet: YES, kind: 'delete' });
+    await request(app).post('/api/public/tap').send({ vet: YES, kind: 'call', src: '<script>' });
+    expect(events).toHaveLength(2);
+    expect(events[1].src).toBe('direct');
+  });
+
+  test('link-preview crawlers are not counted', async () => {
+    const events = [];
+    await request(makeApp(list, events)).get('/poultry-vets/lagos').set('User-Agent', 'WhatsApp/2.23');
+    await request(makeApp(list, events)).get('/poultry-vets/lagos').set('User-Agent', 'Googlebot/2.1');
+    expect(events).toHaveLength(0);
+  });
+
+  test('visitSource', () => {
+    const req = (query, referer) => ({ query, get: (h) => (h === 'referer' ? referer : '') });
+    expect(visitSource(req({ src: 'ig' }))).toBe('ig');
+    expect(visitSource(req({ from: 'google' }, 'https://go.xpressvetmarketplace.com/x'))).toBe('google');
+    expect(visitSource(req({}, 'https://www.google.com/'))).toBe('google');
+    expect(visitSource(req({}, 'https://m.facebook.com/'))).toBe('fb');
+    expect(visitSource(req({}, 'https://l.instagram.com/'))).toBe('ig');
+    expect(visitSource(req({}, ''))).toBe('direct');
+    expect(visitSource(req({ src: 'BAD TAG!' }, 'https://example.org/'))).toBe('other');
   });
 });
 

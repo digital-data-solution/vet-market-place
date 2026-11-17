@@ -309,6 +309,7 @@ app.get('/vets/:state', publicVetLimiter, trackPublicVetClick, publicVetPages.st
 const guideRoute = (type) => (req, res) => { req.params.type = type; return publicVetPages.guidePage(req, res); };
 app.get('/poultry-vets/:state', publicVetLimiter, trackPublicVetClick, guideRoute('poultry-vets'));
 app.get('/pet-vets/:state',     publicVetLimiter, trackPublicVetClick, guideRoute('pet-vets'));
+app.post('/api/public/tap',     publicVetLimiter, publicVetPages.tap);
 
 const PUBLIC_PAGES_ORIGIN = process.env.PUBLIC_PAGES_ORIGIN || 'https://go.xpressvetmarketplace.com';
 app.get('/robots.txt', (_req, res) => {

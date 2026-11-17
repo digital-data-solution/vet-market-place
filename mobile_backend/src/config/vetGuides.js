@@ -79,6 +79,14 @@ export const GUIDE_STATES = {
     'poultry-vets': 'Oyo is one of Nigeria’s biggest egg-producing states, with layer and broiler farms around Ibadan, Ogbomoso and Oyo town. Close farms mean disease spreads fast, so early diagnosis matters.',
     'pet-vets': 'From Ibadan to Ogbomoso, dog owners in Oyo need a vet for vaccines, ticks, deworming and emergencies. Below are vets listed for dogs, cats and other pets.',
   },
+  Kaduna: {
+    'poultry-vets': 'Kaduna has a large and growing poultry sector, from Zaria and Kaduna city down to Southern Kaduna. Hot dry seasons and harmattan dust put birds under stress, so a vet you can reach quickly saves birds and money.',
+    'pet-vets': 'From Kaduna city to Zaria and Southern Kaduna, dog and cat owners can reach a vet below for rabies vaccines, puppy shots, deworming and emergencies.',
+  },
+  Enugu: {
+    'poultry-vets': 'Poultry farms are growing across Enugu and neighbouring Ebonyi, from small backyard flocks to commercial broiler and layer houses. In the rainy season, wet litter brings coccidiosis, so act early when droppings change.',
+    'pet-vets': 'Dog and cat owners in Enugu and Ebonyi can reach a vet below for vaccines, tick control, deworming and emergencies.',
+  },
   Kwara: {
     'poultry-vets': 'Poultry farming is growing fast around Ilorin and across Kwara. Strong harmattan and hot dry months put birds under stress, and stressed birds fall sick more easily.',
     'pet-vets': 'Dog and cat owners in Ilorin and across Kwara can reach a vet below for vaccines, deworming, tick control and emergencies.',

@@ -10,7 +10,9 @@
  * in config/publicVets.js. They never show a personal name, VCN, email or
  * street address.
  */
+import mongoose from 'mongoose';
 import Professional from '../models/Professional.js';
+import PublicPageEvent from '../models/PublicPageEvent.js';
 import { PUBLIC_VETS, NIGERIAN_STATES } from '../config/publicVets.js';
 import { GUIDE_TYPES, GUIDE_STATES } from '../config/vetGuides.js';
 import logger from '../lib/logger.js';
@@ -18,6 +20,31 @@ import logger from '../lib/logger.js';
 const WEB_APP_ORIGIN = process.env.WEB_APP_ORIGIN || 'https://xpressvetmarketplace.com';
 const PUBLIC_ORIGIN = process.env.PUBLIC_PAGES_ORIGIN || 'https://go.xpressvetmarketplace.com';
 const OBJECT_ID = /^[0-9a-f]{24}$/i;
+const SRC_TAG = /^[a-z0-9_-]{1,20}$/;
+const CRAWLER_UA = /bot|crawler|spider|facebookexternalhit|facebookcatalog|meta-externalagent|whatsapp|telegram|slack|discord|preview|lighthouse|inspectiontool/i;
+
+/**
+ * Where a visitor came from: an explicit ?from= / ?src= tag, else the referring
+ * site (Google, Facebook...), else 'direct' (WhatsApp in-app taps send no referrer).
+ */
+export function visitSource(req) {
+  for (const key of ['from', 'src']) {
+    const tag = String(req.query?.[key] || '').toLowerCase();
+    if (SRC_TAG.test(tag)) return tag;
+  }
+  let host = '';
+  try { host = new URL(req.get?.('referer') || '').hostname.toLowerCase(); } catch { /* none */ }
+  if (!host) return 'direct';
+  if (/(^|\.)google\./.test(host)) return 'google';
+  if (/(^|\.)bing\.com$/.test(host)) return 'bing';
+  if (/(^|\.)(facebook\.com|fb\.com|fb\.me)$/.test(host)) return 'fb';
+  if (/(^|\.)instagram\.com$/.test(host)) return 'ig';
+  if (/(^|\.)(youtube\.com|youtu\.be)$/.test(host)) return 'yt';
+  if (/(^|\.)whatsapp\.(com|net)$/.test(host)) return 'whatsapp';
+  if (/xpressvetmarketplace\.com$/.test(host)) return 'internal';
+  return 'other';
+}
+
 const TREATS = { poultry: 'poultry', pets: 'dogs, cats and other pets' };
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => (
@@ -50,19 +77,19 @@ export function internationalPhone(phone) {
 
 const TREAT_LABELS = { poultry: 'Poultry', pets: 'Dogs, cats and pets', farm: 'Livestock and farm animals' };
 
-function vetCard(vet) {
+function vetCard(vet, src = 'direct') {
   const whatsappText = encodeURIComponent('Good day Doctor, I found you on Xpress Vet and I need help with my animals.');
   const treats = vet.treats.map((t) => TREAT_LABELS[t]).join(' · ') || 'General veterinary practice';
   const buttons = vet.phone
-    ? `<div class="btns"><a class="btn call" href="tel:+${vet.phone}">Call</a><a class="btn wa" href="https://wa.me/${vet.phone}?text=${whatsappText}">WhatsApp</a></div>`
+    ? `<div class="btns"><a class="btn call" data-tap="call" data-vet="${esc(vet.id)}" data-src="${esc(src)}" href="tel:+${vet.phone}">Call</a><a class="btn wa" data-tap="whatsapp" data-vet="${esc(vet.id)}" data-src="${esc(src)}" href="https://wa.me/${vet.phone}?text=${whatsappText}">WhatsApp</a></div>`
     : '<p class="muted">Phone number not available.</p>';
   return `<section class="card"><h2>${esc(vet.title)}</h2><p class="town">${esc(vet.town)}, ${esc(vet.state)}</p><p>${esc(treats)}</p>${buttons}</section>`;
 }
 
 /** Guide-page card: no phone number, so Google never indexes one. */
-function guideCard(vet) {
+function guideCard(vet, src = 'direct') {
   const treats = vet.treats.map((t) => TREAT_LABELS[t]).join(' · ') || 'General veterinary practice';
-  return `<section class="card"><h3>${esc(vet.title)}</h3><p class="town">${esc(vet.town)}, ${esc(vet.state)}</p><p>${esc(treats)}</p><div class="btns"><a class="btn wa" href="/v/${esc(vet.id)}">Call or WhatsApp (no login)</a></div></section>`;
+  return `<section class="card"><h3>${esc(vet.title)}</h3><p class="town">${esc(vet.town)}, ${esc(vet.state)}</p><p>${esc(treats)}</p><div class="btns"><a class="btn wa" href="/v/${esc(vet.id)}${src === 'direct' ? '' : `?from=${esc(src)}`}">Call or WhatsApp (no login)</a></div></section>`;
 }
 
 /** Guide pages that exist, as [type, state] pairs. */
@@ -111,7 +138,9 @@ ${body}
 <p>No login needed. Xpress Vet is a directory: please agree the service and any fee directly with the vet.</p>
 <p><a href="/vets">See all states</a> · <a href="${esc(WEB_APP_ORIGIN)}/auth/register">Are you a vet? Get listed</a></p>
 </footer>
-</main></body></html>`;
+</main>
+<script>document.addEventListener('click',function(e){var a=e.target.closest&&e.target.closest('a[data-tap]');if(!a||!navigator.sendBeacon)return;try{navigator.sendBeacon('/api/public/tap',new Blob([JSON.stringify({vet:a.dataset.vet,kind:a.dataset.tap,src:a.dataset.src,path:location.pathname})],{type:'application/json'}));}catch(_){}});</script>
+</body></html>`;
 }
 
 /**
@@ -119,7 +148,13 @@ ${body}
  * @param {Array}    [deps.publicVets]  the consent list
  * @param {Function} [deps.findVets]    (ids) => professional docs; replaced in tests
  */
-export function createPublicVetHandlers({ publicVets = PUBLIC_VETS, findVets = defaultFindVets } = {}) {
+export function createPublicVetHandlers({ publicVets = PUBLIC_VETS, findVets = defaultFindVets, recordEvent = defaultRecordEvent } = {}) {
+  // Fire-and-forget: a failed write never breaks the page.
+  const track = (req, event) => {
+    if (CRAWLER_UA.test(req.get?.('user-agent') || '')) return;
+    try { Promise.resolve(recordEvent(event)).catch(() => {}); } catch { /* ignore */ }
+  };
+
   // Eligibility is enforced on every request: a vet who loses verification or
   // stops taking clients disappears even if still on the consent list.
   async function loadVets(entries) {
@@ -166,10 +201,12 @@ export function createPublicVetHandlers({ publicVets = PUBLIC_VETS, findVets = d
       const entry = publicVets.find((e) => e.id === id);
       const [vet] = entry ? await loadVets([entry]) : [];
       if (!vet) return res.redirect(302, fallback);
+      const src = visitSource(req);
+      track(req, { kind: 'view', path: req.path, vetId: vet.id, src });
       return sendHtml(res, page({
         title: `${vet.title} — vet in ${vet.town}, ${vet.state}`,
         description: `Call or WhatsApp ${vet.title} in ${vet.town}. No login needed.`,
-        body: `<h1>Vet in ${esc(vet.town)}</h1>${vetCard(vet)}`,
+        body: `<h1>Vet in ${esc(vet.town)}</h1>${vetCard(vet, src)}`,
       }));
     } catch (err) {
       return sendError(res, err);
@@ -178,6 +215,7 @@ export function createPublicVetHandlers({ publicVets = PUBLIC_VETS, findVets = d
 
   async function statesIndex(req, res) {
     try {
+      track(req, { kind: 'view', path: req.path, src: visitSource(req) });
       const vets = await loadVets(publicVets);
       const counts = new Map();
       for (const v of vets) counts.set(v.state, (counts.get(v.state) || 0) + 1);
@@ -199,6 +237,8 @@ export function createPublicVetHandlers({ publicVets = PUBLIC_VETS, findVets = d
     if (!stateName) return res.redirect(302, '/vets');
     const treats = Object.hasOwn(TREATS, req.query.treats) ? req.query.treats : null;
     try {
+      const src = visitSource(req);
+      track(req, { kind: 'view', path: req.originalUrl?.slice(0, 200) || req.path, src });
       const inState = await loadVets(publicVets.filter((e) => e.state === stateName));
       const vets = treats ? inState.filter((v) => v.treats.includes(treats)) : inState;
       const base = `/vets/${stateSlug(stateName)}`;
@@ -210,7 +250,7 @@ export function createPublicVetHandlers({ publicVets = PUBLIC_VETS, findVets = d
       return sendHtml(res, page({
         title: `${heading} — Xpress Vet`,
         description: `Call or WhatsApp a vet in ${stateName}. No login needed.`,
-        body: `<h1>${esc(heading)}</h1><div class="filters">${filter(base, 'All', !treats)}${filter(`${base}?treats=poultry`, 'Poultry', treats === 'poultry')}${filter(`${base}?treats=pets`, 'Pets', treats === 'pets')}</div>${vets.length ? vets.map(vetCard).join('') : empty}`,
+        body: `<h1>${esc(heading)}</h1><div class="filters">${filter(base, 'All', !treats)}${filter(`${base}?treats=poultry`, 'Poultry', treats === 'poultry')}${filter(`${base}?treats=pets`, 'Pets', treats === 'pets')}</div>${vets.length ? vets.map((v) => vetCard(v, src)).join('') : empty}`,
       }));
     } catch (err) {
       return sendError(res, err);
@@ -227,10 +267,12 @@ export function createPublicVetHandlers({ publicVets = PUBLIC_VETS, findVets = d
       return res.redirect(302, known ? `/vets/${stateSlug(known)}` : '/vets');
     }
     try {
+      const src = visitSource(req);
+      track(req, { kind: 'view', path: req.path, src });
       const vets = (await loadVets(publicVets.filter((e) => e.state === stateName)))
         .filter((v) => v.treats.includes(guide.treats));
       const list = vets.length
-        ? vets.map(guideCard).join('')
+        ? vets.map((v) => guideCard(v, src)).join('')
         : `<p>No ${esc(guide.noun)} is listed in ${esc(stateName)} yet. <a href="/vets/${esc(stateSlug(stateName))}">See all vets in ${esc(stateName)}</a>.</p>`;
       const tips = guide.tips.map(([t, d]) => `<dt>${esc(t)}</dt><dd>${esc(d)}</dd>`).join('');
       const faq = guide.faq.map(([q, a]) => `<h3>${esc(q)}</h3><p>${esc(a)}</p>`).join('');
@@ -249,7 +291,28 @@ export function createPublicVetHandlers({ publicVets = PUBLIC_VETS, findVets = d
     }
   }
 
-  return { vetPage, statesIndex, statePage, guidePage };
+  // POST /api/public/tap — sent by the page's beacon when a Call/WhatsApp button is tapped.
+  function tap(req, res) {
+    const { vet, kind, src, path } = req.body || {};
+    const known = publicVets.some((e) => e.id === vet);
+    if (known && (kind === 'call' || kind === 'whatsapp')) {
+      track(req, {
+        kind,
+        vetId: vet,
+        src: SRC_TAG.test(String(src || '')) ? String(src) : 'direct',
+        path: String(path || '').slice(0, 200) || '/',
+      });
+    }
+    return res.status(204).end();
+  }
+
+  return { vetPage, statesIndex, statePage, guidePage, tap };
+}
+
+function defaultRecordEvent(event) {
+  // Skip rather than queue when the database is down: a count is not worth a pile-up.
+  if (mongoose.connection.readyState !== 1) return null;
+  return PublicPageEvent.create(event);
 }
 
 function defaultFindVets(ids) {
