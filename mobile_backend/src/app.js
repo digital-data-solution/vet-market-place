@@ -11,7 +11,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname  = path.dirname(__filename);
 
 // Routes
-import { createPublicVetHandlers, guidePages, guidePath } from './api/publicVets.controller.js';
+import { createPublicVetHandlers, guidePages, guidePath, topicPaths } from './api/publicVets.controller.js';
 import authRoutes            from './routes/auth.routes.js';
 import kennelRoutes          from './routes/kennel.routes.js';
 import shopRoutes            from './routes/shop.routes.js';
@@ -184,6 +184,8 @@ app.use((req, res, next) => {
     req.path.startsWith('/vets/') ||
     req.path.startsWith('/poultry-vets/') ||
     req.path.startsWith('/pet-vets/') ||
+    req.path === '/guides' ||
+    req.path.startsWith('/guides/') ||
     req.path === '/robots.txt' ||
     req.path === '/sitemap.xml' ||
     req.path === GOOGLE_SITE_FILE ||
@@ -309,6 +311,8 @@ app.get('/vets/:state', publicVetLimiter, trackPublicVetClick, publicVetPages.st
 const guideRoute = (type) => (req, res) => { req.params.type = type; return publicVetPages.guidePage(req, res); };
 app.get('/poultry-vets/:state', publicVetLimiter, trackPublicVetClick, guideRoute('poultry-vets'));
 app.get('/pet-vets/:state',     publicVetLimiter, trackPublicVetClick, guideRoute('pet-vets'));
+app.get('/guides',              publicVetLimiter, trackPublicVetClick, publicVetPages.topicsIndex);
+app.get('/guides/:slug',        publicVetLimiter, trackPublicVetClick, publicVetPages.topicPage);
 app.post('/api/public/tap',     publicVetLimiter, publicVetPages.tap);
 
 const PUBLIC_PAGES_ORIGIN = process.env.PUBLIC_PAGES_ORIGIN || 'https://go.xpressvetmarketplace.com';
@@ -324,7 +328,8 @@ app.get(GOOGLE_SITE_FILE, (_req, res) => {
   res.type('text/html').send(`google-site-verification: ${GOOGLE_SITE_FILE.slice(1)}`);
 });
 app.get('/sitemap.xml', (_req, res) => {
-  const urls = guidePages().map(([t, s]) => `<url><loc>${PUBLIC_PAGES_ORIGIN}${guidePath(t, s)}</loc></url>`).join('');
+  const paths = [...guidePages().map(([t, s]) => guidePath(t, s)), '/guides', ...topicPaths()];
+  const urls = paths.map((p) => `<url><loc>${PUBLIC_PAGES_ORIGIN}${p}</loc></url>`).join('');
   res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`);
 });
 

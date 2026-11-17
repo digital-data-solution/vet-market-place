@@ -15,6 +15,7 @@ import Professional from '../models/Professional.js';
 import PublicPageEvent from '../models/PublicPageEvent.js';
 import { PUBLIC_VETS, NIGERIAN_STATES } from '../config/publicVets.js';
 import { GUIDE_TYPES, GUIDE_STATES } from '../config/vetGuides.js';
+import { TOPICS, TOPIC_ANIMALS } from '../config/topicGuides.js';
 import logger from '../lib/logger.js';
 
 const WEB_APP_ORIGIN = process.env.WEB_APP_ORIGIN || 'https://xpressvetmarketplace.com';
@@ -99,6 +100,13 @@ export function guidePages() {
 
 export const guidePath = (type, state) => `/${type}/${stateSlug(state)}`;
 
+/** Topic guide paths, e.g. '/guides/parvo-in-puppies'. */
+export const topicPaths = () => Object.keys(TOPICS).map((slug) => `/guides/${slug}`);
+
+const topicLinks = (animal, exclude = null) => Object.entries(TOPICS)
+  .filter(([slug, t]) => t.animal === animal && slug !== exclude)
+  .map(([slug, t]) => `<a href="/guides/${slug}">${esc(t.short)}</a>`).join('');
+
 function page({ title, description, body, index = false, canonical = null }) {
   return `<!doctype html><html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -118,6 +126,7 @@ h2{font-size:20px;margin:24px 0 6px}
 h3{font-size:18px;margin:0 0 2px}
 .card h2{font-size:18px;margin:0 0 2px}
 .lead{font-size:17px}
+ul{padding-left:20px;margin:6px 0}li{margin:5px 0}
 .tips dt{font-weight:700;margin-top:10px}.tips dd{margin:2px 0 0}
 .cta{background:#fff7f0;border:1px solid #f3c9a6;border-radius:10px;padding:14px;margin:16px 0}
 .cta .btn{display:block;background:#e8610a;margin-top:10px}
@@ -284,11 +293,52 @@ export function createPublicVetHandlers({ publicVets = PUBLIC_VETS, findVets = d
         canonical: `${PUBLIC_ORIGIN}${guidePath(type, stateName)}`,
         title: `${guide.title(stateName)} | Xpress Vet`,
         description: guide.description(stateName),
-        body: `<h1>${esc(guide.h1(stateName))}</h1><p class="lead">${esc(intro)}</p>${list}${cta(guide.community)}<h2>${esc(guide.tipsHeading)}</h2><dl class="tips">${tips}</dl>${cta(guide.learn)}<h2>Questions</h2>${faq}<h2>More guides</h2><div class="states">${others}</div>`,
+        body: `<h1>${esc(guide.h1(stateName))}</h1><p class="lead">${esc(intro)}</p>${list}${cta(guide.community)}<h2>${esc(guide.tipsHeading)}</h2><dl class="tips">${tips}</dl>${cta(guide.learn)}<h2>Questions</h2>${faq}${topicLinks(guide.treats) ? `<h2>Common problems</h2><div class="states">${topicLinks(guide.treats)}</div>` : ''}<h2>More guides</h2><div class="states">${others}</div>`,
       }), { index: true });
     } catch (err) {
       return sendError(res, err);
     }
+  }
+
+  async function topicPage(req, res) {
+    const slug = String(req.params.slug || '').toLowerCase();
+    const topic = Object.hasOwn(TOPICS, slug) ? TOPICS[slug] : null;
+    if (!topic) return res.redirect(302, '/guides');
+    try {
+      track(req, { kind: 'view', path: `/guides/${slug}`, src: visitSource(req) });
+      const a = TOPIC_ANIMALS[topic.animal];
+      const sections = topic.sections.map((sec) => `<h2>${esc(sec.h)}</h2>${(sec.p || []).map((x) => `<p>${esc(x)}</p>`).join('')}${sec.ul ? `<ul>${sec.ul.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}`).join('');
+      const states = Object.keys(GUIDE_STATES).filter((s) => GUIDE_STATES[s][a.guideType]).sort()
+        .map((s) => `<a href="${guidePath(a.guideType, s)}">${esc(s)}</a>`).join('');
+      const cta = (c) => (c ? `<div class="cta"><p>${esc(c.text)}</p><a class="btn" href="${esc(c.href)}" rel="noopener">${esc(c.button)}</a></div>` : '');
+      const related = topicLinks(topic.animal, slug);
+      return sendHtml(res, page({
+        index: true,
+        canonical: `${PUBLIC_ORIGIN}/guides/${slug}`,
+        title: `${topic.title} | Xpress Vet`,
+        description: topic.description,
+        body: `<h1>${esc(topic.title)}</h1><p class="lead">${esc(topic.lead)}</p>`
+          + `<div class="cta"><p>${esc(a.findVet)}</p><div class="states">${states}</div><p class="muted">Other states: <a href="/vets">see all states</a>.</p></div>`
+          + sections
+          + cta(a.learn) + cta(a.community)
+          + (related ? `<h2>Related guides</h2><div class="states">${related}</div>` : '')
+          + '<p class="muted">This guide is general information from the Xpress Vet team. It does not replace an examination by a vet, who can diagnose your animals and prescribe the right treatment.</p>',
+      }), { index: true });
+    } catch (err) {
+      return sendError(res, err);
+    }
+  }
+
+  function topicsIndex(req, res) {
+    track(req, { kind: 'view', path: '/guides', src: visitSource(req) });
+    const group = (animal, heading) => `<h2>${heading}</h2><div class="states">${topicLinks(animal)}</div>`;
+    return sendHtml(res, page({
+      index: true,
+      canonical: `${PUBLIC_ORIGIN}/guides`,
+      title: 'Animal health guides for Nigerian farmers and pet owners | Xpress Vet',
+      description: 'Plain-English guides to common poultry and dog diseases in Nigeria: signs, what to do today, prevention, and how to reach a vet.',
+      body: `<h1>Animal health guides</h1><p class="lead">Plain-English guides to common diseases: the signs, what to do today, and how to prevent them.</p>${group('poultry', 'Poultry')}${group('pets', 'Dogs and puppies')}`,
+    }), { index: true });
   }
 
   // POST /api/public/tap — sent by the page's beacon when a Call/WhatsApp button is tapped.
@@ -306,7 +356,7 @@ export function createPublicVetHandlers({ publicVets = PUBLIC_VETS, findVets = d
     return res.status(204).end();
   }
 
-  return { vetPage, statesIndex, statePage, guidePage, tap };
+  return { vetPage, statesIndex, statePage, guidePage, topicPage, topicsIndex, tap };
 }
 
 function defaultRecordEvent(event) {

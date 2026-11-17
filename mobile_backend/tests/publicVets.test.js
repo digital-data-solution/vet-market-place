@@ -161,6 +161,48 @@ describe('Google guide pages', () => {
   });
 });
 
+describe('topic guides', () => {
+  const makeTopicApp = (events = []) => {
+    const app = express();
+    const h = createPublicVetHandlers({ publicVets: list, findVets: async () => docs, recordEvent: async (e) => { events.push(e); } });
+    app.get('/guides', h.topicsIndex);
+    app.get('/guides/:slug', h.topicPage);
+    return app;
+  };
+
+  test('a topic page can be indexed and links to vets, the pack and related topics', async () => {
+    const events = [];
+    const res = await request(makeTopicApp(events)).get('/guides/newcastle-disease-in-chickens').set('Referer', 'https://www.google.com/');
+    expect(res.status).toBe(200);
+    expect(res.text).not.toContain('noindex');
+    expect(res.text).toContain('rel="canonical" href="https://go.xpressvetmarketplace.com/guides/newcastle-disease-in-chickens"');
+    expect(res.text).toContain('href="/poultry-vets/lagos"');
+    expect(res.text).toContain('selar.com/5779aps353');
+    expect(res.text).toContain('href="/guides/coccidiosis-in-chickens"');
+    expect(res.text).toContain('does not replace an examination by a vet');
+    expect(events).toContainEqual({ kind: 'view', path: '/guides/newcastle-disease-in-chickens', src: 'google' });
+  });
+
+  test('a pet topic points to pet vets and the Dog pack, not poultry', async () => {
+    const res = await request(makeTopicApp()).get('/guides/parvo-in-puppies');
+    expect(res.text).toContain('href="/pet-vets/lagos"');
+    expect(res.text).toContain('selar.com/2900z16541');
+    expect(res.text).not.toContain('5779aps353');
+    expect(res.text).not.toContain('/poultry-vets/');
+  });
+
+  test('the index lists every topic, and an unknown topic goes to the index', async () => {
+    const app = makeTopicApp();
+    const index = await request(app).get('/guides');
+    for (const slug of ['newcastle-disease-in-chickens', 'coccidiosis-in-chickens', 'gumboro-disease-in-chickens', 'parvo-in-puppies']) {
+      expect(index.text).toContain(`href="/guides/${slug}"`);
+    }
+    const unknown = await request(app).get('/guides/bird-flu-cure');
+    expect(unknown.status).toBe(302);
+    expect(unknown.headers.location).toBe('/guides');
+  });
+});
+
 describe('counting visits and taps', () => {
   test('a Google visit to a guide is counted, and the source follows the farmer to the vet page', async () => {
     const events = [];
@@ -220,7 +262,7 @@ describe('routing in the real app', () => {
     expect(robots.text).toContain('Sitemap: https://go.xpressvetmarketplace.com/sitemap.xml');
     const map = await request(realApp).get('/sitemap.xml');
     expect(map.headers['content-type']).toContain('xml');
-    for (const p of ['/poultry-vets/lagos', '/pet-vets/oyo', '/poultry-vets/kwara']) {
+    for (const p of ['/poultry-vets/lagos', '/pet-vets/oyo', '/poultry-vets/kwara', '/guides', '/guides/parvo-in-puppies']) {
       expect(map.text).toContain(`https://go.xpressvetmarketplace.com${p}`);
     }
   });
