@@ -82,7 +82,7 @@ function vetCard(vet, src = 'direct') {
   const whatsappText = encodeURIComponent('Good day Doctor, I found you on Xpress Vet and I need help with my animals.');
   const treats = vet.treats.map((t) => TREAT_LABELS[t]).join(' · ') || 'General veterinary practice';
   const buttons = vet.phone
-    ? `<div class="btns"><a class="btn call" data-tap="call" data-vet="${esc(vet.id)}" data-src="${esc(src)}" href="tel:+${vet.phone}">Call</a><a class="btn wa" data-tap="whatsapp" data-vet="${esc(vet.id)}" data-src="${esc(src)}" href="https://wa.me/${vet.phone}?text=${whatsappText}">WhatsApp</a></div>`
+    ? `<div class="btns"><a class="btn call" data-tap="call" data-vet="${esc(vet.id)}" data-src="${esc(src)}" href="tel:+${vet.phone}">Call</a>${vet.whatsapp ? `<a class="btn wa" data-tap="whatsapp" data-vet="${esc(vet.id)}" data-src="${esc(src)}" href="https://wa.me/${vet.phone}?text=${whatsappText}">WhatsApp</a>` : ''}</div>`
     : '<p class="muted">Phone number not available.</p>';
   return `<section class="card"><h2>${esc(vet.title)}</h2><p class="town">${esc(vet.town)}, ${esc(vet.state)}</p><p>${esc(treats)}</p>${buttons}</section>`;
 }
@@ -90,7 +90,7 @@ function vetCard(vet, src = 'direct') {
 /** Guide-page card: no phone number, so Google never indexes one. */
 function guideCard(vet, src = 'direct') {
   const treats = vet.treats.map((t) => TREAT_LABELS[t]).join(' · ') || 'General veterinary practice';
-  return `<section class="card"><h3>${esc(vet.title)}</h3><p class="town">${esc(vet.town)}, ${esc(vet.state)}</p><p>${esc(treats)}</p><div class="btns"><a class="btn wa" href="/v/${esc(vet.id)}${src === 'direct' ? '' : `?from=${esc(src)}`}">Call or WhatsApp (no login)</a></div></section>`;
+  return `<section class="card"><h3>${esc(vet.title)}</h3><p class="town">${esc(vet.town)}, ${esc(vet.state)}</p><p>${esc(treats)}</p><div class="btns"><a class="btn wa" href="/v/${esc(vet.id)}${src === 'direct' ? '' : `?from=${esc(src)}`}">${vet.whatsapp ? 'Call or WhatsApp' : 'Call'} (no login)</a></div></section>`;
 }
 
 /** Guide pages that exist, as [type, state] pairs. */
@@ -180,6 +180,7 @@ export function createPublicVetHandlers({ publicVets = PUBLIC_VETS, findVets = d
         title: decodeEntities(doc.businessName) || `Vet in ${entry.town}`,
         treats: entry.treats ?? treatsFrom(doc.specialization),
         phone: internationalPhone(doc.phone || doc.userId?.phone),
+        whatsapp: !entry.noWhatsApp,
       }];
     });
   }

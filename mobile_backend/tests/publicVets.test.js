@@ -68,6 +68,12 @@ describe('public vet pages', () => {
     expect(res.text).toContain('Livestock and farm animals');
   });
 
+  test('a vet whose number is not on WhatsApp gets a Call button only', async () => {
+    const res = await request(makeApp([{ id: YES, state: 'Lagos', town: 'Egbeda', noWhatsApp: true }])).get(`/v/${YES}`);
+    expect(res.text).toContain('tel:+2348031234567');
+    expect(res.text).not.toContain('wa.me');
+  });
+
   test('never shows personal name, VCN, email or street address', async () => {
     const res = await request(makeApp(list)).get(`/v/${YES}`);
     for (const secret of ['Dr Private Name', 'VCN-SECRET', 'private@example.com', 'Hidden Street']) {
