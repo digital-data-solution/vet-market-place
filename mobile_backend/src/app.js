@@ -166,6 +166,9 @@ app.use(express.static(PUBLIC_DIR, {
   },
 }));
 
+// Google Search Console ownership file for go.xpressvetmarketplace.com. Keep it, or the site loses verification.
+const GOOGLE_SITE_FILE = '/google418686a976f055c5.html';
+
 // ─── SPA catch-all ────────────────────────────────────────────────────────────
 // Must come RIGHT AFTER express.static and BEFORE any route or error handler so
 // that every non-asset GET request (page refresh, deep link) receives index.html.
@@ -183,6 +186,7 @@ app.use((req, res, next) => {
     req.path.startsWith('/pet-vets/') ||
     req.path === '/robots.txt' ||
     req.path === '/sitemap.xml' ||
+    req.path === GOOGLE_SITE_FILE ||
     req.path === '/admin' ||
     req.path === '/health'
   ) return next();
@@ -314,6 +318,9 @@ Allow: /
 
 Sitemap: ${PUBLIC_PAGES_ORIGIN}/sitemap.xml
 `);
+});
+app.get(GOOGLE_SITE_FILE, (_req, res) => {
+  res.type('text/html').send(`google-site-verification: ${GOOGLE_SITE_FILE.slice(1)}`);
 });
 app.get('/sitemap.xml', (_req, res) => {
   const urls = guidePages().map(([t, s]) => `<url><loc>${PUBLIC_PAGES_ORIGIN}${guidePath(t, s)}</loc></url>`).join('');

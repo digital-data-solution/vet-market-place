@@ -158,6 +158,12 @@ describe('Google guide pages', () => {
 });
 
 describe('routing in the real app', () => {
+  test('the Google Search Console ownership file is served', async () => {
+    const res = await request(realApp).get('/google418686a976f055c5.html');
+    expect(res.status).toBe(200);
+    expect(res.text).toBe('google-site-verification: google418686a976f055c5.html');
+  });
+
   test('robots.txt and sitemap.xml list the guide pages', async () => {
     const robots = await request(realApp).get('/robots.txt');
     expect(robots.status).toBe(200);
