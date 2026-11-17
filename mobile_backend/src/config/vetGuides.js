@@ -8,12 +8,15 @@
 // (config/publicVets.js). Each state gets its own intro so the pages are not
 // copies of each other.
 
+// 'FCT' is not a state, and people search for Abuja.
+const stateLabel = (s) => (s === 'FCT' ? 'Abuja (FCT)' : `${s} State`);
+
 export const GUIDE_TYPES = {
   'poultry-vets': {
     treats: 'poultry',
     noun: 'poultry vet',
-    title: (s) => `Poultry vet in ${s} — call or WhatsApp, no login`,
-    h1: (s) => `Poultry vets in ${s} State`,
+    title: (s) => `Poultry vet in ${s === 'FCT' ? 'Abuja' : s} — call or WhatsApp, no login`,
+    h1: (s) => `Poultry vets in ${stateLabel(s)}`,
     description: (s) => `Find a vet for your broilers, layers and other birds in ${s}. Call or WhatsApp directly, no login. Plus a simple health checklist for poultry farmers.`,
     tipsHeading: 'Poultry health checklist',
     tips: [
@@ -44,8 +47,8 @@ export const GUIDE_TYPES = {
   'pet-vets': {
     treats: 'pets',
     noun: 'vet for dogs and cats',
-    title: (s) => `Vet for dogs and cats in ${s} — call or WhatsApp, no login`,
-    h1: (s) => `Vets for dogs and cats in ${s} State`,
+    title: (s) => `Vet for dogs and cats in ${s === 'FCT' ? 'Abuja' : s} — call or WhatsApp, no login`,
+    h1: (s) => `Vets for dogs and cats in ${stateLabel(s)}`,
     description: (s) => `Find a vet for your dog or cat in ${s}. Call or WhatsApp directly, no login. Plus vaccine and health basics for pet owners.`,
     tipsHeading: 'Dog and cat health basics',
     tips: [
