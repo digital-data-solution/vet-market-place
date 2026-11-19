@@ -312,7 +312,7 @@ function DmEndCard({ cta }) {
         {word}
       </div>
       <div style={{ fontFamily: FONT, fontWeight: 900, fontSize: 60, color: 'white', textAlign: 'center', width: 960 }}>
-        for a free guide 📩
+        for {cta.offer || 'a free guide'} 📩
       </div>
       <div style={{ fontFamily: 'Arial', fontWeight: 700, fontSize: 40, color: 'white', marginTop: 10 }}>@xpress_vet</div>
     </AbsoluteFill>

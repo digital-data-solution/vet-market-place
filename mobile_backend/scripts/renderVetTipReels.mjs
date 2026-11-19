@@ -50,7 +50,7 @@ const CTA_BY_VIDEO = {
 // spec.json can set "cta" per video; otherwise the map above, else pet care.
 // cta "dm" (Nov 2026, Sam's choice): "DM us <keyword>" for a free guide, answered by hand.
 const ctaFor = (video) => (video.cta === 'dm'
-  ? { kind: 'dm', keyword: video.keyword, quiz: !!video.quiz }
+  ? { kind: 'dm', keyword: video.keyword, quiz: !!video.quiz, offer: video.offer || 'a free guide' }
   : CTA[video.cta || CTA_BY_VIDEO[video.id] || 'pet']);
 
 const probeSeconds =(file) => Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', file]).toString().trim());
@@ -64,7 +64,8 @@ function captionText(video, props, music) {
       segs[0].text,
       '',
       ...(cta.quiz ? [segs[segs.length - 3].text, '', 'Comment your number 👇 Answer tomorrow evening.', ''] : []),
-      `💬 DM us "${cta.keyword}" for a free guide 📩`,
+      `💬 DM us "${cta.keyword}" for ${cta.offer} 📩`,
+      ...(video.captionExtra || []),
       '',
       video.tags,
       '',

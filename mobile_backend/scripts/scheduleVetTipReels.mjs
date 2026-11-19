@@ -55,6 +55,20 @@ const CALENDAR = [
   ['21-quiz-gumboro', '2026-11-25'],
   ['22-fireworks-calm', '2026-11-27'],
   ['23-cat-christmas-food', '2026-11-30'],
+  // December 2026: Academy course push for vets/vet students (checked by the Academy dev 2026-11-19)
+  ['24-intro-academy', '2026-12-02'],
+  ['25-pm-newcastle', '2026-12-04'],
+  ['26-dog-parvo-students', '2026-12-07'],
+  ['27-pm-gumboro', '2026-12-09'],
+  ['28-dog-tick-fever', '2026-12-11'],
+  ['29-pm-coccidiosis', '2026-12-14'],
+  ['30-dog-distemper', '2026-12-16'],
+  ['31-pm-marek', '2026-12-18'],
+  ['32-dog-gdv', '2026-12-21'],
+  ['33-pm-fowl-typhoid', '2026-12-23'],
+  ['34-dog-rabies-bite', '2026-12-25'],
+  ['35-pm-crd', '2026-12-28'],
+  ['36-new-year-learn', '2026-12-30'],
 ];
 
 const AI_NOTE = '🎙️ Narrated with an AI voice.';
