@@ -23,7 +23,7 @@ import {
   sendUnansweredSupportAlert,
 } from '../services/email.service.js';
 
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'contact@xpressdigitalanddatasolutions.online';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'support@xpressvetmarketplace.com';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // JOB 1 — STALE REVIEW ALERT  (every 12h: 07:00 and 19:00 UTC)

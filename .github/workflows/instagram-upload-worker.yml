@@ -39,6 +39,10 @@ on:
     - cron: '0,30 13-20 * * 0,4,6'
   workflow_dispatch: {} # lets you trigger a sweep manually from the Actions tab too
 
+# CPU runners: skip the optional CUDA download (its URL now 404s and breaks npm ci).
+env:
+  ONNXRUNTIME_NODE_INSTALL_CUDA: skip
+
 jobs:
   sweep:
     runs-on: ubuntu-latest

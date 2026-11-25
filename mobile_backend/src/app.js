@@ -719,7 +719,7 @@ app.post('/api/v1/report-error', errorReportLimiter, async (req, res) => {
     const { error, stack, platform, url, userId } = req.body ?? {};
     if (!error) return res.status(400).json({ success: false });
     const { sendEmail } = await import('./services/email.service.js');
-    const ADMIN_EMAIL   = process.env.ADMIN_EMAIL || 'contact@xpressdigitalanddatasolutions.online';
+    const ADMIN_EMAIL   = process.env.ADMIN_EMAIL || 'support@xpressvetmarketplace.com';
     await sendEmail(
       ADMIN_EMAIL,
       `[Xpress Vet] App crash reported — ${platform || 'unknown platform'}`,

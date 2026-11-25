@@ -110,7 +110,7 @@ export function generatePitchOnePager(outputPath, stats) {
   doc.moveDown(0.2);
   doc.fontSize(11).font('Helvetica').fillColor(DARK).text('xpressvetmarketplace.com — sign up in under 2 minutes, no card required for the Free tier.');
   doc.moveDown(0.5);
-  doc.fontSize(10).fillColor(GREY).text('Questions? Talk to Dr. Samuel directly: contact@xpressdigitalanddatasolutions.online');
+  doc.fontSize(10).fillColor(GREY).text('Questions? Write to the Xpress Vet Team: support@xpressvetmarketplace.com');
 
   doc.end();
   return outputPath;

@@ -309,7 +309,7 @@ export const onboardProfessional = async (req, res) => {
 
     // ── Fire-and-forget emails — never block the response ───────────────────
     const profEmail  = email?.trim() || req.user?.email;
-    const adminEmail = process.env.ADMIN_EMAIL || 'contact@xpressdigitalanddatasolutions.online';
+    const adminEmail = process.env.ADMIN_EMAIL || 'support@xpressvetmarketplace.com';
 
     if (profEmail && needsReview) {
       sendDocumentSubmissionReceived(name, profEmail, role).catch(() => {});

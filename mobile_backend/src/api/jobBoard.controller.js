@@ -27,7 +27,7 @@ import { ROLE_CATEGORIES, EMPLOYMENT_TYPES } from '../models/JobPosting.js';
 
 const PAYSTACK_BASE   = process.env.PAYSTACK_BASE       || 'https://api.paystack.co';
 const PAYSTACK_SECRET = process.env.PAYSTACK_SECRET_KEY || '';
-const ADMIN_EMAIL     = process.env.ADMIN_EMAIL || 'contact@xpressdigitalanddatasolutions.online';
+const ADMIN_EMAIL     = process.env.ADMIN_EMAIL || 'support@xpressvetmarketplace.com';
 
 const POSTING_TTL_DAYS    = 30;  // postings auto-expire after this; renew to extend
 const MAX_ACTIVE_POSTINGS = 10;  // anti-spam cap per poster (not a paywall)

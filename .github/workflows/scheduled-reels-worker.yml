@@ -20,6 +20,10 @@ on:
     - cron: '0,30 13-20 * * 1,2,3,5'
   workflow_dispatch: {}
 
+# CPU runners: skip the optional CUDA download (its URL now 404s and breaks npm ci).
+env:
+  ONNXRUNTIME_NODE_INSTALL_CUDA: skip
+
 jobs:
   sweep:
     runs-on: ubuntu-latest

@@ -30,7 +30,7 @@ const COMMISSION_RATE = parseFloat(process.env.WALLET_COMMISSION_RATE || '0.10')
 const MIN_FUND        = 100;   // ₦
 const MIN_WITHDRAW    = 500;   // ₦
 const AUTO_RELEASE_DAYS = parseFloat(process.env.WALLET_AUTO_RELEASE_DAYS || '7');
-const ADMIN_EMAIL     = process.env.ADMIN_EMAIL || 'contact@xpressdigitalanddatasolutions.online';
+const ADMIN_EMAIL     = process.env.ADMIN_EMAIL || 'support@xpressvetmarketplace.com';
 
 function internalRef(prefix) {
   return `${prefix}_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;

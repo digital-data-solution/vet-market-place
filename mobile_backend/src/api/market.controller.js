@@ -34,7 +34,7 @@ const PAYSTACK_BASE   = process.env.PAYSTACK_BASE       || 'https://api.paystack
 const PAYSTACK_SECRET = process.env.PAYSTACK_SECRET_KEY || '';
 const COMMISSION_RATE = parseFloat(process.env.WALLET_COMMISSION_RATE || '0.10');
 const AUTO_RELEASE_DAYS = parseFloat(process.env.WALLET_AUTO_RELEASE_DAYS || '7');
-const ADMIN_EMAIL     = process.env.ADMIN_EMAIL || 'contact@xpressdigitalanddatasolutions.online';
+const ADMIN_EMAIL     = process.env.ADMIN_EMAIL || 'support@xpressvetmarketplace.com';
 
 const LISTING_TTL_DAYS   = 30;   // listings auto-expire after this; renew to extend
 const MAX_ACTIVE_LISTINGS = 20;  // anti-spam cap per seller (not a paywall)

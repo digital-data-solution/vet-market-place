@@ -21,6 +21,10 @@ on:
     - cron: '15,45 * * * *' # every 30 minutes, offset from the listing-video sweep so they don't both fight for CPU on the same runner minute
   workflow_dispatch: {} # lets you trigger a sweep manually from the Actions tab too
 
+# CPU runners: skip the optional CUDA download (its URL now 404s and breaks npm ci).
+env:
+  ONNXRUNTIME_NODE_INSTALL_CUDA: skip
+
 jobs:
   sweep:
     runs-on: ubuntu-latest

@@ -6,7 +6,7 @@ import ActivityLog from '../models/ActivityLog.js';
 import logger from '../lib/logger.js';
 import { sendWeeklyDigestEmail } from '../services/email.service.js';
 
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'contact@xpressdigitalanddatasolutions.online';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'support@xpressvetmarketplace.com';
 
 // ─── Data aggregation ─────────────────────────────────────────────────────────
 

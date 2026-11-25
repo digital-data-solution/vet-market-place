@@ -2,7 +2,7 @@ import SupportThread from '../models/SupportThread.js';
 import { sendSupportMessageAlert } from '../services/email.service.js';
 import { getBotReply } from '../lib/supportBot.js';
 
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'contact@xpressdigitalanddatasolutions.online';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'support@xpressvetmarketplace.com';
 
 // POST /api/support — user sends a message (creates thread if none exists)
 export const sendSupportMessage = async (req, res) => {
